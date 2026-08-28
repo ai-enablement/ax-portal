@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AX Projects Hub · 팀원별 프로젝트 관리</title>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- JSX 변환기 -->
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  body {
+    font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 "Malgun Gothic", "맑은 고딕", Roboto, sans-serif;
+  }
+  #loading { padding: 3rem; text-align: center; color: #78716c; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="root"><div id="loading">화면을 불러오는 중입니다…</div></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
+    "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react"
+  }
+}
+</script>
+
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, useMemo, useEffect, useContext, createContext } from "react";
+import { createRoot } from "react-dom/client";
+import {
+  Search, Plus, ChevronRight, ChevronDown, ChevronLeft, LayoutGrid, Table2,
+  CalendarDays, Users, FileText, Building2, X, Trash2,
+  ArrowUpDown, Clock, ArrowLeft, Star, Home, Mail,
+  ShieldCheck, Eye, Pencil, UserPlus, Settings, CircleDot, Layers, Palette, CornerDownLeft
+} from "lucide-react";
+
+/* ------------------------------------------------------------------ */
+/* 기준 데이터                                                          */
+/* ------------------------------------------------------------------ */
+
+const TODAY = "2026-07-29";
+
+const PALETTES = [
+  { id: "blue", label: "블루", tint: "bg-blue-50 text-blue-700 border-blue-200", bar: "bg-blue-500", av: "bg-blue-100 text-blue-700" },
+  { id: "violet", label: "바이올렛", tint: "bg-violet-50 text-violet-700 border-violet-200", bar: "bg-violet-500", av: "bg-violet-100 text-violet-700" },
+  { id: "pink", label: "핑크", tint: "bg-pink-50 text-pink-700 border-pink-200", bar: "bg-pink-500", av: "bg-pink-100 text-pink-700" },
+  { id: "emerald", label: "에메랄드", tint: "bg-emerald-50 text-emerald-700 border-emerald-200", bar: "bg-emerald-500", av: "bg-emerald-100 text-emerald-700" },
+  { id: "amber", label: "앰버", tint: "bg-amber-50 text-amber-700 border-amber-200", bar: "bg-amber-500", av: "bg-amber-100 text-amber-700" },
+  { id: "sky", label: "스카이", tint: "bg-sky-50 text-sky-700 border-sky-200", bar: "bg-sky-500", av: "bg-sky-100 text-sky-700" },
+  { id: "teal", label: "틸", tint: "bg-teal-50 text-teal-700 border-teal-200", bar: "bg-teal-500", av: "bg-teal-100 text-teal-700" },
+  { id: "stone", label: "그레이", tint: "bg-stone-100 text-stone-700 border-stone-300", bar: "bg-stone-500", av: "bg-stone-200 text-stone-700" },
+];
+const palette = (id) => PALETTES.find((p) => p.id === id) || PALETTES[7];
+
+const COVERS = [
+  { id: "sky", label: "스카이", css: "bg-gradient-to-r from-sky-200 via-indigo-200 to-emerald-200" },
+  { id: "sunset", label: "선셋", css: "bg-gradient-to-r from-amber-200 via-rose-200 to-violet-200" },
+  { id: "forest", label: "포레스트", css: "bg-gradient-to-r from-emerald-200 via-teal-200 to-sky-200" },
+  { id: "mono", label: "모노", css: "bg-gradient-to-r from-stone-200 via-stone-300 to-stone-200" },
+];
+const cover = (id) => COVERS.find((c) => c.id === id) || COVERS[0];
+
+const SEED_MEMBERS = [
+  { id: "byungdoo", name: "최병두", role: "팀장 · 총괄", emoji: "🧭", email: "byungdoo.choi@company.com", color: "blue" },
+  { id: "junghwan", name: "허정환", role: "도입 · 거버넌스", emoji: "🛡️", email: "junghwan.heo@company.com", color: "violet" },
+  { id: "jiheon", name: "정지헌", role: "교육 기획", emoji: "🎓", email: "jiheon.jung@company.com", color: "pink" },
+  { id: "siyoung", name: "허시영", role: "데이터 · 대시보드", emoji: "📊", email: "siyoung.heo@company.com", color: "emerald" },
+  { id: "sujeong", name: "황수정", role: "커뮤니케이션 · 콘텐츠", emoji: "📣", email: "sujeong.hwang@company.com", color: "amber" },
+  { id: "hyebin", name: "박혜빈", role: "라이선스 · 운영", emoji: "🔑", email: "hyebin.park@company.com", color: "sky" },
+  { id: "jaeseung", name: "이재승", role: "솔루션 · 자동화", emoji: "🤖", email: "jaeseung.lee@company.com", color: "teal" },
+];
+
+const SEED_DEPTS = [
+  { id: "hr", name: "인사팀", contact: "노현주 책임" },
+  { id: "sales", name: "영업본부", contact: "장민석 부장" },
+  { id: "fin", name: "재무팀", contact: "권다인 과장" },
+  { id: "it", name: "IT인프라팀", contact: "서준혁 수석" },
+  { id: "mkt", name: "마케팅팀", contact: "홍채원 대리" },
+  { id: "legal", name: "법무팀", contact: "심규태 변호사" },
+  { id: "cs", name: "고객지원팀", contact: "차은비 매니저" },
+  { id: "ga", name: "경영지원팀", contact: "임지호 팀장" },
+];
+const DEPT_CHIP = "bg-stone-100 text-stone-700 border-stone-300";
+
+const STATUSES = [
+  { id: "todo", label: "시작 전", chip: "bg-stone-100 text-stone-600 border-stone-200", dot: "bg-stone-400" },
+  { id: "doing", label: "진행 중", chip: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500" },
+  { id: "review", label: "부서 검토", chip: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
+  { id: "done", label: "완료", chip: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  { id: "hold", label: "보류", chip: "bg-rose-50 text-rose-700 border-rose-200", dot: "bg-rose-400" },
+];
+
+const PRIORITIES = [
+  { id: "high", label: "높음", chip: "bg-rose-50 text-rose-700 border-rose-200" },
+  { id: "mid", label: "보통", chip: "bg-amber-50 text-amber-700 border-amber-200" },
+  { id: "low", label: "낮음", chip: "bg-stone-100 text-stone-600 border-stone-200" },
+];
+
+const it = (id, title, status, start, due, progress, body = "") => ({ id, title, status, start, due, progress, body });
+
+const SEED_PROJECTS = [
+  {
+    id: 1, title: "Copilot 전사 라이선스 배분 기준 수립", owner: "byungdoo", dept: "ga", status: "review", priority: "high",
+    start: "2026-07-06", due: "2026-08-07", progress: 80,
+    body: "부서별 라이선스 배분 기준을 정량화해서 다음 분기 예산 협의의 근거로 쓰는 것이 목표입니다.\n\n판단 기준\n- 최근 8주 활성 사용률\n- 부서 요청 건수와 실제 산출물\n- 대체 도구 보유 여부",
+    items: [
+      it("1a", "Kick-off", "done", "2026-07-06", "2026-07-08", 100, "경영지원팀과 범위 합의. 배분 기준은 분기 단위로 재산정하기로 함."),
+      it("1b", "현행 배분 실태 조사", "done", "2026-07-08", "2026-07-14", 100, "부서 12곳 라이선스 보유 현황과 실제 사용률을 수집했습니다."),
+      it("1c", "유관부서 협의 (재무팀)", "done", "2026-07-15", "2026-07-20", 100, "예산 반영 시점과 회수 정책 연동 방식을 논의했습니다."),
+      it("1d", "배분 기준 초안 작성", "done", "2026-07-20", "2026-07-27", 100, ""),
+      it("1e", "경영진 보고", "doing", "2026-07-28", "2026-08-03", 40, "보고 자료 초안 작성 중입니다."),
+      it("1f", "최종 공지", "todo", "2026-08-04", "2026-08-07", 0, ""),
+    ],
+  },
+  {
+    id: 3, title: "3분기 AI 활성화 로드맵 확정", owner: "byungdoo", dept: "ga", status: "doing", priority: "high",
+    start: "2026-07-13", due: "2026-08-14", progress: 45,
+    body: "3분기에 실제로 착수할 과제만 남기고 나머지는 4분기로 이월합니다.",
+    items: [
+      it("3a", "Kick-off", "done", "2026-07-13", "2026-07-15", 100, ""),
+      it("3b", "부서 요청 과제 정리", "done", "2026-07-15", "2026-07-22", 100, "접수된 요청 31건을 8개 부서 기준으로 분류했습니다."),
+      it("3c", "우선순위 워크숍", "doing", "2026-07-23", "2026-08-03", 50, "팀 내부 논의 1회 완료. 2차는 8월 첫 주 예정."),
+      it("3d", "로드맵 문서화", "todo", "2026-08-04", "2026-08-10", 0, ""),
+      it("3e", "전사 공유", "todo", "2026-08-11", "2026-08-14", 0, ""),
+    ],
+  },
+  { id: 2, title: "AI 활용 성숙도 진단 설문 설계", owner: "byungdoo", dept: "hr", status: "done", priority: "mid", start: "2026-06-22", due: "2026-07-17", progress: 100, body: "", items: [] },
+  {
+    id: 4, title: "생성형 AI 사용 가이드라인 개정", owner: "junghwan", dept: "legal", status: "doing", priority: "high",
+    start: "2026-07-01", due: "2026-08-12", progress: 62,
+    body: "외부 데이터 반출 기준 강화가 이번 개정의 핵심입니다. 법무팀 검토 후 전사 공지합니다.",
+    items: [
+      it("4a", "Kick-off", "done", "2026-07-01", "2026-07-03", 100, ""),
+      it("4b", "타사 정책 벤치마크", "done", "2026-07-03", "2026-07-10", 100, "동종업계 5개사 공개 정책을 비교했습니다."),
+      it("4c", "개정 초안 작성", "done", "2026-07-13", "2026-07-22", 100, ""),
+      it("4d", "법무팀 검토", "doing", "2026-07-23", "2026-08-05", 45, "1차 회신 반영 중. 반출 기준 문구 조정이 남았습니다."),
+      it("4e", "전사 공지 및 교육 반영", "todo", "2026-08-06", "2026-08-12", 0, ""),
+    ],
+  },
+  { id: 5, title: "민감정보 입력 차단 정책 적용", owner: "junghwan", dept: "it", status: "review", priority: "high", start: "2026-07-08", due: "2026-07-31", progress: 90, body: "", items: [] },
+  { id: 6, title: "부서별 AI 도구 승인 프로세스 정비", owner: "junghwan", dept: "legal", status: "todo", priority: "mid", start: "2026-08-03", due: "2026-08-28", progress: 0, body: "", items: [] },
+  {
+    id: 7, title: "영업본부 Copilot 실무 교육 3회차", owner: "jiheon", dept: "sales", status: "doing", priority: "high",
+    start: "2026-07-06", due: "2026-08-10", progress: 50,
+    body: "격주 3회차 구성. 회차마다 미션 제출을 필수로 하고 이수 현황을 집계합니다.",
+    items: [
+      it("7a", "Kick-off (영업본부 협의)", "done", "2026-07-06", "2026-07-08", 100, "대상 인원 48명, 오전·오후 2개 세션으로 운영하기로 했습니다."),
+      it("7b", "1회차 교안 제작", "done", "2026-07-08", "2026-07-14", 100, ""),
+      it("7c", "1회차 운영", "done", "2026-07-16", "2026-07-16", 100, "참석 44명. 미션 제출 39건."),
+      it("7d", "2회차 운영", "doing", "2026-07-30", "2026-07-30", 20, "제안서 작성 시나리오 실습으로 구성했습니다."),
+      it("7e", "3회차 운영", "todo", "2026-08-06", "2026-08-06", 0, ""),
+      it("7f", "이수 현황 집계 및 결과 공유", "todo", "2026-08-07", "2026-08-10", 0, ""),
+    ],
+  },
+  { id: 8, title: "신입사원 온보딩 AI 커리큘럼 개편", owner: "jiheon", dept: "hr", status: "review", priority: "mid", start: "2026-07-13", due: "2026-08-05", progress: 75, body: "", items: [] },
+  { id: 9, title: "고객지원팀 프롬프트 실습 워크숍", owner: "jiheon", dept: "cs", status: "done", priority: "mid", start: "2026-06-08", due: "2026-07-14", progress: 100, body: "", items: [] },
+  { id: 10, title: "교육 이수 현황 자동 집계 시트", owner: "jiheon", dept: "hr", status: "todo", priority: "low", start: "2026-08-17", due: "2026-09-11", progress: 0, body: "", items: [] },
+  {
+    id: 11, title: "Copilot 사용량 월간 대시보드 고도화", owner: "siyoung", dept: "ga", status: "doing", priority: "high",
+    start: "2026-06-29", due: "2026-08-19", progress: 55,
+    body: "Viva Insights export 기준으로 월별 활성 사용자와 라이선스 대비 활용률을 자동 산출합니다.",
+    items: [
+      it("11a", "지표 정의 확정", "done", "2026-06-29", "2026-07-10", 100, "활성 기준을 주 1회 이상 사용으로 통일했습니다."),
+      it("11b", "데이터 수집 파이프라인 정비", "done", "2026-07-13", "2026-07-24", 100, ""),
+      it("11c", "대시보드 화면 개편", "doing", "2026-07-27", "2026-08-10", 35, "부서별 드릴다운 화면을 추가하는 중입니다."),
+      it("11d", "검증 및 배포", "todo", "2026-08-11", "2026-08-19", 0, ""),
+    ],
+  },
+  { id: 12, title: "부서별 활성 사용자 리포트 자동화", owner: "siyoung", dept: "it", status: "review", priority: "mid", start: "2026-07-15", due: "2026-08-03", progress: 85, body: "", items: [] },
+  { id: 13, title: "라이선스 대비 활용률 지표 재정의", owner: "siyoung", dept: "fin", status: "doing", priority: "mid", start: "2026-07-20", due: "2026-08-21", progress: 30, body: "", items: [] },
+  { id: 14, title: "영업 파이프라인 AI 분석 PoC", owner: "jaeseung", dept: "sales", status: "hold", priority: "high", start: "2026-07-09", due: "2026-08-24", progress: 40, body: "데이터 접근 권한 이슈로 보류 중입니다.", items: [] },
+  {
+    id: 15, title: "사내 AI 뉴스레터 주간 발행", owner: "sujeong", dept: "mkt", status: "doing", priority: "mid",
+    start: "2026-07-01", due: "2026-08-26", progress: 38,
+    body: "매주 월요일 오전 발행. 주요 업데이트, 사내 활용 사례, 짧은 팁 세 꼭지로 구성합니다.",
+    items: [
+      it("15a", "발행 포맷 확정", "done", "2026-07-01", "2026-07-06", 100, ""),
+      it("15b", "7월 4주 발행", "done", "2026-07-20", "2026-07-20", 100, "오픈율 62%. 사례 꼭지 클릭률이 가장 높았습니다."),
+      it("15c", "8월 콘텐츠 캘린더 작성", "doing", "2026-07-28", "2026-08-05", 30, ""),
+      it("15d", "8월 발행 (4회)", "todo", "2026-08-03", "2026-08-24", 0, ""),
+      it("15e", "월간 성과 리포트", "todo", "2026-08-25", "2026-08-26", 0, ""),
+    ],
+  },
+  { id: 16, title: "활용 우수사례 인터뷰 8편", owner: "sujeong", dept: "hr", status: "doing", priority: "mid", start: "2026-07-27", due: "2026-08-13", progress: 15, body: "", items: [] },
+  { id: 17, title: "AI 활성화 포털 페이지 개편", owner: "sujeong", dept: "mkt", status: "todo", priority: "low", start: "2026-08-10", due: "2026-09-04", progress: 0, body: "", items: [] },
+  { id: 18, title: "브라운백 세미나 하반기 운영안", owner: "sujeong", dept: "ga", status: "review", priority: "low", start: "2026-07-02", due: "2026-08-31", progress: 70, body: "", items: [] },
+  {
+    id: 19, title: "미사용 라이선스 회수 캠페인", owner: "hyebin", dept: "fin", status: "done", priority: "high",
+    start: "2026-06-25", due: "2026-07-24", progress: 100,
+    body: "90일 미사용 계정을 대상으로 사전 안내 후 회수했습니다. 총 84석 확보.",
+    items: [
+      it("19a", "회수 기준 확정", "done", "2026-06-25", "2026-06-30", 100, ""),
+      it("19b", "대상자 사전 안내", "done", "2026-07-01", "2026-07-10", 100, "안내 후 21명이 사용 재개를 신청했습니다."),
+      it("19c", "회수 실행", "done", "2026-07-13", "2026-07-20", 100, ""),
+      it("19d", "결과 보고", "done", "2026-07-21", "2026-07-24", 100, "재무팀 보고 완료. 84석 회수."),
+    ],
+  },
+  { id: 20, title: "부서별 라이선스 예산 집행 점검", owner: "hyebin", dept: "fin", status: "doing", priority: "mid", start: "2026-07-20", due: "2026-08-07", progress: 60, body: "", items: [] },
+  { id: 22, title: "고객지원 챗봇 응대 품질 점검", owner: "hyebin", dept: "cs", status: "hold", priority: "low", start: "2026-07-10", due: "2026-08-28", progress: 25, body: "", items: [] },
+  { id: 21, title: "AI 도구 계정 생성·회수 절차 자동화", owner: "jaeseung", dept: "it", status: "todo", priority: "mid", start: "2026-08-05", due: "2026-08-20", progress: 0, body: "", items: [] },
+  {
+    id: 23, title: "회의록 자동 요약 워크플로 구축", owner: "jaeseung", dept: "ga", status: "doing", priority: "mid",
+    start: "2026-07-06", due: "2026-08-18", progress: 35,
+    body: "1차 대상은 팀 내부 회의입니다. 요약 결과를 문서로 자동 생성하는 것까지가 범위입니다.",
+    items: [
+      it("23a", "Kick-off", "done", "2026-07-06", "2026-07-08", 100, ""),
+      it("23b", "워크플로 설계", "done", "2026-07-09", "2026-07-20", 100, "녹취 → 요약 → 문서 생성 3단계로 구성했습니다."),
+      it("23c", "프로토타입 구현", "doing", "2026-07-21", "2026-08-07", 40, ""),
+      it("23d", "내부 테스트", "todo", "2026-08-10", "2026-08-14", 0, ""),
+      it("23e", "팀 적용", "todo", "2026-08-17", "2026-08-18", 0, ""),
+    ],
+  },
+];
+
+const DEFAULT_SETTINGS = { teamName: "AI 활성화팀", cover: "sky", defaultView: "table", defaultGroup: "owner", adminPw: "ai2026" };
+
+/* ------------------------------------------------------------------ */
+/* 공용                                                                */
+/* ------------------------------------------------------------------ */
+
+const AppCtx = createContext({ isAdmin: false, members: SEED_MEMBERS, depts: SEED_DEPTS, settings: DEFAULT_SETTINGS });
+const useApp = () => useContext(AppCtx);
+
+const status = (id) => STATUSES.find((s) => s.id === id) || STATUSES[0];
+const priority = (id) => PRIORITIES.find((p) => p.id === id) || PRIORITIES[1];
+const fmt = (d) => (d ? `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일` : "-");
+const range = (a, b) => (a && b ? `${fmt(a)} → ${fmt(b)}` : fmt(a || b));
+
+function rollup(p) {
+  const items = p.items || [];
+  if (items.length === 0) return { progress: p.progress, start: p.start, due: p.due, done: 0, total: 0 };
+  return {
+    progress: Math.round(items.reduce((s, i) => s + i.progress, 0) / items.length),
+    start: items.map((i) => i.start).sort()[0],
+    due: items.map((i) => i.due).sort().slice(-1)[0],
+    done: items.filter((i) => i.status === "done").length,
+    total: items.length,
+  };
+}
+
+function useMember() {
+  const { members } = useApp();
+  return (id) => members.find((m) => m.id === id) || members[0];
+}
+function useDept() {
+  const { depts } = useApp();
+  return (id) => depts.find((d) => d.id === id) || depts[0] || { id: "", name: "미지정", contact: "-" };
+}
+
+function Avatar({ id, name, size = "sm" }) {
+  const { members } = useApp();
+  const m = id ? members.find((x) => x.id === id) : members.find((x) => x.name === name);
+  const label = (m ? m.name : name || "?").slice(-2);
+  const tone = m ? palette(m.color).av : "bg-stone-200 text-stone-600";
+  const box = size === "lg" ? "w-11 h-11 text-sm" : size === "md" ? "w-8 h-8 text-xs" : "w-6 h-6 text-xs";
+  return <span className={`${box} ${tone} rounded-full inline-flex items-center justify-center font-medium shrink-0`}>{label}</span>;
+}
+
+function Chip({ className, children }) {
+  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium ${className}`}>{children}</span>;
+}
+
+function Progress({ value, bar = "bg-stone-800", showLabel = true }) {
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <div className="h-1.5 flex-1 rounded-full bg-stone-200 overflow-hidden">
+        <div className={`h-full rounded-full ${bar}`} style={{ width: `${value}%` }} />
+      </div>
+      {showLabel && <span className="text-xs text-stone-500 tabular-nums w-9 text-right">{value}%</span>}
+    </div>
+  );
+}
+
+const FIELD = "w-full px-2.5 py-1.5 rounded border border-stone-300 text-sm text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-stone-800";
+const CONTROL = "px-2.5 py-1.5 rounded border border-stone-300 bg-white text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-800";
+
+function Modal({ title, onClose, children, footer, wide }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900 bg-opacity-40" onClick={onClose}>
+      <div className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} bg-white rounded-lg shadow-xl max-h-full overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-stone-200">
+          <h3 className="text-sm font-semibold text-stone-800">{title}</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-stone-100 text-stone-500" aria-label="닫기"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-5">{children}</div>
+        {footer && <div className="flex items-center justify-between px-5 py-3 border-t border-stone-200">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 전역 검색                                                            */
+/* ------------------------------------------------------------------ */
+
+function SearchModal({ projects, onGo, onClose }) {
+  const { members, depts } = useApp();
+  const [q, setQ] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const term = q.trim().toLowerCase();
+
+  const results = useMemo(() => {
+    if (!term) return [];
+    const out = [];
+    projects.forEach((p) => {
+      const owner = members.find((m) => m.id === p.owner);
+      if ((p.title || "").toLowerCase().includes(term) || (p.body || "").toLowerCase().includes(term)) {
+        out.push({ kind: "project", key: `p${p.id}`, icon: "📁", title: p.title || "제목 없음", sub: `프로젝트 · ${owner ? owner.name : ""}`, go: { type: "project", pid: p.id, iid: null } });
+      }
+      (p.items || []).forEach((i) => {
+        if ((i.title || "").toLowerCase().includes(term) || (i.body || "").toLowerCase().includes(term)) {
+          out.push({ kind: "item", key: `p${p.id}i${i.id}`, icon: "📄", title: i.title || "제목 없음", sub: `하위 항목 · ${p.title}`, go: { type: "project", pid: p.id, iid: i.id } });
+        }
+      });
+    });
+    members.forEach((m) => {
+      if (m.name.toLowerCase().includes(term) || m.role.toLowerCase().includes(term) || m.email.toLowerCase().includes(term)) {
+        out.push({ kind: "member", key: `m${m.id}`, icon: m.emoji, title: m.name, sub: `팀원 · ${m.role}`, go: { type: "member", id: m.id } });
+      }
+    });
+    depts.forEach((d) => {
+      if (d.name.toLowerCase().includes(term) || (d.contact || "").toLowerCase().includes(term)) {
+        out.push({ kind: "dept", key: `d${d.id}`, icon: "🏢", title: d.name, sub: `유관 부서 · ${d.contact}`, go: { type: "dept" } });
+      }
+    });
+    return out.slice(0, 20);
+  }, [term, projects, members, depts]);
+
+  useEffect(() => setCursor(0), [term]);
+
+  const onKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(c + 1, results.length - 1)); }
+    if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); }
+    if (e.key === "Enter" && results[cursor]) onGo(results[cursor].go);
+    if (e.key === "Escape") onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 bg-stone-900 bg-opacity-40" onClick={onClose}>
+      <div className="w-full max-w-xl bg-white rounded-lg shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-4 border-b border-stone-200">
+          <Search className="w-4 h-4 text-stone-400 shrink-0" />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
+            placeholder="프로젝트, 하위 항목, 팀원, 부서 검색"
+            className="flex-1 py-3 text-sm text-stone-800 focus:outline-none placeholder-stone-400" />
+          <kbd className="text-xs text-stone-400 border border-stone-200 rounded px-1.5 py-0.5">Esc</kbd>
+        </div>
+
+        <div className="max-h-96 overflow-y-auto">
+          {!term && (
+            <p className="px-4 py-8 text-sm text-stone-400 text-center">
+              검색어를 입력하세요. 본문 내용까지 함께 찾습니다.
+            </p>
+          )}
+          {term && results.length === 0 && (
+            <p className="px-4 py-8 text-sm text-stone-400 text-center">일치하는 항목이 없습니다.</p>
+          )}
+          {results.map((r, i) => (
+            <button key={r.key} onClick={() => onGo(r.go)} onMouseEnter={() => setCursor(i)}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${i === cursor ? "bg-stone-100" : "hover:bg-stone-50"}`}>
+              <span className="w-5 text-center shrink-0">{r.icon}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm text-stone-800 truncate">{r.title}</span>
+                <span className="block text-xs text-stone-500 truncate">{r.sub}</span>
+              </span>
+              {i === cursor && <CornerDownLeft className="w-3.5 h-3.5 text-stone-400 shrink-0" />}
+            </button>
+          ))}
+        </div>
+
+        {results.length > 0 && (
+          <div className="px-4 py-2 border-t border-stone-200 text-xs text-stone-400">
+            ↑↓ 이동 · Enter 열기 · 결과 {results.length}건
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 설정                                                                */
+/* ------------------------------------------------------------------ */
+
+function SettingsModal({ settings, setSettings, depts, setDepts, members, projects, onEditMember, onAddMember, onClose }) {
+  const { isAdmin } = useApp();
+  const [tab, setTab] = useState(isAdmin ? "workspace" : "view");
+
+  const tabs = isAdmin
+    ? [["workspace", "워크스페이스"], ["depts", "유관 부서"], ["members", "팀원"], ["view", "화면"]]
+    : [["view", "화면"], ["workspace", "워크스페이스 정보"]];
+
+  const set = (k, v) => setSettings({ ...settings, [k]: v });
+
+  const addDept = () => setDepts([...depts, { id: `d${Date.now()}`, name: "새 부서", contact: "" }]);
+  const patchDept = (id, patch) => setDepts(depts.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  const removeDept = (id) => setDepts(depts.filter((d) => d.id !== id));
+  const inUse = (id) => projects.filter((p) => p.dept === id).length;
+
+  return (
+    <Modal title="설정" onClose={onClose} wide>
+      <div className="flex gap-1 border-b border-stone-200 mb-5 -mt-1">
+        {tabs.map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === id ? "border-stone-800 text-stone-900 font-medium" : "border-transparent text-stone-500 hover:text-stone-800"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "workspace" && (
+        <div className="space-y-5">
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-1">팀 이름</label>
+            {isAdmin
+              ? <input className={FIELD} value={settings.teamName} onChange={(e) => set("teamName", e.target.value)} />
+              : <p className="text-sm text-stone-800">{settings.teamName}</p>}
+          </div>
+          {isAdmin && (
+            <div>
+              <label className="block text-xs font-medium text-stone-500 mb-1 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" /> 관리자 비밀번호
+              </label>
+              <input type="text" className={FIELD} value={settings.adminPw} onChange={(e) => set("adminPw", e.target.value)} />
+              <p className="text-xs text-stone-400 mt-1">일반 사용자가 관리자 모드로 전환할 때 입력하는 값입니다.</p>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-2 flex items-center gap-1.5"><Palette className="w-3.5 h-3.5" /> 커버 색상</label>
+            <div className="grid grid-cols-2 gap-2">
+              {COVERS.map((c) => (
+                <button key={c.id} onClick={() => isAdmin && set("cover", c.id)} disabled={!isAdmin}
+                  className={`rounded-lg overflow-hidden border-2 text-left ${settings.cover === c.id ? "border-stone-800" : "border-stone-200"} ${isAdmin ? "" : "opacity-60"}`}>
+                  <span className={`block h-10 ${c.css}`} />
+                  <span className="block px-2 py-1.5 text-xs text-stone-600">{c.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3 pt-2 border-t border-stone-100">
+            <div><p className="text-xs text-stone-500">팀원</p><p className="text-lg font-semibold text-stone-900">{members.length}명</p></div>
+            <div><p className="text-xs text-stone-500">프로젝트</p><p className="text-lg font-semibold text-stone-900">{projects.length}건</p></div>
+            <div><p className="text-xs text-stone-500">유관 부서</p><p className="text-lg font-semibold text-stone-900">{depts.length}개</p></div>
+          </div>
+        </div>
+      )}
+
+      {tab === "depts" && (
+        <div className="space-y-2">
+          <p className="text-xs text-stone-500 mb-3">프로젝트를 요청하는 부서 목록입니다. 이름과 요청 창구를 바로 수정할 수 있습니다.</p>
+          {depts.map((d) => {
+            const used = inUse(d.id);
+            return (
+              <div key={d.id} className="flex items-center gap-2">
+                <input className={`${FIELD} flex-1`} value={d.name} onChange={(e) => patchDept(d.id, { name: e.target.value })} placeholder="부서명" />
+                <input className={`${FIELD} flex-1`} value={d.contact} onChange={(e) => patchDept(d.id, { contact: e.target.value })} placeholder="요청 창구 담당자" />
+                <span className="text-xs text-stone-400 w-12 text-right shrink-0">{used}건</span>
+                <button onClick={() => used === 0 && removeDept(d.id)} disabled={used > 0}
+                  title={used > 0 ? "요청 중인 프로젝트가 있어 삭제할 수 없습니다" : "삭제"}
+                  className={`p-1.5 rounded shrink-0 ${used > 0 ? "text-stone-300" : "text-rose-500 hover:bg-rose-50"}`}>
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })}
+          <button onClick={addDept} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 pt-2">
+            <Plus className="w-4 h-4" /> 부서 추가
+          </button>
+        </div>
+      )}
+
+      {tab === "members" && (
+        <div className="space-y-2">
+          {members.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 px-3 py-2.5 border border-stone-200 rounded-lg">
+              <Avatar id={m.id} size="md" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-stone-800">{m.name}</p>
+                <p className="text-xs text-stone-500 truncate">{m.role} · {m.email}</p>
+              </div>
+              <span className="text-xs text-stone-400 shrink-0">{projects.filter((p) => p.owner === m.id).length}건</span>
+              <button onClick={() => { onEditMember(m); onClose(); }} className="p-1.5 rounded text-stone-500 hover:bg-stone-100 shrink-0" aria-label="편집">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+          <button onClick={() => { onAddMember(); onClose(); }} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 pt-2">
+            <UserPlus className="w-4 h-4" /> 팀원 추가
+          </button>
+        </div>
+      )}
+
+      {tab === "view" && (
+        <div className="space-y-5">
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-1">프로젝트 현황 기본 뷰</label>
+            <select className={FIELD} value={settings.defaultView} onChange={(e) => set("defaultView", e.target.value)}>
+              <option value="table">표</option>
+              <option value="board">보드</option>
+              <option value="calendar">캘린더</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-1">표 기본 그룹</label>
+            <select className={FIELD} value={settings.defaultGroup} onChange={(e) => set("defaultGroup", e.target.value)}>
+              <option value="owner">팀원별 그룹</option>
+              <option value="none">그룹 없음</option>
+            </select>
+          </div>
+          <p className="text-xs text-stone-400">여기서 고른 값은 프로젝트 현황 표를 다시 열 때 기본값으로 적용됩니다.</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 상세 페이지 패널                                                     */
+/* ------------------------------------------------------------------ */
+
+function PropRow({ icon: Icon, label, children }) {
+  return (
+    <div className="flex items-start gap-3 py-1.5">
+      <span className="w-32 shrink-0 flex items-center gap-1.5 text-xs text-stone-500 pt-1.5">
+        <Icon className="w-3.5 h-3.5" /> {label}
+      </span>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function DetailPanel({ project, item, onClose, onOpenItem, actions }) {
+  const { isAdmin, members, depts } = useApp();
+  const findMember = useMember();
+  const findDept = useDept();
+  const isItem = !!item;
+  const node = item || project;
+  const owner = findMember(project.owner);
+  const pal = palette(owner.color);
+  const roll = rollup(project);
+  const patch = (k, v) => (isItem ? actions.updateItem(project.id, item.id, { [k]: v }) : actions.updateProject(project.id, { [k]: v }));
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-stone-900 bg-opacity-30" onClick={onClose}>
+      <div className="w-full max-w-2xl bg-white h-full overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-stone-200 px-5 h-11 flex items-center gap-2 z-10">
+          {isItem ? (
+            <>
+              <button onClick={() => onOpenItem(null)} className="text-sm text-stone-500 hover:text-stone-800 truncate max-w-xs">{project.title || "제목 없음"}</button>
+              <ChevronRight className="w-3.5 h-3.5 text-stone-300 shrink-0" />
+              <span className="text-sm text-stone-800 truncate">{item.title || "제목 없음"}</span>
+            </>
+          ) : (
+            <span className="text-sm text-stone-800 truncate">{project.title || "제목 없음"}</span>
+          )}
+          <div className="ml-auto flex items-center gap-1">
+            {isAdmin && (
+              <button onClick={() => { if (isItem) { actions.removeItem(project.id, item.id); onOpenItem(null); } else { actions.removeProject(project.id); onClose(); } }}
+                className="p-1.5 rounded hover:bg-rose-50 text-rose-500" aria-label="삭제">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+            <button onClick={onClose} className="p-1.5 rounded hover:bg-stone-100 text-stone-500" aria-label="닫기"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+
+        <div className="px-8 py-6">
+          <div className="text-3xl mb-3">{isItem ? "📄" : "📁"}</div>
+          {isAdmin ? (
+            <input value={node.title} onChange={(e) => patch("title", e.target.value)} placeholder="제목 없음"
+              className="w-full text-2xl font-bold text-stone-900 mb-5 focus:outline-none placeholder-stone-300" />
+          ) : (
+            <h2 className="text-2xl font-bold text-stone-900 mb-5">{node.title || "제목 없음"}</h2>
+          )}
+
+          <div className="mb-6">
+            <PropRow icon={Users} label="담당자">
+              {isAdmin && !isItem ? (
+                <select className={FIELD} value={project.owner} onChange={(e) => patch("owner", e.target.value)}>
+                  {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              ) : (
+                <span className="flex items-center gap-1.5 text-sm text-stone-800 py-1.5"><Avatar id={owner.id} /> {owner.name}</span>
+              )}
+            </PropRow>
+
+            <PropRow icon={Building2} label="유관 부서">
+              {isAdmin && !isItem ? (
+                <select className={FIELD} value={project.dept} onChange={(e) => patch("dept", e.target.value)}>
+                  {depts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              ) : (
+                <span className="text-sm text-stone-800 py-1.5 block">{findDept(project.dept).name} <span className="text-stone-400">· {findDept(project.dept).contact}</span></span>
+              )}
+            </PropRow>
+
+            <PropRow icon={CircleDot} label="진행 상황">
+              {isAdmin ? (
+                <select className={FIELD} value={node.status} onChange={(e) => patch("status", e.target.value)}>
+                  {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              ) : (
+                <span className="py-1.5 block"><Chip className={status(node.status).chip}><span className={`w-1.5 h-1.5 rounded-full ${status(node.status).dot}`} />{status(node.status).label}</Chip></span>
+              )}
+            </PropRow>
+
+            <PropRow icon={CalendarDays} label="날짜">
+              {isAdmin && (isItem || roll.total === 0) ? (
+                <div className="flex items-center gap-2">
+                  <input type="date" className={FIELD} value={node.start} onChange={(e) => patch("start", e.target.value)} />
+                  <span className="text-stone-400">→</span>
+                  <input type="date" className={FIELD} value={node.due} onChange={(e) => patch("due", e.target.value)} />
+                </div>
+              ) : (
+                <span className="text-sm text-stone-800 py-1.5 block">
+                  {isItem ? range(node.start, node.due) : range(roll.start, roll.due)}
+                  {!isItem && roll.total > 0 && <span className="text-xs text-stone-400 ml-2">하위 항목 기준 자동 계산</span>}
+                </span>
+              )}
+            </PropRow>
+
+            <PropRow icon={Layers} label="진행률">
+              {isAdmin && (isItem || roll.total === 0) ? (
+                <div className="py-1.5">
+                  <input type="range" min="0" max="100" step="5" className="w-full accent-stone-800" value={node.progress} onChange={(e) => patch("progress", Number(e.target.value))} />
+                  <span className="text-xs text-stone-500">{node.progress}%</span>
+                </div>
+              ) : (
+                <div className="py-2"><Progress value={isItem ? node.progress : roll.progress} bar={pal.bar} /></div>
+              )}
+            </PropRow>
+
+            {!isItem && (
+              <PropRow icon={Star} label="우선순위">
+                {isAdmin ? (
+                  <select className={FIELD} value={project.priority} onChange={(e) => patch("priority", e.target.value)}>
+                    {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+                ) : (
+                  <span className="py-1.5 block"><Chip className={priority(project.priority).chip}>{priority(project.priority).label}</Chip></span>
+                )}
+              </PropRow>
+            )}
+          </div>
+
+          <hr className="border-stone-200 mb-6" />
+
+          {isAdmin ? (
+            <textarea value={node.body || ""} onChange={(e) => patch("body", e.target.value)}
+              placeholder="내용을 입력하세요. 회의 메모, 진행 상황, 참고 링크 등 자유롭게 작성할 수 있습니다."
+              className="w-full min-h-40 text-sm text-stone-700 leading-relaxed focus:outline-none placeholder-stone-300 resize-y" />
+          ) : node.body ? (
+            <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-wrap">{node.body}</p>
+          ) : (
+            <p className="text-sm text-stone-400">작성된 내용이 없습니다.</p>
+          )}
+
+          {!isItem && (
+            <div className="mt-10">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-stone-800">하위 항목</h4>
+                <span className="text-xs text-stone-400">{roll.total > 0 ? `${roll.done} / ${roll.total} 완료` : "없음"}</span>
+              </div>
+              <div className="border border-stone-200 rounded-lg divide-y divide-stone-100">
+                {(project.items || []).map((i) => (
+                  <button key={i.id} onClick={() => onOpenItem(i.id)} className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-stone-50 text-left">
+                    <FileText className="w-4 h-4 text-stone-400 shrink-0" />
+                    <span className="text-sm text-stone-800 flex-1 truncate">{i.title || "제목 없음"}</span>
+                    <span className="text-xs text-stone-500 whitespace-nowrap hidden sm:block">{range(i.start, i.due)}</span>
+                    <Chip className={status(i.status).chip}><span className={`w-1.5 h-1.5 rounded-full ${status(i.status).dot}`} />{status(i.status).label}</Chip>
+                    <span className="w-20 shrink-0"><Progress value={i.progress} bar={pal.bar} showLabel={false} /></span>
+                  </button>
+                ))}
+                {(project.items || []).length === 0 && <p className="px-3 py-4 text-sm text-stone-400">아직 하위 항목이 없습니다.</p>}
+                {isAdmin && (
+                  <button onClick={() => onOpenItem(actions.addItem(project.id))} className="w-full px-3 py-2.5 flex items-center gap-2 text-sm text-stone-500 hover:bg-stone-50">
+                    <Plus className="w-4 h-4" /> 새 하위 항목
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 표 · 보드 · 캘린더                                                   */
+/* ------------------------------------------------------------------ */
+
+function ProjectTable({ rows, onOpen, sort, setSort, grouped, actions }) {
+  const { isAdmin, members } = useApp();
+  const findMember = useMember();
+  const findDept = useDept();
+  const [expanded, setExpanded] = useState(() => new Set(rows.filter((r) => (r.items || []).length).map((r) => r.id)));
+  const [closedGroups, setClosedGroups] = useState(() => new Set());
+
+  const toggle = (id) => { const n = new Set(expanded); n.has(id) ? n.delete(id) : n.add(id); setExpanded(n); };
+  const toggleGroup = (id) => { const n = new Set(closedGroups); n.has(id) ? n.delete(id) : n.add(id); setClosedGroups(n); };
+
+  const th = "px-3 py-2 text-left text-xs font-medium text-stone-500 border-b border-stone-200";
+  const sortBtn = (key, label) => (
+    <button onClick={() => setSort(sort === key ? "" : key)} className={`flex items-center gap-1 hover:text-stone-800 ${sort === key ? "text-stone-800" : ""}`}>
+      {label} <ArrowUpDown className="w-3 h-3" />
+    </button>
+  );
+
+  const header = (
+    <thead className="bg-stone-50">
+      <tr>
+        <th className={th}>업무 내용</th>
+        <th className={th}>담당자</th>
+        <th className={th}>유관 부서</th>
+        <th className={th}>{sortBtn("due", "날짜")}</th>
+        <th className={th}>진행 상황</th>
+        <th className={`${th} w-44`}>{sortBtn("progress", "진행률")}</th>
+      </tr>
+    </thead>
+  );
+
+  const renderRows = (list) =>
+    list.map((p) => {
+      const mb = findMember(p.owner), dp = findDept(p.dept), st = status(p.status);
+      const pal = palette(mb.color), roll = rollup(p), items = p.items || [];
+      const isOpen = expanded.has(p.id);
+      const late = roll.due < TODAY && p.status !== "done";
+      return (
+        <React.Fragment key={p.id}>
+          <tr className="hover:bg-stone-50 border-b border-stone-100">
+            <td className="px-3 py-2.5">
+              <div className="flex items-center gap-1">
+                <button onClick={() => toggle(p.id)} disabled={items.length === 0}
+                  className={`p-0.5 rounded shrink-0 ${items.length ? "text-stone-400 hover:bg-stone-200" : "text-transparent"}`} aria-label="하위 항목 펼치기">
+                  {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </button>
+                <button onClick={() => onOpen(p.id, null)} className="flex items-center gap-1.5 text-sm text-stone-800 font-medium text-left hover:underline">
+                  <FileText className="w-3.5 h-3.5 text-stone-400 shrink-0" /> {p.title || "제목 없음"}
+                </button>
+                {items.length > 0 && <span className="text-xs text-stone-400 shrink-0 ml-1">{roll.done}/{roll.total}</span>}
+              </div>
+            </td>
+            <td className="px-3 py-2.5"><span className="flex items-center gap-1.5 text-sm text-stone-700 whitespace-nowrap"><Avatar id={p.owner} /> {mb.name}</span></td>
+            <td className="px-3 py-2.5"><Chip className={DEPT_CHIP}>{dp.name}</Chip></td>
+            <td className={`px-3 py-2.5 text-sm whitespace-nowrap ${late ? "text-rose-600 font-medium" : "text-stone-600"}`}>{range(roll.start, roll.due)}</td>
+            <td className="px-3 py-2.5"><Chip className={st.chip}><span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}</Chip></td>
+            <td className="px-3 py-2.5"><Progress value={roll.progress} bar={pal.bar} /></td>
+          </tr>
+
+          {isOpen && items.map((i) => {
+            const ist = status(i.status);
+            const ilate = i.due < TODAY && i.status !== "done";
+            return (
+              <tr key={i.id} className="hover:bg-stone-50 border-b border-stone-100">
+                <td className="px-3 py-2">
+                  <button onClick={() => onOpen(p.id, i.id)} className="flex items-center gap-1.5 text-sm text-stone-700 text-left hover:underline pl-8">
+                    <FileText className="w-3.5 h-3.5 text-stone-400 shrink-0" /> {i.title || "제목 없음"}
+                  </button>
+                </td>
+                <td className="px-3 py-2"><span className="flex items-center gap-1.5 text-sm text-stone-600 whitespace-nowrap"><Avatar id={p.owner} /> {mb.name}</span></td>
+                <td className="px-3 py-2"><Chip className={DEPT_CHIP}>{dp.name}</Chip></td>
+                <td className={`px-3 py-2 text-sm whitespace-nowrap ${ilate ? "text-rose-600" : "text-stone-500"}`}>{range(i.start, i.due)}</td>
+                <td className="px-3 py-2"><Chip className={ist.chip}><span className={`w-1.5 h-1.5 rounded-full ${ist.dot}`} />{ist.label}</Chip></td>
+                <td className="px-3 py-2"><Progress value={i.progress} bar={pal.bar} /></td>
+              </tr>
+            );
+          })}
+
+          {isOpen && isAdmin && (
+            <tr className="border-b border-stone-100">
+              <td colSpan={6} className="px-3 py-1.5">
+                <button onClick={() => onOpen(p.id, actions.addItem(p.id))} className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-700 pl-8">
+                  <Plus className="w-3.5 h-3.5" /> 새 하위 항목
+                </button>
+              </td>
+            </tr>
+          )}
+        </React.Fragment>
+      );
+    });
+
+  if (rows.length === 0) {
+    return (
+      <div className="border border-dashed border-stone-300 rounded-lg py-12 text-center">
+        <p className="text-sm text-stone-500">조건에 맞는 프로젝트가 없습니다.</p>
+        <p className="text-xs text-stone-400 mt-1">필터를 바꿔 다시 찾아보세요.</p>
+      </div>
+    );
+  }
+
+  if (!grouped) {
+    return (
+      <div className="border border-stone-200 rounded-lg overflow-x-auto">
+        <table className="w-full min-w-max">{header}<tbody>{renderRows(rows)}</tbody></table>
+      </div>
+    );
+  }
+
+  const groups = members.map((m) => ({ m, list: rows.filter((p) => p.owner === m.id) })).filter((g) => g.list.length > 0);
+
+  return (
+    <div className="space-y-4">
+      {groups.map(({ m, list }) => {
+        const closed = closedGroups.has(m.id);
+        return (
+          <div key={m.id}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <button onClick={() => toggleGroup(m.id)} className="p-0.5 rounded text-stone-400 hover:bg-stone-200" aria-label="그룹 접기">
+                {closed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              <Avatar id={m.id} />
+              <span className="text-sm font-semibold text-stone-800">{m.name}</span>
+              <span className="text-xs text-stone-400">{list.length}</span>
+              {isAdmin && (
+                <button onClick={() => onOpen(actions.addProject(m.id), null)} className="p-1 rounded text-stone-400 hover:bg-stone-200" aria-label="프로젝트 추가">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {!closed && (
+              <div className="border border-stone-200 rounded-lg overflow-x-auto">
+                <table className="w-full min-w-max">{header}<tbody>{renderRows(list)}</tbody></table>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProjectBoard({ rows, onOpen, onMove, groupBy }) {
+  const { isAdmin, members } = useApp();
+  const findMember = useMember();
+  const findDept = useDept();
+  const [dragId, setDragId] = useState(null);
+  const [overCol, setOverCol] = useState(null);
+
+  const columns = groupBy === "owner"
+    ? members.map((m) => ({ key: m.id, label: m.name, chip: palette(m.color).tint, icon: m.emoji, droppable: false }))
+    : STATUSES.map((s) => ({ key: s.id, label: s.label, chip: s.chip, dot: s.dot, droppable: isAdmin }));
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2">
+      {columns.map((col) => {
+        const cards = rows.filter((p) => (groupBy === "owner" ? p.owner : p.status) === col.key);
+        return (
+          <div key={col.key}
+            onDragOver={(e) => { if (col.droppable) { e.preventDefault(); setOverCol(col.key); } }}
+            onDragLeave={() => setOverCol(null)}
+            onDrop={() => { if (col.droppable && dragId) onMove(dragId, col.key); setDragId(null); setOverCol(null); }}
+            className={`w-64 shrink-0 rounded-lg p-2 transition-colors ${overCol === col.key ? "bg-stone-200" : "bg-stone-50"}`}>
+            <div className="flex items-center justify-between px-1.5 py-1.5 mb-1">
+              <Chip className={col.chip}>
+                {col.dot ? <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`} /> : <span>{col.icon}</span>}
+                {col.label}
+              </Chip>
+              <span className="text-xs text-stone-400 tabular-nums">{cards.length}</span>
+            </div>
+
+            <div className="space-y-2 min-h-16">
+              {cards.map((p) => {
+                const mb = findMember(p.owner), pal = palette(mb.color), roll = rollup(p), st = status(p.status);
+                return (
+                  <div key={p.id} draggable={isAdmin && groupBy === "status"}
+                    onDragStart={() => setDragId(p.id)} onDragEnd={() => { setDragId(null); setOverCol(null); }}
+                    onClick={() => onOpen(p.id, null)}
+                    className={`bg-white border border-stone-200 rounded-md p-3 cursor-pointer hover:border-stone-400 shadow-sm ${dragId === p.id ? "opacity-40" : ""}`}>
+                    <p className="text-sm text-stone-800 font-medium leading-snug mb-2">{p.title || "제목 없음"}</p>
+                    <div className="flex flex-wrap gap-1 mb-2.5">
+                      <Chip className={DEPT_CHIP}>{findDept(p.dept).name}</Chip>
+                      {groupBy === "owner"
+                        ? <Chip className={st.chip}><span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}</Chip>
+                        : <Chip className={priority(p.priority).chip}>{priority(p.priority).label}</Chip>}
+                      {roll.total > 0 && <Chip className="bg-white text-stone-500 border-stone-200"><Layers className="w-3 h-3" />{roll.done}/{roll.total}</Chip>}
+                    </div>
+                    <Progress value={roll.progress} bar={pal.bar} />
+                    <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-stone-100">
+                      <span className="flex items-center gap-1.5 text-xs text-stone-600"><Avatar id={p.owner} />{mb.name}</span>
+                      <span className="flex items-center gap-1 text-xs text-stone-500"><Clock className="w-3 h-3" />{fmt(roll.due)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {cards.length === 0 && (
+                <div className="text-xs text-stone-400 text-center py-6 border border-dashed border-stone-300 rounded-md">
+                  {isAdmin && groupBy === "status" ? "여기로 카드를 끌어 오세요" : "해당 항목이 없습니다"}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MonthCalendar({ rows, onOpen }) {
+  const findMember = useMember();
+  const [cursor, setCursor] = useState({ y: 2026, m: 7 });
+  const { y, m } = cursor;
+
+  const events = useMemo(() => {
+    const out = [];
+    rows.forEach((p) => {
+      const items = p.items || [];
+      if (items.length) items.forEach((i) => out.push({ key: `${p.id}-${i.id}`, pid: p.id, iid: i.id, title: i.title || "제목 없음", due: i.due, owner: p.owner }));
+      else out.push({ key: `${p.id}`, pid: p.id, iid: null, title: p.title || "제목 없음", due: p.due, owner: p.owner });
+    });
+    return out;
+  }, [rows]);
+
+  const grid = useMemo(() => {
+    const startPad = new Date(y, m - 1, 1).getDay();
+    const days = new Date(y, m, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < startPad; i++) cells.push(null);
+    for (let d = 1; d <= days; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }, [y, m]);
+
+  const key = (d) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const shift = (delta) => {
+    let nm = m + delta, ny = y;
+    if (nm > 12) { nm = 1; ny++; }
+    if (nm < 1) { nm = 12; ny--; }
+    setCursor({ y: ny, m: nm });
+  };
+
+  return (
+    <div className="border border-stone-200 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-200 bg-stone-50">
+        <h4 className="text-sm font-semibold text-stone-800">{y}년 {m}월</h4>
+        <div className="flex items-center gap-1">
+          <button onClick={() => shift(-1)} className="p-1.5 rounded hover:bg-stone-200 text-stone-600" aria-label="이전 달"><ChevronLeft className="w-4 h-4" /></button>
+          <button onClick={() => setCursor({ y: 2026, m: 7 })} className="px-2 py-1 rounded text-xs text-stone-600 hover:bg-stone-200">오늘</button>
+          <button onClick={() => shift(1)} className="p-1.5 rounded hover:bg-stone-200 text-stone-600" aria-label="다음 달"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50">
+        {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+          <div key={d} className={`py-1.5 text-center text-xs font-medium ${i === 0 ? "text-rose-500" : i === 6 ? "text-blue-500" : "text-stone-500"}`}>{d}</div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7">
+        {grid.map((d, i) => {
+          const dk = d ? key(d) : null;
+          const dayEvents = d ? events.filter((e) => e.due === dk) : [];
+          const isToday = dk === TODAY;
+          return (
+            <div key={i} className={`min-h-24 border-b border-r border-stone-100 p-1.5 ${d ? "bg-white" : "bg-stone-50"}`}>
+              {d && (
+                <>
+                  <span className={`inline-flex items-center justify-center w-5 h-5 text-xs mb-1 rounded-full ${isToday ? "bg-stone-800 text-white font-semibold" : i % 7 === 0 ? "text-rose-500" : "text-stone-500"}`}>{d}</span>
+                  <div className="space-y-1">
+                    {dayEvents.map((e) => (
+                      <button key={e.key} onClick={() => onOpen && onOpen(e.pid, e.iid)}
+                        className={`w-full text-left text-xs px-1.5 py-0.5 rounded border truncate ${palette(findMember(e.owner).color).tint}`}>
+                        {e.title}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 데이터베이스                                                        */
+/* ------------------------------------------------------------------ */
+
+function ProjectDatabase({ projects, setProjects, fixedOwner = null, title = "팀원별 프로젝트 현황", focus = null }) {
+  const { isAdmin, members, depts, settings } = useApp();
+  const [view, setView] = useState(settings.defaultView);
+  const [grouped, setGrouped] = useState(settings.defaultGroup === "owner" && !fixedOwner);
+  const [groupBy, setGroupBy] = useState("status");
+  const [q, setQ] = useState("");
+  const [fOwner, setFOwner] = useState("all");
+  const [fDept, setFDept] = useState("all");
+  const [fStatus, setFStatus] = useState("all");
+  const [sort, setSort] = useState("");
+  const [open, setOpen] = useState(null);
+
+  useEffect(() => { if (focus) setOpen({ pid: focus.pid, iid: focus.iid }); }, [focus]);
+
+  const rows = useMemo(() => {
+    let r = projects.filter((p) => {
+      if (fixedOwner && p.owner !== fixedOwner) return false;
+      if (!fixedOwner && fOwner !== "all" && p.owner !== fOwner) return false;
+      if (fDept !== "all" && p.dept !== fDept) return false;
+      if (fStatus !== "all" && p.status !== fStatus) return false;
+      if (q.trim()) {
+        const t = q.trim().toLowerCase();
+        if (!((p.title || "").toLowerCase().includes(t) || (p.items || []).some((i) => (i.title || "").toLowerCase().includes(t)))) return false;
+      }
+      return true;
+    });
+    if (sort === "due") r = [...r].sort((a, b) => rollup(a).due.localeCompare(rollup(b).due));
+    if (sort === "progress") r = [...r].sort((a, b) => rollup(b).progress - rollup(a).progress);
+    return r;
+  }, [projects, q, fOwner, fDept, fStatus, sort, fixedOwner]);
+
+  const actions = {
+    updateProject: (id, patch) => setProjects(projects.map((p) => (p.id === id ? { ...p, ...patch } : p))),
+    updateItem: (pid, iid, patch) => setProjects(projects.map((p) => (p.id === pid ? { ...p, items: p.items.map((i) => (i.id === iid ? { ...i, ...patch } : i)) } : p))),
+    addItem: (pid) => {
+      const iid = `i${Date.now()}`;
+      setProjects(projects.map((p) => (p.id === pid ? { ...p, items: [...(p.items || []), { id: iid, title: "", status: "todo", start: TODAY, due: TODAY, progress: 0, body: "" }] } : p)));
+      return iid;
+    },
+    removeItem: (pid, iid) => setProjects(projects.map((p) => (p.id === pid ? { ...p, items: p.items.filter((i) => i.id !== iid) } : p))),
+    addProject: (ownerId) => {
+      const id = Date.now();
+      setProjects([...projects, { id, title: "", owner: ownerId || fixedOwner || members[0].id, dept: depts[0].id, status: "todo", priority: "mid", start: TODAY, due: TODAY, progress: 0, body: "", items: [] }]);
+      return id;
+    },
+    removeProject: (id) => setProjects(projects.filter((p) => p.id !== id)),
+    move: (id, st) => setProjects(projects.map((p) => (p.id === id ? { ...p, status: st } : p))),
+  };
+
+  const openProject = open ? projects.find((p) => p.id === open.pid) : null;
+  const openItem = openProject && open.iid ? (openProject.items || []).find((i) => i.id === open.iid) : null;
+
+  const viewBtn = (id, Icon, label) => (
+    <button onClick={() => setView(id)}
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-sm transition-colors ${view === id ? "bg-white text-stone-900 shadow-sm font-medium" : "text-stone-500 hover:text-stone-800"}`}>
+      <Icon className="w-4 h-4" /> {label}
+    </button>
+  );
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-lg font-semibold text-stone-800">{title}</h3>
+        {isAdmin && (
+          <button onClick={() => setOpen({ pid: actions.addProject(fixedOwner), iid: null })}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-stone-800 text-white text-sm hover:bg-stone-700">
+            <Plus className="w-4 h-4" /> 새 프로젝트
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-0.5 bg-stone-100 rounded-md p-0.5">
+          {viewBtn("table", Table2, "표")}
+          {viewBtn("board", LayoutGrid, "보드")}
+          {viewBtn("calendar", CalendarDays, "캘린더")}
+        </div>
+
+        {view === "table" && !fixedOwner && (
+          <select value={grouped ? "owner" : "none"} onChange={(e) => setGrouped(e.target.value === "owner")} className={CONTROL}>
+            <option value="owner">팀원별 그룹</option>
+            <option value="none">그룹 없음</option>
+          </select>
+        )}
+        {view === "board" && !fixedOwner && (
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} className={CONTROL}>
+            <option value="status">상태별 그룹</option>
+            <option value="owner">팀원별 그룹</option>
+          </select>
+        )}
+
+        <div className="relative">
+          <Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-2" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이 표에서 검색" className={`${CONTROL} pl-8 w-44`} />
+        </div>
+
+        {!fixedOwner && (
+          <select value={fOwner} onChange={(e) => setFOwner(e.target.value)} className={CONTROL}>
+            <option value="all">모든 팀원</option>
+            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        )}
+        <select value={fDept} onChange={(e) => setFDept(e.target.value)} className={CONTROL}>
+          <option value="all">모든 유관 부서</option>
+          {depts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className={CONTROL}>
+          <option value="all">모든 상태</option>
+          {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+
+        <span className="text-sm text-stone-400 tabular-nums ml-auto">{rows.length}건</span>
+      </div>
+
+      {view === "table" && <ProjectTable rows={rows} onOpen={(pid, iid) => setOpen({ pid, iid })} sort={sort} setSort={setSort} grouped={grouped && !fixedOwner} actions={actions} />}
+      {view === "board" && <ProjectBoard rows={rows} onOpen={(pid, iid) => setOpen({ pid, iid })} onMove={actions.move} groupBy={fixedOwner ? "status" : groupBy} />}
+      {view === "calendar" && <MonthCalendar rows={rows} onOpen={(pid, iid) => setOpen({ pid, iid })} />}
+
+      {openProject && (
+        <DetailPanel project={openProject} item={openItem} actions={actions}
+          onOpenItem={(iid) => setOpen({ pid: open.pid, iid })} onClose={() => setOpen(null)} />
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 팀원 · 공지 모달                                                     */
+/* ------------------------------------------------------------------ */
+
+function MemberModal({ target, onSave, onDelete, onClose }) {
+  const [draft, setDraft] = useState(target);
+  const set = (k, v) => setDraft({ ...draft, [k]: v });
+  const isNew = !draft.id;
+  return (
+    <Modal title={isNew ? "팀원 추가" : "팀원 정보 편집"} onClose={onClose}
+      footer={<>
+        {!isNew ? (
+          <button onClick={() => onDelete(draft.id)} className="flex items-center gap-1.5 text-sm text-rose-600 hover:bg-rose-50 px-2.5 py-1.5 rounded">
+            <Trash2 className="w-4 h-4" /> 팀원 삭제
+          </button>
+        ) : <span />}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded text-sm text-stone-600 hover:bg-stone-100">취소</button>
+          <button onClick={() => draft.name.trim() && onSave(draft)} disabled={!draft.name.trim()}
+            className="px-3 py-1.5 rounded text-sm bg-stone-800 text-white hover:bg-stone-700 disabled:opacity-40">저장</button>
+        </div>
+      </>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-stone-500 mb-1">아이콘</label>
+            <input className={`${FIELD} text-center`} value={draft.emoji} onChange={(e) => set("emoji", e.target.value)} maxLength={2} />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-stone-500 mb-1">이름</label>
+            <input className={FIELD} value={draft.name} onChange={(e) => set("name", e.target.value)} placeholder="팀원 이름" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-stone-500 mb-1">담당 역할</label>
+          <input className={FIELD} value={draft.role} onChange={(e) => set("role", e.target.value)} placeholder="예: 교육 기획" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-stone-500 mb-1">이메일</label>
+          <input className={FIELD} value={draft.email} onChange={(e) => set("email", e.target.value)} placeholder="name@company.com" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-stone-500 mb-1">표시 색상</label>
+          <div className="flex flex-wrap gap-2">
+            {PALETTES.map((p) => (
+              <button key={p.id} onClick={() => set("color", p.id)}
+                className={`px-2.5 py-1.5 rounded border text-xs ${p.tint} ${draft.color === p.id ? "ring-2 ring-stone-800" : ""}`}>{p.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AdminGateModal({ expected, onSuccess, onClose }) {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState(false);
+
+  const submit = () => {
+    if (pw === expected) onSuccess();
+    else { setErr(true); setPw(""); }
+  };
+
+  return (
+    <Modal title="관리자 모드" onClose={onClose}
+      footer={<>
+        <span className="text-xs text-stone-400">관리자만 등록·수정할 수 있습니다</span>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded text-sm text-stone-600 hover:bg-stone-100">취소</button>
+          <button onClick={submit} disabled={!pw} className="px-3 py-1.5 rounded text-sm bg-stone-800 text-white hover:bg-stone-700 disabled:opacity-40">확인</button>
+        </div>
+      </>}>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm text-stone-600">
+          <ShieldCheck className="w-4 h-4 text-stone-500" /> 비밀번호를 입력하면 관리자 모드로 전환됩니다.
+        </div>
+        <input autoFocus type="password" value={pw}
+          onChange={(e) => { setPw(e.target.value); setErr(false); }}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onClose(); }}
+          placeholder="비밀번호"
+          className={`${FIELD} ${err ? "border-rose-400 ring-2 ring-rose-100" : ""}`} />
+        {err && <p className="text-xs text-rose-600">비밀번호가 맞지 않습니다. 다시 입력해 주세요.</p>}
+      </div>
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 페이지/* ------------------------------------------------------------------ */
+/* 페이지                                                              */
+/* ------------------------------------------------------------------ */
+
+function StatCard({ label, value, sub }) {
+  return (
+    <div className="border border-stone-200 rounded-lg p-4">
+      <p className="text-xs text-stone-500 mb-1.5">{label}</p>
+      <p className="text-2xl font-semibold text-stone-900 tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-stone-400 mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 타임라인 (팀원별 프로젝트 진행률)                                     */
+/* ------------------------------------------------------------------ */
+
+const DAY_W = 26;
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dayDiff = (a, b) => Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+
+function Blocks({ value, bar }) {
+  const filled = Math.round(value / 10);
+  return (
+    <span className="flex gap-0.5 shrink-0">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <span key={i} className={`w-2 h-2 rounded-sm ${i < filled ? bar : "bg-stone-200"}`} />
+      ))}
+    </span>
+  );
+}
+
+const LABEL_W = 136;
+
+function Timeline({ projects, onOpen, mode = "member" }) {
+  const { members, depts } = useApp();
+  const scroller = React.useRef(null);
+
+  /* 레인: 팀원 또는 유관 부서 */
+  const lanes = useMemo(() => (
+    mode === "dept"
+      ? depts.map((d, i) => ({ id: d.id, name: d.name, color: PALETTES[i % PALETTES.length].id, memberId: null }))
+      : members.map((m) => ({ id: m.id, name: m.name, color: m.color, memberId: m.id }))
+  ), [mode, members, depts]);
+
+  const laneKey = (p) => (mode === "dept" ? p.dept : p.owner);
+
+  const [selected, setSelected] = useState(() => new Set(lanes.map((l) => l.id)));
+  useEffect(() => { setSelected(new Set(lanes.map((l) => l.id))); }, [lanes]);
+
+  const rows = useMemo(() => {
+    const order = new Map(lanes.map((l, i) => [l.id, i]));
+    return projects
+      .filter((p) => selected.has(laneKey(p)))
+      .sort((a, b) => (order.get(laneKey(a)) - order.get(laneKey(b))) || String(rollup(a).start).localeCompare(String(rollup(b).start)));
+  }, [projects, selected, lanes, mode]);
+
+  const bounds = useMemo(() => {
+    const dates = [TODAY];
+    (rows.length ? rows : projects).forEach((p) => { const r = rollup(p); if (r.start) dates.push(r.start); if (r.due) dates.push(r.due); });
+    const sorted = [...dates].sort();
+    const first = new Date(sorted[0] + "T00:00:00");
+    const last = new Date(sorted[sorted.length - 1] + "T00:00:00");
+    const s = iso(new Date(first.getFullYear(), first.getMonth(), 1));
+    const e = iso(new Date(last.getFullYear(), last.getMonth() + 1, 0));
+    return { start: s, end: e, total: dayDiff(s, e) + 1 };
+  }, [rows, projects]);
+
+  const months = useMemo(() => {
+    const out = [];
+    let cur = new Date(bounds.start + "T00:00:00");
+    const stop = new Date(bounds.end + "T00:00:00");
+    while (cur <= stop) {
+      const y = cur.getFullYear(), mo = cur.getMonth();
+      const monthEnd = new Date(y, mo + 1, 0);
+      const from = iso(cur) < bounds.start ? bounds.start : iso(cur);
+      const to = iso(monthEnd) > bounds.end ? bounds.end : iso(monthEnd);
+      out.push({ key: `${y}-${mo}`, label: out.length === 0 ? `${y}년 ${mo + 1}월` : `${mo + 1}월`, days: dayDiff(from, to) + 1 });
+      cur = new Date(y, mo + 1, 1);
+    }
+    return out;
+  }, [bounds]);
+
+  const days = useMemo(() => {
+    const out = [];
+    const base = new Date(bounds.start + "T00:00:00").getTime();
+    for (let i = 0; i < bounds.total; i++) {
+      const d = new Date(base + i * 86400000);
+      out.push({ i, day: d.getDate(), dow: d.getDay(), key: iso(d) });
+    }
+    return out;
+  }, [bounds]);
+
+  const todayOffset = dayDiff(bounds.start, TODAY);
+  useEffect(() => {
+    if (scroller.current) scroller.current.scrollLeft = Math.max(0, (todayOffset - 6) * DAY_W);
+  }, [todayOffset]);
+
+  const toggle = (id) => {
+    const n = new Set(selected);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setSelected(n.size ? n : new Set(lanes.map((l) => l.id)));
+  };
+  const allOn = selected.size === lanes.length;
+  const trackW = bounds.total * DAY_W;
+  const laneLabel = mode === "dept" ? "유관 부서" : "담당자";
+
+  return (
+    <div className="space-y-2">
+      {/* 필터 */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <button onClick={() => setSelected(new Set(lanes.map((l) => l.id)))}
+          className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${allOn ? "bg-stone-800 text-white border-stone-800" : "bg-white text-stone-600 border-stone-300 hover:border-stone-500"}`}>
+          전체 {lanes.length}
+        </button>
+        {lanes.map((l) => {
+          const on = selected.has(l.id);
+          const pal = palette(l.color);
+          const count = projects.filter((p) => laneKey(p) === l.id).length;
+          if (count === 0 && mode === "dept") return null;
+          return (
+            <button key={l.id} onClick={() => toggle(l.id)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs transition-colors ${on ? pal.tint : "bg-white text-stone-400 border-stone-200"}`}>
+              <span className={`w-2 h-2 rounded-full ${on ? pal.bar : "bg-stone-300"}`} />
+              {l.name} <span className="tabular-nums opacity-60">{count}</span>
+            </button>
+          );
+        })}
+        <span className="ml-auto text-xs text-stone-400 tabular-nums">{rows.length}건 표시</span>
+      </div>
+
+      <div ref={scroller} className="border border-stone-200 rounded-lg overflow-auto" style={{ maxHeight: 460 }}>
+        <div className="relative" style={{ width: LABEL_W + trackW, minWidth: "100%" }}>
+
+          <div className="flex sticky top-0 z-20 bg-stone-50 border-b border-stone-200">
+            <div className="sticky left-0 z-30 bg-stone-50 border-r border-stone-200 shrink-0 px-2 py-1.5 text-xs font-medium text-stone-500" style={{ width: LABEL_W }}>
+              {laneLabel}
+            </div>
+            {months.map((mo) => (
+              <div key={mo.key} style={{ width: mo.days * DAY_W }} className="px-2 py-1.5 text-xs font-medium text-stone-600 border-r border-stone-200 truncate shrink-0">
+                {mo.label}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex sticky z-20 bg-stone-50 border-b border-stone-200" style={{ top: 29 }}>
+            <div className="sticky left-0 z-30 bg-stone-50 border-r border-stone-200 shrink-0" style={{ width: LABEL_W }} />
+            {days.map((d) => (
+              <div key={d.key} style={{ width: DAY_W }}
+                className={`text-center text-xs py-1 shrink-0 ${d.key === TODAY ? "" : d.dow === 0 ? "text-rose-400" : d.dow === 6 ? "text-blue-400" : "text-stone-400"}`}>
+                {d.key === TODAY
+                  ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-rose-500 text-white font-medium">{d.day}</span>
+                  : d.day}
+              </div>
+            ))}
+          </div>
+
+          <div className="absolute pointer-events-none" style={{ left: LABEL_W, top: 56, bottom: 0, width: trackW }}>
+            {days.filter((d) => d.dow === 0 || d.dow === 6).map((d) => (
+              <div key={d.key} className="absolute top-0 bottom-0 bg-stone-50" style={{ left: d.i * DAY_W, width: DAY_W }} />
+            ))}
+          </div>
+
+          <div className="absolute border-l border-rose-400 pointer-events-none" style={{ left: LABEL_W + todayOffset * DAY_W + DAY_W / 2, top: 56, bottom: 0 }} />
+
+          <div className="relative">
+            {rows.map((p, idx) => {
+              const lane = lanes.find((l) => l.id === laneKey(p)) || lanes[0];
+              const pal = palette(lane.color);
+              const r = rollup(p);
+              const off = Math.max(0, dayDiff(bounds.start, r.start));
+              const span = Math.max(1, dayDiff(r.start, r.due) + 1);
+              const late = r.due < TODAY && p.status !== "done";
+              const firstOfLane = idx === 0 || laneKey(rows[idx - 1]) !== laneKey(p);
+              return (
+                <div key={p.id} className={`flex h-11 ${firstOfLane && idx > 0 ? "border-t border-stone-200" : "border-t border-stone-100"}`}>
+                  <div className="sticky left-0 z-10 bg-white border-r border-stone-200 shrink-0 flex items-center gap-1.5 px-2" style={{ width: LABEL_W }}>
+                    <span className={`w-1 h-6 rounded-full shrink-0 ${pal.bar}`} />
+                    {firstOfLane ? (
+                      <>
+                        {lane.memberId
+                          ? <Avatar id={lane.memberId} />
+                          : <Building2 className="w-4 h-4 text-stone-400 shrink-0" />}
+                        <span className="text-xs font-medium text-stone-800 truncate">{lane.name}</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-stone-300 truncate pl-6">{lane.name}</span>
+                    )}
+                  </div>
+
+                  <div className="relative shrink-0" style={{ width: trackW }}>
+                    <button onClick={() => onOpen(p.id)}
+                      style={{ left: off * DAY_W, width: Math.max(span * DAY_W, 200) }}
+                      className={`absolute top-1.5 h-8 flex items-center gap-2 pl-1.5 pr-2 rounded border shadow-sm overflow-hidden hover:ring-2 hover:ring-stone-300 ${pal.tint} ${late ? "border-rose-400" : ""}`}>
+                      <ChevronRight className="w-3 h-3 opacity-50 shrink-0" />
+                      <span className="text-xs truncate flex-1 text-left">{p.title || "제목 없음"}</span>
+                      <Blocks value={r.progress} bar={pal.bar} />
+                      <span className="text-xs tabular-nums shrink-0 opacity-70">{r.progress}%</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {rows.length === 0 && <p className="px-4 py-10 text-sm text-stone-400 text-center">선택한 항목의 프로젝트가 없습니다.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HomePage({ projects, setProjects, setPage, setMemberId, onAddMember, focus, onOpenProject }) {
+  const { isAdmin, members, depts } = useApp();
+  const findDept = useDept();
+  const [tab, setTab] = useState("board");
+  useEffect(() => { if (focus) setTab("board"); }, [focus]);
+
+  const done = projects.filter((p) => p.status === "done").length;
+  const doing = projects.filter((p) => p.status === "doing").length;
+  const overdue = projects.filter((p) => rollup(p).due < TODAY && p.status !== "done").length;
+  const totalItems = projects.reduce((s, p) => s + (p.items || []).length, 0);
+
+  const tabBtn = (id, label) => (
+    <button onClick={() => setTab(id)} className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === id ? "border-stone-800 text-stone-900 font-medium" : "border-transparent text-stone-500 hover:text-stone-800"}`}>
+      {label}
+    </button>
+  );
+
+  return (
+    <>
+      <div className="flex items-center gap-1 border-b border-stone-200 mb-6">
+        {tabBtn("board", "팀 보드")}
+        {tabBtn("members", "팀원별 페이지")}
+      </div>
+
+      {tab === "board" && (
+        <div className="space-y-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="전체 프로젝트" value={projects.length} sub={`하위 항목 ${totalItems}건`} />
+            <StatCard label="진행 중" value={doing} />
+            <StatCard label="완료" value={done} sub={projects.length ? `완료율 ${Math.round((done / projects.length) * 100)}%` : ""} />
+            <StatCard label="기한 초과" value={overdue} sub={overdue ? "확인이 필요합니다" : "없습니다"} />
+          </div>
+
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-stone-800">
+                {isAdmin ? "팀원별 프로젝트 진행률" : "유관 부서별 프로젝트 진행률"}
+              </h3>
+              <span className="text-xs text-stone-400">막대를 누르면 상세 페이지가 열립니다</span>
+            </div>
+            <Timeline projects={projects} onOpen={onOpenProject} mode={isAdmin ? "member" : "dept"} />
+          </section>
+
+          <section>
+            <h3 className="text-lg font-semibold text-stone-800 mb-3">바로 가기</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { icon: Building2, label: "유관 부서 현황", desc: `${depts.length}개 부서 요청`, go: "dept" },
+                { icon: CalendarDays, label: "팀 캘린더", desc: "마감일 한눈에", go: "calendar" },
+              ].map((c) => (
+                <button key={c.go} onClick={() => setPage(c.go)} className="border border-stone-200 rounded-lg p-4 text-left hover:border-stone-400 hover:bg-stone-50 transition-colors">
+                  <c.icon className="w-5 h-5 text-stone-700 mb-2" />
+                  <p className="text-sm font-medium text-stone-800">{c.label}</p>
+                  <p className="text-xs text-stone-500 mt-0.5">{c.desc}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <ProjectDatabase projects={projects} setProjects={setProjects} focus={focus} />
+        </div>
+      )}
+
+      {tab === "members" && (
+        <>
+          {isAdmin && (
+            <div className="flex justify-end mb-3">
+              <button onClick={onAddMember} className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-stone-800 text-white text-sm hover:bg-stone-700">
+                <UserPlus className="w-4 h-4" /> 팀원 추가
+              </button>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {members.map((m) => {
+              const mine = projects.filter((p) => p.owner === m.id);
+              const fin = mine.filter((p) => p.status === "done").length;
+              const rate = mine.length ? Math.round(mine.reduce((s, p) => s + rollup(p).progress, 0) / mine.length) : 0;
+              const partners = [...new Set(mine.map((p) => p.dept))];
+              return (
+                <button key={m.id} onClick={() => { setMemberId(m.id); setPage("member"); }}
+                  className="border border-stone-200 rounded-lg p-4 text-left hover:border-stone-400 hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="flex items-center gap-2.5">
+                      <Avatar id={m.id} size="lg" />
+                      <span>
+                        <span className="block text-base font-semibold text-stone-800">{m.name}</span>
+                        <span className="block text-xs text-stone-500">{m.role}</span>
+                      </span>
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-stone-400" />
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {partners.map((d) => <Chip key={d} className={DEPT_CHIP}>{findDept(d).name}</Chip>)}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-stone-500 mb-2">
+                    <span>프로젝트 {mine.length}</span>
+                    <span>완료 {fin}</span>
+                    <span>유관 부서 {partners.length}</span>
+                  </div>
+                  <Progress value={rate} bar={palette(m.color).bar} />
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function MemberPage({ memberId, projects, setProjects, setPage, onEditMember, focus }) {
+  const { isAdmin, depts } = useApp();
+  const findMember = useMember();
+  const m = findMember(memberId);
+  const mine = projects.filter((p) => p.owner === memberId);
+  const done = mine.filter((p) => p.status === "done").length;
+  const rate = mine.length ? Math.round(mine.reduce((s, p) => s + rollup(p).progress, 0) / mine.length) : 0;
+  const late = mine.filter((p) => rollup(p).due < TODAY && p.status !== "done").length;
+  const partners = depts.filter((d) => mine.some((p) => p.dept === d.id));
+
+  return (
+    <div className="space-y-8">
+      <button onClick={() => setPage("home")} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800">
+        <ArrowLeft className="w-4 h-4" /> 팀원별 페이지
+      </button>
+
+      <div className="border border-stone-200 rounded-lg p-4 flex items-center gap-4 flex-wrap">
+        <Avatar id={m.id} size="lg" />
+        <div>
+          <p className="text-sm font-medium text-stone-800">{m.name} · {m.role}</p>
+          <p className="text-xs text-stone-500 flex items-center gap-1.5 mt-0.5"><Mail className="w-3 h-3" /> {m.email}</p>
+        </div>
+        {isAdmin && (
+          <button onClick={() => onEditMember(m)} className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-stone-300 text-sm text-stone-700 hover:bg-stone-50">
+            <Pencil className="w-3.5 h-3.5" /> 정보 편집
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="담당 프로젝트" value={mine.length} sub={`하위 항목 ${mine.reduce((s, p) => s + (p.items || []).length, 0)}건`} />
+        <StatCard label="진행 중" value={mine.filter((p) => p.status === "doing").length} />
+        <StatCard label="완료" value={done} sub={`평균 진행률 ${rate}%`} />
+        <StatCard label="기한 초과" value={late} sub={late ? "일정 조정이 필요합니다" : "없습니다"} />
+      </div>
+
+      <section>
+        <h3 className="text-lg font-semibold text-stone-800 mb-3">협업 중인 유관 부서</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {partners.map((d) => {
+            const list = mine.filter((p) => p.dept === d.id);
+            const fin = list.filter((p) => p.status === "done").length;
+            return (
+              <div key={d.id} className="border border-stone-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="w-4 h-4 text-stone-500" />
+                  <p className="text-sm font-medium text-stone-800">{d.name}</p>
+                </div>
+                <p className="text-xs text-stone-500 mb-3">요청 창구 {d.contact}</p>
+                <Progress value={list.length ? Math.round(list.reduce((s, p) => s + rollup(p).progress, 0) / list.length) : 0} bar={palette(m.color).bar} />
+                <p className="text-xs text-stone-400 mt-1.5">요청 {list.length}건 · 완료 {fin}건</p>
+              </div>
+            );
+          })}
+          {partners.length === 0 && <p className="text-sm text-stone-500">아직 연결된 유관 부서가 없습니다.</p>}
+        </div>
+      </section>
+
+      <ProjectDatabase projects={projects} setProjects={setProjects} fixedOwner={memberId} title={`${m.name} 님의 프로젝트`} focus={focus} />
+    </div>
+  );
+}
+
+function DeptPage({ projects, setPage, setMemberId }) {
+  const { depts } = useApp();
+  const findMember = useMember();
+  const active = depts.filter((d) => projects.some((p) => p.dept === d.id));
+  const busiest = [...active].sort((a, b) => projects.filter((p) => p.dept === b.id).length - projects.filter((p) => p.dept === a.id).length)[0];
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="요청 부서" value={`${active.length}개`} sub={`전체 ${depts.length}개 중`} />
+        <StatCard label="접수된 요청" value={projects.length} />
+        <StatCard label="검토 대기" value={projects.filter((p) => p.status === "review").length} sub="부서 확인 필요" />
+        <StatCard label="최다 요청" value={busiest ? busiest.name : "-"} sub={busiest ? `${projects.filter((p) => p.dept === busiest.id).length}건` : ""} />
+      </div>
+
+      <section>
+        <h3 className="text-lg font-semibold text-stone-800 mb-3">유관 부서별 요청 현황</h3>
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {active.map((d) => {
+            const list = projects.filter((p) => p.dept === d.id);
+            return (
+              <div key={d.id} className="w-64 shrink-0 bg-stone-50 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1 px-1">
+                  <span className="text-sm font-semibold text-stone-800">{d.name}</span>
+                  <span className="text-xs text-stone-400">{list.length}건</span>
+                </div>
+                <p className="px-1 text-xs text-stone-500 mb-3">{d.contact}</p>
+                <div className="space-y-2">
+                  {list.map((p) => {
+                    const mb = findMember(p.owner), st = status(p.status), roll = rollup(p);
+                    return (
+                      <button key={p.id} onClick={() => { setMemberId(p.owner); setPage("member"); }}
+                        className="w-full text-left bg-white border border-stone-200 rounded-md p-3 hover:border-stone-400">
+                        <p className="text-sm font-medium text-stone-800 leading-snug mb-2">{p.title || "제목 없음"}</p>
+                        <Chip className={st.chip}><span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}</Chip>
+                        <div className="flex items-center justify-between mt-2.5">
+                          <span className="flex items-center gap-1.5 text-xs text-stone-600"><Avatar id={p.owner} />{mb.name}</span>
+                          <span className="text-xs text-stone-500">{fmt(roll.due)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 사이드바 · 앱/* ------------------------------------------------------------------ */
+/* 사이드바 · 앱                                                        */
+/* ------------------------------------------------------------------ */
+
+function Sidebar({ page, setPage, memberId, setMemberId, open, setOpen, onSearch, onSettings }) {
+  const { members, settings } = useApp();
+  const [treeOpen, setTreeOpen] = useState(true);
+  const item = (active) =>
+    `w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors ${
+      active ? "bg-stone-200 text-stone-900 font-medium" : "text-stone-600 hover:bg-stone-200"}`;
+
+  return (
+    <aside className={`${open ? "w-60" : "w-0"} shrink-0 bg-stone-100 border-r border-stone-200 overflow-hidden transition-all duration-200`}>
+      <div className="w-60 h-full flex flex-col">
+        <div className="px-3 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-6 h-6 rounded bg-stone-800 text-white text-xs flex items-center justify-center font-semibold shrink-0">
+              {settings.teamName.slice(0, 1)}
+            </span>
+            <span className="text-sm font-medium text-stone-800 truncate">{settings.teamName} 워크스페이스</span>
+          </div>
+          <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-stone-200 text-stone-500" aria-label="사이드바 접기">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-2 space-y-0.5">
+          <button onClick={onSearch} className={item(false)}>
+            <Search className="w-4 h-4" /> 검색
+            <kbd className="ml-auto text-xs text-stone-400 border border-stone-300 rounded px-1">⌘K</kbd>
+          </button>
+          <button onClick={() => setPage("home")} className={item(page === "home")}><Home className="w-4 h-4" /> 홈</button>
+          <button onClick={onSettings} className={item(false)}><Settings className="w-4 h-4" /> 설정</button>
+        </div>
+
+        <div className="mt-5 px-2 flex-1 overflow-y-auto">
+          <div className="px-2 pb-1 text-xs font-semibold text-stone-400 tracking-wide">페이지</div>
+          <button onClick={() => setTreeOpen(!treeOpen)} className="w-full flex items-center gap-1 px-2 py-1.5 rounded text-sm text-stone-800 hover:bg-stone-200 font-medium text-left">
+            {treeOpen ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
+            <span>📁</span><span className="truncate">팀원별 프로젝트 관리</span>
+          </button>
+
+          {treeOpen && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-stone-300 pl-2">
+              <button onClick={() => setPage("dept")} className={item(page === "dept")}><Building2 className="w-4 h-4" /> 유관 부서 현황</button>
+              <button onClick={() => setPage("calendar")} className={item(page === "calendar")}><CalendarDays className="w-4 h-4" /> 팀 캘린더</button>
+              <div className="px-2 pt-2 pb-1 text-xs font-semibold text-stone-400">팀원 페이지</div>
+              {members.map((m) => (
+                <button key={m.id} onClick={() => { setMemberId(m.id); setPage("member"); }} className={item(page === "member" && memberId === m.id)}>
+                  <span className="w-4 text-center">{m.emoji}</span> {m.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function App() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
+  const [members, setMembers] = useState(SEED_MEMBERS);
+  const [depts, setDepts] = useState(SEED_DEPTS);
+  const [projects, setProjects] = useState(SEED_PROJECTS);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [page, setPage] = useState("home");
+  const [memberId, setMemberId] = useState(SEED_MEMBERS[0].id);
+  const [memberEdit, setMemberEdit] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [focus, setFocus] = useState(null);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearchOpen(true); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const current = members.find((m) => m.id === memberId) || members[0];
+
+  const go = (target) => {
+    setSearchOpen(false);
+    if (target.type === "project") {
+      const p = projects.find((x) => x.id === target.pid);
+      if (p) { setMemberId(p.owner); setPage("member"); setFocus({ pid: target.pid, iid: target.iid, n: Date.now() }); }
+    }
+    if (target.type === "member") { setMemberId(target.id); setPage("member"); }
+    if (target.type === "dept") setPage("dept");
+  };
+
+  const saveMember = (m) => {
+    if (m.id) setMembers(members.map((x) => (x.id === m.id ? m : x)));
+    else {
+      const id = `m${Date.now()}`;
+      setMembers([...members, { ...m, id }]);
+      setMemberId(id);
+    }
+    setMemberEdit(null);
+  };
+  const removeMember = (id) => {
+    if (members.length <= 1) return;
+    const rest = members.filter((m) => m.id !== id);
+    setMembers(rest);
+    setProjects(projects.filter((p) => p.owner !== id));
+    if (memberId === id) { setMemberId(rest[0].id); setPage("home"); }
+    setMemberEdit(null);
+  };
+
+  const openProject = (pid, iid = null) => {
+    const p = projects.find((x) => x.id === pid);
+    if (p) { setMemberId(p.owner); setPage("member"); setFocus({ pid, iid, n: Date.now() }); }
+  };
+
+  const crumbs = { home: "팀원별 프로젝트 관리", dept: "유관 부서 현황", calendar: "팀 캘린더", member: current.name };
+  const heading = {
+    home: { icon: "📁", title: "팀원별 프로젝트 관리", sub: `${settings.teamName} · Member-Based Project Management` },
+    dept: { icon: "🏢", title: "유관 부서 현황", sub: "부서에서 요청한 프로젝트 한눈에" },
+    calendar: { icon: "🗓", title: "팀 캘린더", sub: "프로젝트와 단위 작업 마감 한눈에" },
+    member: { icon: current.emoji, title: current.name, sub: current.role },
+  }[page];
+
+  const roleBtn = (admin, Icon, label) => (
+    <button onClick={() => { if (admin) { if (!isAdmin) setGateOpen(true); } else setIsAdmin(false); }}
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors ${isAdmin === admin ? "bg-white text-stone-900 shadow-sm font-medium" : "text-stone-500 hover:text-stone-800"}`}>
+      <Icon className="w-3.5 h-3.5" /> {label}
+    </button>
+  );
+
+  return (
+    <AppCtx.Provider value={{ isAdmin, members, depts, settings }}>
+      <div className="flex h-screen bg-white text-stone-900 overflow-hidden">
+        <main className="flex-1 flex flex-col min-w-0">
+          <header className="flex items-center gap-2 px-4 h-11 border-b border-stone-200 shrink-0">
+            <button onClick={() => setPage("home")} className="text-sm text-stone-500 hover:text-stone-800">팀원별 프로젝트 관리</button>
+            {page !== "home" && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-stone-300" />
+                <span className="text-sm text-stone-800">{crumbs[page]}</span>
+              </>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={() => setSearchOpen(true)} className="p-1.5 rounded hover:bg-stone-100 text-stone-400" aria-label="검색"><Search className="w-4 h-4" /></button>
+              <div className="flex items-center gap-0.5 bg-stone-100 rounded-md p-0.5">
+                {roleBtn(true, ShieldCheck, "관리자")}
+                {roleBtn(false, Eye, "일반 사용자")}
+              </div>
+              <button onClick={() => setSettingsOpen(true)} className="p-1.5 rounded hover:bg-stone-100 text-stone-400" aria-label="설정"><Settings className="w-4 h-4" /></button>
+            </div>
+          </header>
+
+          {!isAdmin && (
+            <div className="px-4 py-1.5 bg-stone-50 border-b border-stone-200 text-xs text-stone-500 flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5" /> 읽기 전용 화면입니다. 등록과 수정은 관리자만 할 수 있습니다.
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto">
+            <div className={`h-32 ${cover(settings.cover).css}`} />
+            <div className="max-w-5xl mx-auto px-6 lg:px-10 pb-20">
+              <div className="-mt-8 mb-6">
+                <div className="w-16 h-16 rounded-lg bg-white border border-stone-200 shadow-sm flex items-center justify-center text-3xl mb-3">{heading.icon}</div>
+                <h1 className="text-3xl font-bold text-stone-900 tracking-tight">{heading.title}</h1>
+                <p className="text-sm text-stone-500 mt-1">{heading.sub}</p>
+              </div>
+
+              {page === "home" && (
+                <HomePage projects={projects} setProjects={setProjects} setPage={setPage} setMemberId={setMemberId}
+                  onAddMember={() => setMemberEdit({ name: "", role: "", email: "", emoji: "🙂", color: "stone" })} focus={null}
+                  onOpenProject={openProject} />
+              )}
+              {page === "member" && (
+                <MemberPage memberId={memberId} projects={projects} setProjects={setProjects} setPage={setPage} onEditMember={setMemberEdit} focus={focus} />
+              )}
+              {page === "dept" && <DeptPage projects={projects} setPage={setPage} setMemberId={setMemberId} />}
+              {page === "calendar" && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 flex-wrap text-xs text-stone-500">
+                    {members.map((m) => (
+                      <span key={m.id} className="flex items-center gap-1.5"><span className={`w-3 h-3 rounded ${palette(m.color).bar}`} /> {m.name}</span>
+                    ))}
+                  </div>
+                  <MonthCalendar rows={projects} onOpen={(pid, iid) => openProject(pid, iid)} />
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+
+        {memberEdit && isAdmin && <MemberModal target={memberEdit} onSave={saveMember} onDelete={removeMember} onClose={() => setMemberEdit(null)} />}
+        {gateOpen && (
+          <AdminGateModal expected={settings.adminPw}
+            onSuccess={() => { setIsAdmin(true); setGateOpen(false); }}
+            onClose={() => setGateOpen(false)} />
+        )}
+        {searchOpen && <SearchModal projects={projects} onGo={go} onClose={() => setSearchOpen(false)} />}
+        {settingsOpen && (
+          <SettingsModal settings={settings} setSettings={setSettings} depts={depts} setDepts={setDepts}
+            members={members} projects={projects}
+            onEditMember={setMemberEdit} onAddMember={() => setMemberEdit({ name: "", role: "", email: "", emoji: "🙂", color: "stone" })}
+            onClose={() => setSettingsOpen(false)} />
+        )}
+      </div>
+    </AppCtx.Provider>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);
+
+</script>
+
+</body>
+</html>
