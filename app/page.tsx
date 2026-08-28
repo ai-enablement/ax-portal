@@ -156,6 +156,8 @@ const userJourney = [
   { title: "운영·개선", caption: "예정", kind: "stage", display: 6, doc: "OPS · CHG" },
 ];
 
+type UserProject = (typeof userProjects)[number] & { intakeAnswers?: string[] };
+
 const lifecycleOutputs = [
   { code: "INT", title: "에이전트 요구 접수서[INT]", summary: "해결하려는 업무 문제와 현재 방식, 업무량, 기대 결과와 위험을 정리합니다.", sections: [["업무 문제", "반복·수작업·오류가 발생하는 현재 업무"], ["업무량", "발생 빈도·건당 시간·수행 인원"], ["입력 자료", "사용 시스템·파일·참고 문서"], ["기대 결과", "목표 처리시간·정확도·통제 방식"]] },
   { code: "FEA", title: "타당성 평가서[FEA]", summary: "AI 적용 적합성과 대안을 비교하고 기대 효과, 위험, 추진 여부를 판정합니다.", sections: [["적합성", "Agent 적용 적합도와 판단 근거"], ["대안 비교", "기존 시스템·RPA·업무 개선 대안"], ["효과 추정", "절감 시간·품질 향상·적용 범위"], ["판정", "Go · Conditional Go · Drop"]] },
@@ -236,6 +238,18 @@ export default function Home() {
   const [mobileNav, setMobileNav] = useState(false);
   const [hubProject, setHubProject] = useState<(typeof projects)[0] | null>(null);
   const [llmCostGuideOpen, setLlmCostGuideOpen] = useState(false);
+  const [submittedProjects, setSubmittedProjects] = useState<UserProject[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("agent-portal-submitted-projects");
+      if (saved) setSubmittedProjects(JSON.parse(saved));
+    } catch {
+      window.localStorage.removeItem("agent-portal-submitted-projects");
+    }
+  }, []);
+
+  const userProjectItems = useMemo<UserProject[]>(() => [...submittedProjects, ...userProjects], [submittedProjects]);
 
   const filteredAgents = useMemo(() => agents.filter((a) => `${a.name} ${a.desc} ${a.category}`.toLowerCase().includes(query.toLowerCase())), [query]);
   const visibleNavGroups = useMemo(() => {
@@ -282,6 +296,40 @@ export default function Home() {
     setLlmCostGuideOpen(true);
   };
 
+  const submitAgentRequest = (answers: string[], title: string) => {
+    setSubmittedProjects(current => {
+      const sequence = String(32 + current.length).padStart(3, "0");
+      const project: UserProject = {
+        no: `2026-${sequence}`,
+        name: title,
+        stage: 1,
+        status: "타당성 평가 대기",
+        tone: "blue",
+        progress: 22,
+        owner: "김현우",
+        handler: "AI활성화팀 배정 대기",
+        updated: "방금",
+        nextAction: "타당성 평가 결과를 기다리고 있습니다",
+        description: "에이전트 요구 접수서[INT] 제출이 완료되어 AI활성화팀의 타당성 평가를 기다리고 있습니다.",
+        journeyStep: 1,
+        nextGate: "G1 착수 승인",
+        teamOwner: "AI활성화팀 배정 대기",
+        dueDate: "FEA 작성 후 안내",
+        requestedDate: answers[4],
+        committedDate: "G2 승인 후 확정",
+        scheduleState: "타당성 평가 대기",
+        checkpoints: "3/11",
+        route: "intake" as View,
+        intakeAnswers: answers,
+      };
+      const next = [project, ...current];
+      window.localStorage.setItem("agent-portal-submitted-projects", JSON.stringify(next));
+      return next;
+    });
+    setView("home");
+    notify("에이전트 요구 접수서[INT]가 제출되었습니다. 신규 과제가 타당성 평가 대기로 등록되었습니다.");
+  };
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
@@ -318,7 +366,7 @@ export default function Home() {
           </div>
         </header>
 
-        {view === "home" && <Dashboard role={role} setView={go} setRequestOpen={setRequestOpen} setDetail={setDetail} />}
+        {view === "home" && <Dashboard role={role} setView={go} setRequestOpen={setRequestOpen} setDetail={setDetail} userProjectItems={userProjectItems} />}
         {view === "teamboard" && role.includes("AI활성화팀") && <LegacyTeamWorkspaceDashboard role={role} setView={go} />}
         {view === "intake" && <IntakeFeasibility role={role} setRole={setRole} notify={notify} goDefinition={() => go("definition")} />}
         {view === "definition" && <RequirementDefinition role={role} setRole={setRole} notify={notify} goDelivery={() => go("delivery")} />}
@@ -329,7 +377,7 @@ export default function Home() {
         {view === "governance" && <Governance onDetail={setDetail} notify={notify} />}
       </main>
 
-      {requestOpen && <RequestWizard step={requestStep} setStep={setRequestStep} close={() => { setRequestOpen(false); setRequestStep(1); }} notify={notify} />}
+      {requestOpen && <RequestWizard step={requestStep} setStep={setRequestStep} close={() => { setRequestOpen(false); setRequestStep(1); }} onSubmit={submitAgentRequest} />}
       {llmCostGuideOpen && <div className="llm-cost-setup-backdrop" onMouseDown={() => setLlmCostGuideOpen(false)}><section className="llm-cost-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="llm-cost-setup-title" onMouseDown={event => event.stopPropagation()}><header><div><Pill tone="blue">최초 1회 설정</Pill><h2 id="llm-cost-setup-title">LLM Cost Monitoring 접속 준비</h2><p>브라우저는 Windows 시스템 파일을 관리자 권한으로 자동 수정할 수 없습니다.</p></div><button aria-label="설정 안내 닫기" onClick={() => setLlmCostGuideOpen(false)}><X size={18} weight="bold" /></button></header><div className="llm-cost-setup-body"><div className="llm-cost-security-note"><ShieldCheck size={20} weight="fill" /><p><b>사용자가 직접 한 번만 설정해야 합니다.</b><span>Windows의 hosts 파일은 운영체제 보안 영역이어서 사이트가 대신 변경할 수 없습니다.</span></p></div><ol><li><span>1</span><div><b>메모장을 관리자 권한으로 실행</b><p>시작 메뉴에서 메모장을 검색한 뒤 ‘관리자 권한으로 실행’을 선택합니다.</p></div></li><li><span>2</span><div><b>hosts 파일 열기</b><p><code>C:\Windows\System32\drivers\etc\hosts</code></p><small>파일명은 <b>hosts</b>이며 확장자가 없습니다. 파일 형식을 ‘모든 파일’로 선택하세요.</small></div></li><li><span>3</span><div><b>아래 한 줄을 추가하고 저장</b><div className="hosts-entry"><code>203.228.99.65 llmcost.changshininc.com</code><button onClick={() => { navigator.clipboard.writeText("203.228.99.65 llmcost.changshininc.com"); notify("hosts 설정 문구를 복사했습니다."); }}>복사</button></div></div></li></ol></div><footer><button className="secondary" onClick={() => setLlmCostGuideOpen(false)}>나중에 하기</button><button className="primary" onClick={() => { window.localStorage.setItem("llm-cost-hosts-ready", "true"); setLlmCostGuideOpen(false); window.open("http://llmcost.changshininc.com/", "_blank", "noopener,noreferrer"); }}>설정 완료 · 사이트 열기 <ArrowRight size={14} weight="bold" /></button></footer></section></div>}
       {detail && <ProjectDrawer project={detail} role={role} close={() => setDetail(null)} openHub={openHub} openWorkflow={(next) => { setDetail(null); go(next); }} notify={notify} />}
       {toast && <div className="toast" role="status" aria-live="polite"><span><Check size={12} weight="bold" /></span>{toast}</div>}
@@ -338,7 +386,7 @@ export default function Home() {
   );
 }
 
-function Dashboard({ role, setView, setRequestOpen, setDetail }: { role: string; setView: (v: View) => void; setRequestOpen: (v: boolean) => void; setDetail: (p: (typeof projects)[0]) => void }) {
+function Dashboard({ role, setView, setRequestOpen, setDetail, userProjectItems }: { role: string; setView: (v: View) => void; setRequestOpen: (v: boolean) => void; setDetail: (p: (typeof projects)[0]) => void; userProjectItems: UserProject[] }) {
   if (["운영 담당자", "AI활성화팀 이재승 리뷰어", "현업 Owner 박정민 팀장", "정보보호 담당자"].includes(role)) {
     const roleHome = role === "운영 담당자"
       ? { eyebrow: "OPERATIONS", title: "운영 점검과 개선 기록을 관리합니다.", body: "월간 점검, 지식 최신성, 재평가와 변경 이력을 기록합니다.", primary: "운영 · 개선 열기", view: "operations" as View, tasks: ["월간 OPS 점검 기록", "CHG 변경·재평가 연결", "지식 최신성·폐기 기준 확인"] }
@@ -349,7 +397,7 @@ function Dashboard({ role, setView, setRequestOpen, setDetail }: { role: string;
           : { eyebrow: "INFORMATION SECURITY", title: "상 트랙의 보안 통제를 검토합니다.", body: "데이터 분류, 권한 최소화, 로그·보존 정책을 확인하고 G3에 추가 서명합니다.", primary: "상 트랙 G3 검토 열기", view: "delivery" as View, tasks: ["개인정보·기밀 처리 확인", "도구 권한·감사 로그 검토", "상 트랙 정보보호 승인 또는 보완"] };
     return <div className="page role-home"><section className="welcome"><div><p className="eyebrow">{roleHome.eyebrow}</p><h1>{roleHome.title}</h1><p>{roleHome.body}</p></div><button className="primary" onClick={() => setView(roleHome.view)}>{roleHome.primary}<ArrowRight size={14} weight="bold" /></button></section><section className="panel role-home-tasks"><div className="panel-title"><div><h2>이 역할의 필수 액션</h2><p>표준체계에서 본인에게 배정된 작성·검토·승인만 표시합니다.</p></div><Pill tone="blue">권한 분리</Pill></div><div>{roleHome.tasks.map((task,index)=><article key={task}><span>{index+1}</span><b>{task}</b><small>다른 역할의 승인 액션은 조회만 가능합니다.</small></article>)}</div></section></div>;
   }
-  if (role !== "AI활성화팀 최병두 팀장") return <UserDashboard role={role} setView={setView} openNewRequest={() => setRequestOpen(true)} />;
+  if (role !== "AI활성화팀 최병두 팀장") return <UserDashboard role={role} setView={setView} openNewRequest={() => setRequestOpen(true)} projectItems={userProjectItems} />;
   return <div className="page dashboard">
     <section className="welcome">
       <div><p className="eyebrow">TUESDAY, AUGUST 11</p><h1>안녕하세요, 최병두님.<br /><span>오늘 처리할 Agent 업무를 확인하세요.</span></h1></div>
@@ -765,12 +813,13 @@ function FeasibilityResult({ projectNo, state }: { projectNo: string; state: str
     ["에이전트 적합성 진단", "5개 기준별 상·중·하 판단"],
     ["기대 효과 정량화", "간이 ROI·품질·개발 비용"],
     ["위험 식별 및 트랙 분류", "권한·데이터·유형·자율성"],
-    ["Go / Drop 판정", "최종 판정과 추진 조건"],
+    ["G1 착수 판정 반영", "팀장 Go·Conditional Go·Drop 결정과 추진 조건"],
   ];
-  const ready = state !== "생성 전";
+  const waitingForFea = state === "진행 중";
+  const ready = state === "완료";
   if (!ready) return <section className="fea-result upcoming" aria-label="타당성 평가서">
-    <header><div><small>{projectNo}-FEA · 생성 전</small><h3>타당성 평가서[FEA]</h3><p>요구 접수가 완료되면 표준 양식에 따라 대안, 적합성, 효과, 위험과 추진 여부를 검토합니다.</p></div><Pill tone="gray">생성 전</Pill></header>
-    <div className="fea-empty"><FileText size={28} weight="duotone" /><b>요구 접수 완료 후 작성됩니다</b><p>현재 단계에서는 에이전트 요구 접수서[INT]를 먼저 완료해 주세요.</p></div>
+    <header><div><small>{projectNo}-FEA · {waitingForFea ? "작성 대기" : "생성 전"}</small><h3>타당성 평가서[FEA]</h3><p>요구 접수 후 AI활성화팀 담당자가 인터뷰 결과를 반영해 대안, 적합성, 효과와 위험을 작성합니다.</p></div><Pill tone={waitingForFea ? "orange" : "gray"}>{waitingForFea ? "타당성 평가 대기" : "생성 전"}</Pill></header>
+    <div className="fea-empty"><FileText size={28} weight="duotone" /><b>{waitingForFea ? "요구 접수가 완료되었습니다" : "요구 접수 완료 후 작성됩니다"}</b><p>{waitingForFea ? "AI활성화팀의 인터뷰와 FEA 작성이 시작되면 진행 상태와 결과가 이곳에 표시됩니다." : "현재 단계에서는 에이전트 요구 접수서[INT]를 먼저 완료해 주세요."}</p></div>
   </section>;
 
   return <section className="fea-result selectable-document" aria-label="타당성 평가서">
@@ -790,7 +839,7 @@ function FeasibilityResult({ projectNo, state }: { projectNo: string; state: str
 
       <section className="fea-section" style={{ order: 10 }} hidden={activeSection !== 4}><div className="fea-section-title"><span>05</span><div><b>위험 식별 및 트랙 분류</b><small>권한·데이터·사용 범위·최대 피해</small></div><Pill tone="orange">중 트랙</Pill></div><dl className="fea-risk-grid"><div><dt>쓰기/실행 권한</dt><dd><Pill tone="green">아니오</Pill></dd></div><div><dt>개인정보/기밀</dt><dd><Pill tone="orange">예 · 마스킹</Pill></dd></div><div><dt>사용 범위</dt><dd>전사</dd></div><div><dt>오답의 최대 피해</dt><dd>비용 반려·규정 위반</dd></div></dl><div className="fea-classification"><article><small>유형 판정</small><b>혼합형 Agent</b><p>규칙 검색 + 예외 판단</p></article><article><small>트랙 판정</small><b>중</b><p>개인정보와 비용 영향</p></article><article><small>자율성 초안</small><b>L0</b><p>안내만, 실행 권한 없음</p></article></div></section>
 
-      <section className="fea-section" style={{ order: 12 }} hidden={activeSection !== 5}><div className="fea-section-title"><span>06</span><div><b>Go / Drop 판정</b><small>G1 승인 결과와 후속 조건</small></div><Pill tone="green">GO</Pill></div><div className="fea-decision"><CheckCircle size={26} weight="fill" /><div><small>최종 판정</small><b>Go · 중 트랙 · 2026년 9월 파일럿 목표</b><p>승인 규정만 사용 · 답변마다 근거 조항 표시 · 저신뢰 답변 담당자 이관 · 개인정보 마스킹을 조건으로 추진합니다.</p></div></div></section>
+      <section className="fea-section" style={{ order: 12 }} hidden={activeSection !== 5}><div className="fea-section-title"><span>06</span><div><b>G1 착수 판정 반영</b><small>AI활성화팀장 결정과 후속 조건</small></div><Pill tone="green">GO</Pill></div><div className="fea-decision"><CheckCircle size={26} weight="fill" /><div><small>G1 승인 결과 · AI활성화팀장</small><b>Go · 중 트랙 · 2026년 9월 파일럿 목표</b><p>승인 규정만 사용 · 답변마다 근거 조항 표시 · 저신뢰 답변 담당자 이관 · 개인정보 마스킹을 조건으로 추진합니다.</p></div></div></section>
 
     </div>
   </section>;
@@ -840,7 +889,7 @@ function RequirementDefinitionResult({ projectNo, state }: { projectNo: string; 
   return <div className={`intake-result-layout ${completed ? "complete" : "draft"}`}>
     <section className="intake-document ard-document selectable-document" aria-label="에이전트 요구사항 정의서">
       <header><div><small>{projectNo}-ARD · v0.8 · AGENT REQUIREMENTS DEFINITION</small><h3>에이전트 요구사항 정의서[ARD]</h3><p>G1 승인 범위를 개발·평가 가능한 요구사항으로 구체화합니다.</p></div><div className="document-progress-summary"><Pill tone={completed ? "green" : "violet"}>{completed ? "작성 완료" : "작성 중 · 자동 저장"}</Pill><strong>{completed ? "100%" : "80%"}</strong></div></header>
-      <nav className="document-section-navigator ard-section-navigator" aria-label="에이전트 요구사항 정의서 항목">{sectionItems.map(([title, description], index) => { const done = completed || ![6, 9].includes(index); return <button type="button" key={title} style={{ order: index * 2 + 1 }} className={activeSection === index ? "active" : ""} onClick={() => setActiveSection(current => current === index ? null : index)} aria-expanded={activeSection === index} aria-current={activeSection === index ? "true" : undefined}><span className={`section-check ${done ? "complete" : "pending"}`}>{done ? <Check size={14} weight="bold" /> : String(index + 1).padStart(2, "0")}</span><div><small>{String(index + 1).padStart(2, "0")}</small><b>{title}</b><p>{description}</p></div><em>{done ? "완료" : index === 6 ? "확인 필요" : "작성 중"}</em><ArrowRight size={14} weight="bold" /></button>; })}</nav>
+      <nav className="document-section-navigator ard-section-navigator" aria-label="에이전트 요구사항 정의서 항목">{sectionItems.map(([title, description], index) => { const done = completed || ![6, 9].includes(index); return <button type="button" key={title} style={{ order: index * 2 + 1 }} className={activeSection === index ? "active" : ""} onClick={() => setActiveSection(current => current === index ? null : index)} aria-expanded={activeSection === index} aria-current={activeSection === index ? "true" : undefined}><span className={`section-check ${done ? "complete" : "pending"}`}>{done ? <Check size={14} weight="bold" /> : "…"}</span><div><small>{String(index + 1).padStart(2, "0")}</small><b>{title}</b><p>{description}</p></div><em>{done ? "완료" : index === 6 ? "확인 필요" : "작성 중"}</em><ArrowRight size={14} weight="bold" /></button>; })}</nav>
       <div className="ard-standard-body">
         <section style={{ order: 2 }} hidden={activeSection !== 0}><div className="ard-section-head"><span>01</span><div><b>개요</b><small>에이전트 정의·목적·이해관계자</small></div></div><dl className="ard-facts"><div><dt>1.1 이름 / 한 줄 정의</dt><dd><b>{profile.name}</b><br/>{profile.oneLine}</dd></div><div><dt>1.2 배경 및 목적</dt><dd>{profile.background}</dd></div><div><dt>1.3 이해관계자</dt><dd>{profile.stakeholders}</dd></div></dl></section>
 
@@ -951,7 +1000,8 @@ function GateApprovalResult({ gate, projectNo, role, notify, onG1Resolved }: { g
     <section className="gate-schedule-card"><div><span><CalendarBlank size={17} weight="fill" /></span><p><small>요청 시 희망 완료일</small><b>{project.requestedDate}</b></p></div><div><p><small>확정 프로젝트 마감일</small><b>{project.committedDate}</b></p><Pill tone={project.scheduleState.includes("지연") ? "red" : project.scheduleState.includes("협의") ? "gray" : "green"}>{project.scheduleState}</Pill></div><div className={`gate-decision-chip ${g1StatusLabel === "Go" ? "go" : g1StatusLabel === "Drop" ? "drop" : "pending"}`}><small>G1 판정</small><b>{g1StatusLabel}</b></div>{!isG1 && <button type="button" onClick={() => setDeadlineChangeOpen(value => !value)}>{deadlineRequestSent ? "변경 승인 대기" : "마감 일정 변경 요청"}</button>}</section>
     {deadlineChangeOpen && !isG1 && <section className="deadline-change-form"><header><div><b>마감 일정 변경 요청</b><p>변경은 최병두 팀장의 승인 후에만 확정됩니다.</p></div><Pill tone={deadlineRequestSent ? "orange" : "gray"}>{deadlineRequestSent ? "팀장 승인 대기" : "요청 작성"}</Pill></header><div><label>변경 희망일<input type="date" value={proposedDeadline} onChange={event => setProposedDeadline(event.target.value)} disabled={deadlineRequestSent} /></label><label>변경 사유<textarea value={deadlineReason} onChange={event => setDeadlineReason(event.target.value)} placeholder="지연 원인과 변경이 필요한 이유를 적어주세요." disabled={deadlineRequestSent} /></label></div><button className="primary" disabled={deadlineRequestSent || !proposedDeadline || !deadlineReason.trim()} onClick={() => setDeadlineRequestSent(true)}>{deadlineRequestSent ? "최병두 팀장 승인 대기 중" : "일정 변경 승인 요청"}</button></section>}
     {isG1 && isLeader && <section className="g1-leader-decision"><header><div><Pill tone="violet">팀장 액션</Pill><h4>추진 여부와 개발 담당자 지정</h4><p>FEA의 판정 영역에도 동일한 결과가 자동 업데이트됩니다.</p></div></header><div className="g1-choice-row">{(["GO","CONDITIONAL","DROP"] as const).map(item => <button key={item} className={g1DraftDecision === item ? `selected ${item.toLowerCase()}` : ""} onClick={() => setG1DraftDecision(item)}><b>{item === "CONDITIONAL" ? "Conditional Go" : item === "DROP" ? "Drop" : "Go"}</b><small>{item === "GO" ? "요구 정의 진행" : item === "CONDITIONAL" ? "조건 보완 후 진행" : "대안 안내·종료"}</small></button>)}</div><div className="g1-decision-fields"><label>AI활성화팀 개발 담당자<select value={g1Assignee} disabled={g1DraftDecision === "DROP"} onChange={event => setG1Assignee(event.target.value)}><option>미배정</option><option>허정환</option><option>이재승</option><option>김서연</option></select></label><label>판정 사유·조건<textarea value={g1Reason} onChange={event => setG1Reason(event.target.value)} placeholder="FEA 근거와 추진 조건 또는 Drop 대안을 기록하세요." /></label></div><button className="primary" disabled={g1DraftDecision !== "DROP" && g1Assignee === "미배정"} onClick={() => { setG1Decision(g1DraftDecision); onG1Resolved?.(g1DraftDecision, g1DraftDecision === "DROP" ? "미배정" : g1Assignee, g1Reason); notify(`${g1DraftDecision === "CONDITIONAL" ? "Conditional Go" : g1DraftDecision === "DROP" ? "Drop" : "Go"} 판정과 개발 담당자 ${g1DraftDecision === "DROP" ? "미배정" : g1Assignee} 기록이 FEA와 G1에 반영되었습니다.`); }}>G1 판정 확정 · FEA 업데이트</button></section>}
-    {!isG1 && canActOnG2 && <section className="g2-role-action"><header><div><Pill tone={isLeader || isOwner ? "violet" : "gray"}>내 승인 차례</Pill><h4>{isLeader ? "AI활성화팀장" : isOwner ? "프로젝트 Owner" : "요구자"} 검토</h4><p>세 명 중 한 명이라도 보완을 요청하면 ARD 수정 후 세 명 모두 다시 확인합니다.</p></div></header><textarea value={g2Reason} onChange={event => setG2Reason(event.target.value)} placeholder="보완·수정이 필요할 때 구체적인 사유를 입력하세요." /><div><button disabled={!g2Reason.trim()} onClick={() => { setMyG2Vote("REWORK"); notify("ARD 보완·수정 요청이 기록되었습니다."); }}>보완·수정 요청</button><button className="primary" onClick={() => { setMyG2Vote("APPROVED"); notify(`${isLeader ? "AI활성화팀장" : isOwner ? "프로젝트 Owner" : "요구자"} 승인이 기록되었습니다.`); }}>이 내용으로 개발 착수 승인</button></div></section>}
+    {!isG1 && canActOnG2 && !rejected && myG2Vote === "PENDING" && <section className="g2-role-action"><header><div><Pill tone={isLeader || isOwner ? "violet" : "gray"}>내 승인 차례</Pill><h4>{isLeader ? "AI활성화팀장" : isOwner ? "프로젝트 Owner" : "요구자"} 검토</h4><p>세 명 중 한 명이라도 보완을 요청하면 ARD 수정 후 세 명 모두 다시 확인합니다.</p></div></header><textarea value={g2Reason} onChange={event => setG2Reason(event.target.value)} placeholder="보완·수정이 필요할 때 구체적인 사유를 입력하세요." /><div><button disabled={!g2Reason.trim()} onClick={() => { setMyG2Vote("REWORK"); notify("ARD 보완·수정 요청이 기록되었습니다."); }}>보완·수정 요청</button><button className="primary" onClick={() => { setMyG2Vote("APPROVED"); notify(`${isLeader ? "AI활성화팀장" : isOwner ? "프로젝트 Owner" : "요구자"} 승인이 기록되었습니다.`); }}>이 내용으로 개발 착수 승인</button></div></section>}
+    {!isG1 && rejected && <section className="gate-role-readonly rework-lock"><Info size={17} weight="fill" /><p><b>이 승인 라운드는 보완 요청으로 종료되었습니다.</b><span>ARD가 수정·재상신된 뒤 새 승인 라운드가 열립니다. 기존 승인자는 지금 다시 승인할 수 없습니다.</span></p></section>}
     {!isG1 && isMember && <section className="gate-role-readonly"><Info size={17} weight="fill" /><p><b>개발 담당자는 ARD 작성·보완 역할입니다.</b><span>G2 서명은 요구자·프로젝트 Owner·AI활성화팀장이 각각 수행하며, 개발 담당자는 승인 현황만 확인합니다.</span></p></section>}
     <footer><div><small>처리 경로</small><b>{rejected ? "반려 → ARD 보완 → 동일 G2 재검토" : isG1 ? "G1 통과 → 요구 정의 단계 이동" : "G2 통과 → 설계·개발·평가 단계 이동"}</b></div><div className="gate-footer-actions">{rejected && <button type="button" onClick={() => setDetailMode("evidence")}>승인 근거 보기<ArrowRight size={13} weight="bold"/></button>}<button type="button" onClick={() => setDetailMode(rejected ? "ard" : "evidence")}>{rejected ? "보완 중인 ARD 보기" : "승인 근거 보기"}<ArrowRight size={13} weight="bold"/></button></div></footer>
   </section>{detailMode && <GateDetailDialog gate={gate} projectNo={projectNo} mode={detailMode} rejected={rejected} onClose={() => setDetailMode(null)} />}</>;
@@ -1063,13 +1113,13 @@ function ChangeDetailModal({ row, agentName, onClose }: { row: ChangeRow; agentN
   </div>;
 }
 
-function UserOperationsResult({ project }: { project: (typeof userProjects)[number] }) {
+function UserOperationsResult({ project }: { project: UserProject }) {
   const [document, setDocument] = useState<"OPS" | "CHG">("OPS");
   const [selectedChange, setSelectedChange] = useState<ChangeRow | null>(null);
-  const isOperating = project.no === "2026-014";
+  const isOperating = project.journeyStep >= 9;
   const isDelivery = project.no === "2026-021";
   const operational = isOperating ? {
-    type: "규칙형", track: "하", autonomy: "L1", owner: "물류운영팀장", operator: "AI활성화팀 이민지", knowledge: "물류운영팀 이수민", deployed: "2026.07.20", status: "파일럿", checked: "2026.08.25", reevaluate: "2026.10.20",
+    type: "규칙형", track: "하", autonomy: "L1", owner: "물류운영팀장", operator: "AI활성화팀 이민지", knowledge: "물류운영팀 이수민", deployed: "2026.09.01", status: "운영", checked: "2026.09.25", reevaluate: "2026.12.01",
     sessions: "486", users: "25명", trend: "+18.4%", errors: "1건 · 조치 완료", knowledgeState: "최신", knowledgeDate: "2026.08.21", score: "96.2% · Pass", decision: "정상 운영",
   } : {
     type: isDelivery ? "혼합형" : "미확정", track: isDelivery ? "중" : "–", autonomy: isDelivery ? "L0" : "–", owner: project.owner, operator: project.teamOwner, knowledge: isDelivery ? "품질혁신팀 정수빈" : "운영 전 지정", deployed: "운영 전", status: isDelivery ? "운영 인수 준비" : "문서 생성 전", checked: "–", reevaluate: "배포 후 확정",
@@ -1081,9 +1131,14 @@ function UserOperationsResult({ project }: { project: (typeof userProjects)[numb
     ["CHG-014-004", "2026.07.29", "도구", "택배사 조회 API 타임아웃 재시도 적용", "월간 점검", "98.0% · Pass", "개발 리뷰어"],
   ] : [];
 
+  if (!isOperating) return <section className="user-operations-result upcoming" aria-label={`${project.name} 운영·개선 문서 생성 전`}>
+    <header><div><small>OPS · CHG · {project.no}</small><h3>운영 대장[OPS] · 개선 이력서[CHG]</h3><p>G4 공동 승인 후 이 요청 과제의 운영 기록과 개선 이력이 자동 생성됩니다.</p></div><Pill tone="gray">선행 단계 필요</Pill></header>
+    <div className="user-ops-stage-notice locked"><Info size={18} weight="fill" /><p><b>{project.journeyStep === 8 ? "G4 확산 승인 대기 중입니다." : "아직 운영 단계에 도달하지 않았습니다."}</b><span>프로젝트 Owner와 AI활성화팀장의 G4 공동 승인 전에는 운영 대장과 개선 이력을 조회하거나 등록할 수 없습니다.</span></p></div>
+    <div className="user-ops-locked-preview" aria-hidden="true"><span>⑦-1 운영 대장[OPS]</span><span>⑦-2 개선 이력서[CHG]</span><p>G4 공동 승인 후 활성화</p></div>
+  </section>;
+
   return <><section className="user-operations-result" aria-label={`${project.name} 운영·개선 문서`}>
     <header><div><small>OPS · CHG · {project.no}</small><h3>{project.name}</h3><p>선택한 요청 과제의 운영 기록과 개선 이력만 표시합니다.</p></div><Pill tone={isOperating ? "green" : isDelivery ? "blue" : "gray"}>{operational.status}</Pill></header>
-    {!isOperating && <div className="user-ops-stage-notice"><Info size={16} weight="fill" /><p><b>{isDelivery ? "운영 인수 준비 단계입니다." : "아직 운영 단계에 도달하지 않았습니다."}</b><span>{isDelivery ? "G4 확산 승인 후 월간 점검 기록이 시작됩니다. 현재는 등록 예정 정보만 확인할 수 있습니다." : "배포·확산 승인 후 운영 대장과 개선 이력이 이 과제에 자동 연결됩니다."}</span></p></div>}
     <nav aria-label="과제별 운영 문서 선택"><button className={document === "OPS" ? "active" : ""} onClick={() => setDocument("OPS")}><span>⑦-1</span><b>운영 대장[OPS]</b><small>월간 점검·재평가</small></button><button className={document === "CHG" ? "active" : ""} onClick={() => setDocument("CHG")}><span>⑦-2</span><b>개선 이력서[CHG]</b><small>변경·재평가·승인</small></button></nav>
     {document === "OPS" ? <div className="user-ops-body">
       <section><div className="user-ops-section-title"><span>A</span><div><b>에이전트 운영 정보</b><small>팀 전체가 아닌 이 요청 과제의 등록 정보</small></div></div><dl className="user-ops-facts"><div><dt>유형 · 트랙 · 자율성</dt><dd>{operational.type} · {operational.track} · {operational.autonomy}</dd></div><div><dt>오너(현업)</dt><dd>{operational.owner}</dd></div><div><dt>개발/운영 담당</dt><dd>{operational.operator}</dd></div><div><dt>지식갱신 담당</dt><dd>{operational.knowledge}</dd></div><div><dt>배포일</dt><dd>{operational.deployed}</dd></div><div><dt>최근 점검 / 다음 재평가</dt><dd>{operational.checked} / {operational.reevaluate}</dd></div></dl></section>
@@ -1093,9 +1148,9 @@ function UserOperationsResult({ project }: { project: (typeof userProjects)[numb
   </section>{selectedChange && <ChangeDetailModal row={selectedChange} agentName={project.name} onClose={() => setSelectedChange(null)} />}</>;
 }
 
-function UserDashboard({ role, setView, openNewRequest }: { role: string; setView: (v: View) => void; openNewRequest: () => void }) {
+function UserDashboard({ role, setView, openNewRequest, projectItems }: { role: string; setView: (v: View) => void; openNewRequest: () => void; projectItems: UserProject[] }) {
   const isAiTeamMember = role.includes("AI활성화팀") && role.includes("담당자");
-  const [selected, setSelected] = useState(isAiTeamMember ? 1 : 0);
+  const [selected, setSelected] = useState(0);
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [chatInput, setChatInput] = useState("");
@@ -1107,36 +1162,37 @@ function UserDashboard({ role, setView, openNewRequest }: { role: string; setVie
     { role: "agent", text: "한 달에 몇 번 발생하고, 한 건을 확인하는 데 평균 얼마나 걸리나요?" },
   ]);
   useEffect(() => {
-    const nextIndex = isAiTeamMember ? 1 : 0;
+    const nextIndex = isAiTeamMember ? Math.max(0, projectItems.findIndex(project => project.no === "2026-028")) : 0;
     setSelected(nextIndex);
-    setSelectedJourney(userProjects[nextIndex].journeyStep);
-  }, [isAiTeamMember, role]);
-  const current = userProjects[selected];
-  const g1Status = current.no === "2026-031" ? "판정 대기" : "Go";
-  const intakeComplete = selected !== 0 || draftCompleted;
-  const effectiveJourneyStep = selected === 0 && draftCompleted ? 1 : current.journeyStep;
+    setSelectedJourney(projectItems[nextIndex].journeyStep);
+  }, [isAiTeamMember, projectItems, role]);
+  const current = projectItems[selected] || projectItems[0];
+  const g1Status = current.journeyStep <= 1 ? "판정 대기" : "Go";
+  const intakeComplete = current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted);
+  const effectiveJourneyStep = current.no === "2026-031" && draftCompleted ? 1 : current.journeyStep;
   const selectedOutput = lifecycleOutputs[selectedJourney];
   const selectedOutputState = selectedJourney < effectiveJourneyStep ? "완료" : selectedJourney === effectiveJourneyStep ? (userJourney[selectedJourney].kind === "gate" ? "승인 대기" : "진행 중") : "생성 전";
-  const assignedProjects = isAiTeamMember ? userProjects.filter(project => project.teamOwner.includes("허정환")) : userProjects;
+  const assignedProjects = isAiTeamMember ? projectItems.filter(project => project.teamOwner.includes("허정환")) : projectItems;
   const visible = assignedProjects.filter((project) => filter === "전체" || (filter === "내 할 일" ? project.status === "내 작성 필요" : project.status !== "내 작성 필요"));
   const applyFilter = (next: string) => {
     setFilter(next);
     if (next === "내 할 일") {
-      const project = isAiTeamMember ? userProjects[1] : userProjects[0];
-      setSelected(userProjects.indexOf(project));
+      const project = isAiTeamMember ? projectItems.find(item => item.no === "2026-028") || projectItems[0] : projectItems.find(item => item.status === "내 작성 필요") || projectItems[0];
+      setSelected(projectItems.indexOf(project));
       setSelectedJourney(project.journeyStep);
       return;
     }
     if (next === "진행 중") {
-      setSelected(2);
-      setSelectedJourney(userProjects[2].journeyStep);
+      const project = projectItems.find(item => item.no === "2026-021") || projectItems[0];
+      setSelected(projectItems.indexOf(project));
+      setSelectedJourney(project.journeyStep);
       return;
     }
-    setSelectedJourney(userProjects[selected].journeyStep);
+    setSelectedJourney(current.journeyStep);
   };
   const selectProject = (index: number) => {
     setSelected(index);
-    setSelectedJourney(userProjects[index].journeyStep);
+    setSelectedJourney(projectItems[index].journeyStep);
   };
   const sendDraftAnswer = () => {
     if (!chatInput.trim()) return;
@@ -1154,7 +1210,7 @@ function UserDashboard({ role, setView, openNewRequest }: { role: string; setVie
       <article className="panel my-project-list">
         <header><div><h2>{isAiTeamMember ? "내 담당 Agent 과제" : "내 Agent 과제"}</h2><p>{isAiTeamMember ? "G1에서 개발 담당자로 지정된 과제입니다." : "과제를 선택해 신청 결과를 확인하세요."}</p></div><div className="compact-filters">{["전체","내 할 일","진행 중"].map(item => <button key={item} className={filter === item ? "active" : ""} onClick={() => applyFilter(item)}>{item}</button>)}</div></header>
         <div className="project-stack">{visible.map((project) => {
-          const index = userProjects.findIndex(item => item.no === project.no);
+          const index = projectItems.findIndex(item => item.no === project.no);
           return <button key={project.no} className={selected === index ? "selected" : ""} onClick={() => selectProject(index)}>
             <span className={`project-stage-number ${project.tone}`}>{index + 1}</span>
             <div><p><small>{project.no}</small><Pill tone={project.tone}>{project.status}</Pill></p><strong>{project.name}</strong><small>{userJourney[project.journeyStep].title} · {project.updated} 업데이트</small></div>
@@ -1164,14 +1220,14 @@ function UserDashboard({ role, setView, openNewRequest }: { role: string; setVie
       </article>
 
       <article className="panel selected-project-status oneview-status">
-        <header><div><Pill tone={current.tone}>{intakeComplete ? current.status.replace("내 작성 필요", "작성 완료") : "작성 중"}</Pill><small>{current.no}</small><h2>{current.name}</h2><p>{intakeComplete ? "작성된 신청 결과와 생애주기 진행 상태입니다." : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다."}</p></div><button onClick={() => setView(current.route)}>업무 화면 열기 <ArrowRight size={13} weight="bold" /></button></header>
+        <header><div><Pill tone={current.tone}>{intakeComplete ? current.status.replace("내 작성 필요", "작성 완료") : "작성 중"}</Pill><small>{current.no}</small><h2>{current.name}</h2><p>{intakeComplete ? "작성된 신청 결과와 생애주기 진행 상태입니다." : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다."}</p></div>{isAiTeamMember ? <button onClick={() => setView(current.route)}>업무 화면 열기 <ArrowRight size={13} weight="bold" /></button> : <button onClick={() => setSelectedJourney(effectiveJourneyStep)}>현재 단계 보기 <ArrowRight size={13} weight="bold" /></button>}</header>
 
         <div className="user-lifecycle-track journey-v2 oneview-journey">{userJourney.map((stage, index) => {
           const state = index < effectiveJourneyStep ? "done" : index === effectiveJourneyStep ? "current" : "upcoming";
           const rejectedGate = current.no === "2026-028" && index === 4;
           return <button type="button" key={`${stage.code || "S"}-${stage.title}`} className={`${rejectedGate ? "rejected" : state} ${stage.kind} ${selectedJourney === index ? "selected" : ""}`} onClick={() => setSelectedJourney(index)} aria-label={`${stage.title} 결과 보기`}>
             <span>{rejectedGate ? <X size={14} weight="bold" /> : index < effectiveJourneyStep ? <Check size={14} weight="bold" /> : stage.kind === "gate" ? stage.code : stage.display}</span>
-            <div><b>{stage.title}</b><small>{rejectedGate ? "반려·보완" : index < effectiveJourneyStep ? "완료" : index === effectiveJourneyStep ? "현재 단계" : stage.kind === "gate" ? "승인 대기" : "예정"}</small></div>
+            <div><b>{stage.title}</b><small>{rejectedGate ? "반려·보완" : index < effectiveJourneyStep ? "완료" : index === effectiveJourneyStep ? "현재 단계" : stage.kind === "gate" ? "선행 단계 필요" : "예정"}</small></div>
           </button>;
         })}</div>
 
@@ -1193,9 +1249,9 @@ function UserDashboard({ role, setView, openNewRequest }: { role: string; setVie
             <header><div><small>INT · AGENT INTAKE</small><h3>에이전트 요구 접수서</h3></div><Pill tone={intakeComplete ? "green" : "orange"}>{intakeComplete ? "작성 완료" : "작성 중 · 자동 저장"}</Pill></header>
             <div className="intake-document-body">
               <section><b>1. 기본 정보</b><dl><div><dt>요구자</dt><dd>김현우 · 개발1팀</dd></div><div><dt>접수일</dt><dd>2026.08.25</dd></div><div><dt>접수 유형</dt><dd>신규 Agent 과제</dd></div></dl></section>
-              <section><b>2. 해결하려는 업무 문제</b><p>개발 BOM 변경 시 관련 부품, 품질 문서와 변경 영향 범위를 담당자가 수작업으로 확인하고 있습니다.</p></section>
-              <section><b>3. 현재 처리 방식과 업무량</b><p>{intakeComplete ? "SAP BOM과 Excel 변경 목록을 비교하고 품질 문서를 수기로 대조합니다. 월 20건, 건당 평균 45분이 소요됩니다." : "SAP BOM과 Excel 변경 목록을 비교하고 품질 문서를 수기로 대조합니다."}</p>{!intakeComplete && <span className="missing-answer">월 발생 건수와 평균 소요시간 확인 필요</span>}</section>
-              <section><b>4. 기대 결과</b><p>{intakeComplete ? "변경 부품과 영향 문서를 자동으로 식별해 검토 시간을 건당 10분 이내로 줄이고 싶습니다." : "Agent가 변경 영향 범위를 먼저 정리해주면 좋겠습니다."}</p></section>
+              <section><b>2. 해결하려는 업무 문제</b><p>{current.intakeAnswers?.[0] || "개발 BOM 변경 시 관련 부품, 품질 문서와 변경 영향 범위를 담당자가 수작업으로 확인하고 있습니다."}</p></section>
+              <section><b>3. 현재 처리 방식과 업무량</b><p>{current.intakeAnswers ? `${current.intakeAnswers[1]} 사용 자료: ${current.intakeAnswers[2]}` : intakeComplete ? "SAP BOM과 Excel 변경 목록을 비교하고 품질 문서를 수기로 대조합니다. 월 20건, 건당 평균 45분이 소요됩니다." : "SAP BOM과 Excel 변경 목록을 비교하고 품질 문서를 수기로 대조합니다."}</p>{!intakeComplete && <span className="missing-answer">월 발생 건수와 평균 소요시간 확인 필요</span>}</section>
+              <section><b>4. 기대 결과</b><p>{current.intakeAnswers?.[3] || (intakeComplete ? "변경 부품과 영향 문서를 자동으로 식별해 검토 시간을 건당 10분 이내로 줄이고 싶습니다." : "Agent가 변경 영향 범위를 먼저 정리해주면 좋겠습니다.")}</p></section>
               <section><b>5. 위험 및 고려사항</b><p>{intakeComplete ? "누락된 변경 영향으로 품질 승인과 양산 일정이 지연될 수 있어 최종 확인은 담당자가 수행합니다." : "답변을 이어가면 위험과 통제 항목이 자동 정리됩니다."}</p></section>
               <section><b>6. 접수 처리</b><dl><div><dt>프로젝트 번호</dt><dd>{current.no}</dd></div><div><dt>희망 개발 완료일</dt><dd>{current.requestedDate}</dd></div><div><dt>담당 예정</dt><dd>{current.teamOwner}</dd></div><div><dt>다음 단계</dt><dd>{current.nextGate}</dd></div></dl></section>
             </div>
@@ -1505,7 +1561,7 @@ function DeliveryWorkplace({ role, setRole, openHub, notify, embedded = false, e
   const [g3ReviewerApproved, setG3ReviewerApproved] = useState(false);
   const [g3SecurityApproved, setG3SecurityApproved] = useState(false);
   const [g4OwnerApproved, setG4OwnerApproved] = useState(false);
-  const [depChecks, setDepChecks] = useState([true, true, true, true, true, true, true, false, false]);
+  const [depChecks, setDepChecks] = useState(() => projectNo === "2026-014" || projectNo === "2026-018" ? Array(9).fill(true) : [true, true, true, true, true, true, true, false, false]);
   const deliveryProjects = [
     { no: "2026-021", name: "생산 품질 이슈 분석 Agent", dept: "품질혁신팀", owner: "박정민 팀장", builder: "허정환", reviewer: "이재승", track: "중", stage: "평가 진행", progress: 72, des: 88, evp: 100, evr: 64, cases: "32/40", pass: "92.5%", guardrail: "0건" },
     { no: "2026-018", name: "해외 출장기안 지원 Agent", dept: "경영지원팀", owner: "김도윤 팀장", builder: "이재승", reviewer: "허정환", track: "상", stage: "G3 검토", progress: 91, des: 100, evp: 100, evr: 100, cases: "50/50", pass: "96.0%", guardrail: "0건" },
@@ -1515,6 +1571,9 @@ function DeliveryWorkplace({ role, setRole, openHub, notify, embedded = false, e
     { no: "2026-031", name: "개발 BOM 변경 영향 분석 Agent", dept: "개발1팀", owner: "개발1팀장", builder: "미배정", reviewer: "미배정", track: "미정", stage: "요구 접수", progress: 18, des: 0, evp: 0, evr: 0, cases: "0/0", pass: "-", guardrail: "-" },
   ];
   const current = deliveryProjects[selectedProject];
+  useEffect(() => {
+    setDepChecks(current.no === "2026-014" || current.no === "2026-018" ? Array(9).fill(true) : [true, true, true, true, true, true, true, false, false]);
+  }, [current.no]);
   const isPlanned = lifecycleState === "생성 전";
   const isLeader = role.includes("최병두");
   const isAiTeamMember = role.includes("AI활성화팀") && role.includes("담당자");
@@ -1558,12 +1617,12 @@ function DeliveryWorkplace({ role, setRole, openHub, notify, embedded = false, e
   const visibleDocData = isPlanned ? { ...docData, progress: 0, status: "예정" } : docData;
   const isLowTrack = current.track === "하";
   const documentsReady = !isPlanned && (isLowTrack || (current.des === 100 && current.evp === 100 && current.evr === 100)) && current.guardrail === "0건";
-  const depReady = current.no === "2026-018" || current.no === "2026-014" || depChecks.every(Boolean);
+  const depReady = depChecks.every(Boolean);
   const securityRequired = current.track === "상";
   const canReviewerApproveG3 = documentsReady && depReady;
   const canLeaderApproveG3 = canReviewerApproveG3 && g3ReviewerApproved && (!securityRequired || g3SecurityApproved);
   const canRequestG3 = isLowTrack ? documentsReady && depReady : canLeaderApproveG3;
-  const visibleG3Decision = viewerMode && lifecycleState === "완료" ? "APPROVED" : g3Decision;
+  const visibleG3Decision = viewerMode && (lifecycleState === "완료" || projectNo === "2026-014") ? "APPROVED" : g3Decision;
 
   const submitG3 = (decision: "APPROVED" | "REWORK") => {
     if (decision === "REWORK") { setG3Decision("REWORK"); notify("보완 요청이 개발 담당자에게 전달되었습니다."); return; }
@@ -1653,7 +1712,7 @@ function DeliveryWorkplace({ role, setRole, openHub, notify, embedded = false, e
     </section>}
 
     {(!embedded || embeddedSection === "pilot" || embeddedSection === "g4") && <section className={`release-grid ${embedded ? "embedded-release-grid" : ""}`}>
-      {(!embedded || embeddedSection === "pilot") && <article className="panel handoff-work"><div className="panel-title"><div><h2>배포 준비 · 파일럿 · 인수인계</h2><p>DEP A항목은 G3 이전에 완료하고, G3 승인 뒤 파일럿 결과와 운영 인수를 기록합니다.</p></div><Pill tone={depReady ? g3Decision === "APPROVED" ? "green" : "blue" : "red"}>{!depReady ? "DEP 미완료" : g3Decision === "APPROVED" ? "파일럿 진행" : "G3 근거 준비 완료"}</Pill></div><div className="handoff-checks">{[[0,"EVR 승인·ARD 성공 기준 통과"],[5,"로그 기록 정상 작동"],[6,"사용자 가이드[UG] 작성 완료"],[8,"지식 갱신 담당자 절차 전달"]].map(([checkIndex,item]) => <label key={String(item)}><input type="checkbox" checked={depChecks[Number(checkIndex)]} disabled={!isAiTeamMember} onChange={event => setDepChecks(currentChecks => currentChecks.map((value,index) => index === Number(checkIndex) ? event.target.checked : value))} /> <span><b>{item}</b><small>{depChecks[Number(checkIndex)] ? "확인 완료" : "G3 배포 차단"}</small></span></label>)}</div><div className="pilot-summary"><div><small>파일럿 대상</small><b>품질혁신팀 25명</b></div><div><small>기간</small><b>2주</b></div><div><small>만족도</small><b>4.6 / 5.0</b></div><div><small>오류 신고</small><b>1건 · 조치 완료</b></div></div><button className="secondary full-button" onClick={() => notify("배포 체크리스트[DEP]·사용자 가이드[UG] 인수인계 패키지를 열었습니다.")}>배포 체크리스트[DEP] · 사용자 가이드[UG] 보기</button></article>}
+      {(!embedded || embeddedSection === "pilot") && <article className="panel handoff-work"><div className="panel-title"><div><h2>배포 준비 · 파일럿 · 인수인계</h2><p>DEP A항목은 G3 이전에 완료하고, G3 승인 뒤 파일럿 결과와 운영 인수를 기록합니다.</p></div><Pill tone={depReady ? visibleG3Decision === "APPROVED" ? "green" : "blue" : "red"}>{!depReady ? "DEP 미완료" : visibleG3Decision === "APPROVED" ? "파일럿 진행" : "G3 근거 준비 완료"}</Pill></div><div className="handoff-checks">{[[0,"EVR 승인·ARD 성공 기준 통과"],[5,"로그 기록 정상 작동"],[6,"사용자 가이드[UG] 작성 완료"],[8,"지식 갱신 담당자 절차 전달"]].map(([checkIndex,item]) => <label key={String(item)}><input type="checkbox" checked={depChecks[Number(checkIndex)]} disabled={!isAiTeamMember} onChange={event => setDepChecks(currentChecks => currentChecks.map((value,index) => index === Number(checkIndex) ? event.target.checked : value))} /> <span><b>{item}</b><small>{depChecks[Number(checkIndex)] ? "확인 완료" : "G3 배포 차단"}</small></span></label>)}</div><div className="pilot-summary"><div><small>파일럿 대상</small><b>품질혁신팀 25명</b></div><div><small>기간</small><b>2주</b></div><div><small>만족도</small><b>4.6 / 5.0</b></div><div><small>오류 신고</small><b>1건 · 조치 완료</b></div></div><button className="secondary full-button" onClick={() => notify("배포 체크리스트[DEP]·사용자 가이드[UG] 인수인계 패키지를 열었습니다.")}>배포 체크리스트[DEP] · 사용자 가이드[UG] 보기</button></article>}
       {(!embedded || embeddedSection === "g4") && <article className="panel g4-card"><div className="gate-work-head"><div><span className="gate-badge green">G4</span><div><p className="eyebrow">SCALE APPROVAL</p><h2>G4 확산 승인 기록</h2><p>파일럿 종료 기준을 확인한 프로젝트 Owner와 AI활성화팀장이 각각 공동 승인합니다.</p></div></div><Pill tone={g4Decision === "APPROVED" ? "green" : g4OwnerApproved ? "blue" : "orange"}>{g4Decision === "APPROVED" ? "공동 승인 완료" : g4OwnerApproved ? "팀장 승인 대기" : "Owner 승인 대기"}</Pill></div><div className="g4-criteria"><span><b>✓</b> 파일럿 사용률 80% 이상</span><span><b>✓</b> 만족도 4.0 이상</span><span><b>✓</b> 치명 오류 0건</span><span><b>✓</b> 운영·지식 담당 인수 완료</span></div><div className="g4-signers"><div><span className={g4OwnerApproved || g4Decision === "APPROVED" ? "signed" : ""}>{g4OwnerApproved || g4Decision === "APPROVED" ? "✓" : "1"}</span><p><b>프로젝트 Owner</b><small>{current.owner} · 확산·운영 책임</small></p></div><div><span className={g4Decision === "APPROVED" ? "signed" : ""}>{g4Decision === "APPROVED" ? "✓" : "2"}</span><p><b>AI활성화팀장</b><small>최병두 · 최종 확산 승인</small></p></div></div>{!viewerMode && (isOwner || isLeader) && <div className="g4-actions"><button onClick={() => submitG4("EXTEND")}>파일럿 연장</button><button className="primary" disabled={isLeader && !g4OwnerApproved} onClick={() => submitG4("APPROVED")}>{isOwner ? "Owner 확산 승인" : "G4 최종 승인"}</button></div>}<div className={`operation-route ${g4Decision === "APPROVED" ? "approved" : ""}`}><span>{g4Decision === "APPROVED" ? "✓" : "→"}</span><p><b>{g4Decision === "APPROVED" ? "운영 · 개선으로 전환" : "Owner·팀장 공동 승인 후 운영 · 개선으로 이동"}</b><small>운영 대장[OPS] 등록 · Agent Master 운영 상태 변경</small></p></div></article>}
     </section>}
 
@@ -1751,7 +1810,17 @@ function Operations() { return <div className="admin-content operations"><div cl
 
 function Changes({ notify }: { notify: (s:string) => void }) { return <div className="admin-content"><div className="change-split"><article><span className="change-icon">변경</span><h3>일반 변경 · 개선 이력서[CHG]</h3><p>프롬프트, 지식, 도구, 플랫폼 변경은 영향도 검토 후 회귀 평가를 수행합니다.</p><button onClick={() => notify("개선 이력서[CHG] 작성을 시작했습니다.")}>변경 요청 시작</button></article><article className="reassess"><span className="change-icon">L↑</span><h3>자율성 상향은 재심사</h3><p>에이전트 요구사항 정의서[ARD] 개정 → 3자 재확인 → 전체 재평가 → G3 재승인 절차를 다시 거칩니다.</p><button onClick={() => notify("자율성 재심사 절차를 열었습니다.")}>재심사 시작</button></article></div></div> }
 
-function RequestWizard({ step, setStep, close, notify }: { step: number; setStep: (n: number) => void; close: () => void; notify: (s: string) => void }) {
+function suggestRequestTitle(problem: string) {
+  if (!problem.trim()) return "대화를 시작하면 제목을 제안합니다.";
+  if (/공급업체|협력사/.test(problem)) return "공급업체 변경 영향 분석 Agent";
+  if (/BOM/i.test(problem)) return "BOM 변경 영향 분석 Agent";
+  if (/출장/.test(problem)) return "출장 규정 문의 Agent";
+  if (/품질|불량/.test(problem)) return "품질 이슈 분석 Agent";
+  const summary = problem.replace(/[.。].*$/, "").replace(/합니다|됩니다|있습니다|해요|입니다/g, "").trim().slice(0, 24);
+  return `${summary || "신규 업무"} Agent`;
+}
+
+function RequestWizard({ step, setStep, close, onSubmit }: { step: number; setStep: (n: number) => void; close: () => void; onSubmit: (answers: string[], title: string) => void }) {
   const labels = ["업무 문제", "업무량", "자료 · 데이터", "기대 결과", "희망 완료일"];
   const prompts = [
     "먼저 어떤 업무가 가장 힘들거나 실수가 잦은지 알려주세요.",
@@ -1768,13 +1837,16 @@ function RequestWizard({ step, setStep, close, notify }: { step: number; setStep
     "2026-10-30",
   ];
   const [answers, setAnswers] = useState(["", "", "", "", ""]);
+  const [submitted, setSubmitted] = useState(false);
+  const requestTitle = suggestRequestTitle(answers[0]);
   const updateAnswer = (value: string) => setAnswers((items) => items.map((item, index) => index === step - 1 ? value : item));
   const advance = () => {
-    if (!answers[step - 1].trim()) updateAnswer(examples[step - 1].replace("예: ", ""));
+    if (!answers[step - 1].trim() || submitted) return;
     if (step < 5) setStep(step + 1);
     else {
+      setSubmitted(true);
+      onSubmit([...answers], requestTitle);
       close();
-      notify("에이전트 요구 접수서[INT]가 제출되었습니다. 내 Agent 과제에서 신청 결과를 확인할 수 있습니다.");
     }
   };
   return <div className="modal-wrap"><button className="modal-scrim" aria-label="닫기" onClick={close} /><section className="wizard chat-wizard" role="dialog" aria-modal="true" aria-labelledby="request-wizard-title">
@@ -1783,7 +1855,7 @@ function RequestWizard({ step, setStep, close, notify }: { step: number; setStep
     <div className="chat-wizard-grid">
       <section className="wizard-document-preview">
         <header><small>INT · 자동 작성 중</small><h3>에이전트 요구 접수서</h3></header>
-        <div><b>요청 제목</b><p>{answers[0] ? "신규 Agent 과제" : "대화를 시작하면 제목을 제안합니다."}</p></div>
+        <div><b>요청 제목</b><p>{requestTitle}</p></div>
         {labels.map((label,index) => <div key={label} className={answers[index] ? "filled" : index === step - 1 ? "editing" : ""}><b>{index + 1}. {label}</b><p>{answers[index] || (index === step - 1 ? "오른쪽 질문에 답변해 주세요." : "아직 작성되지 않았습니다.")}</p></div>)}
         <footer><span>자동 저장됨</span><b>{answers.filter(Boolean).length}/5 항목 작성</b></footer>
       </section>
@@ -1793,10 +1865,10 @@ function RequestWizard({ step, setStep, close, notify }: { step: number; setStep
           {answers.slice(0, step - 1).map((answer,index) => <div className="wizard-answer-pair" key={`${answer}-${index}`}><div className="chat-message agent"><small>요구 접수 Agent</small><p>{prompts[index]}</p></div><div className="chat-message user"><small>나</small><p>{answer}</p></div></div>)}
           <div className="chat-message agent current"><small>요구 접수 Agent</small><p>{prompts[step - 1]}</p></div>
         </div>
-        <div className="wizard-chat-input">{step === 5 ? <label className="wizard-date-input"><span>희망 완료일</span><input type="date" min="2026-08-29" value={answers[step - 1]} onChange={(event) => updateAnswer(event.target.value)} /></label> : <textarea value={answers[step - 1]} onChange={(event) => updateAnswer(event.target.value)} placeholder={examples[step - 1]} />}<button onClick={advance}>{step === 5 ? "작성 완료" : "답변 저장"}<ArrowRight size={15} weight="bold" /></button></div>
+        <div className="wizard-chat-input">{step === 5 ? <label className="wizard-date-input"><span>희망 완료일</span><input type="date" min="2026-08-29" value={answers[step - 1]} onInput={(event) => updateAnswer((event.target as HTMLInputElement).value)} onChange={(event) => updateAnswer(event.target.value)} /></label> : <textarea value={answers[step - 1]} onChange={(event) => updateAnswer(event.target.value)} placeholder={examples[step - 1]} />}<button disabled={!answers[step - 1].trim() || submitted} onClick={advance}>{step === 5 ? "접수서 제출" : "답변 저장"}<ArrowRight size={15} weight="bold" /></button></div>
       </section>
     </div>
-    <footer><button className="ghost" onClick={step === 1 ? close : () => setStep(step - 1)}>{step === 1 ? "나중에 이어서 하기" : "← 이전 질문"}</button><div><span>닫아도 작성 이력이 남습니다</span>{step === 5 && <button className="primary" onClick={advance}>접수서 제출</button>}</div></footer>
+    <footer><button className="ghost" onClick={step === 1 ? close : () => setStep(step - 1)}>{step === 1 ? "나중에 이어서 하기" : "← 이전 질문"}</button><div><span>{step === 5 ? "희망 완료일을 확인한 뒤 접수서를 제출하세요" : "닫아도 작성 이력이 남습니다"}</span></div></footer>
   </section></div>;
 }
 
