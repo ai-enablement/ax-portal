@@ -14443,3 +14443,231 @@ fieldset.fea-grid {
   outline: 2px solid #2f6fed;
   outline-offset: -2px;
 }
+
+/* Connected workflow context, notifications, and compact ARD details */
+.top-actions {
+  position: relative;
+}
+.notification-panel {
+  position: absolute;
+  top: 48px;
+  right: 42px;
+  width: min(390px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid #dce3ec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(23, 38, 63, 0.18);
+  z-index: 80;
+}
+.notification-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e7ebf1;
+  background: #f8fafc;
+}
+.notification-panel > header b,
+.notification-panel > header small {
+  display: block;
+}
+.notification-panel > header b {
+  font-size: 13px;
+}
+.notification-panel > header small {
+  margin-top: 3px;
+  color: #7a8798;
+  font-size: 9px;
+}
+.notification-panel > div > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 9px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 16px;
+  border: 0;
+  border-bottom: 1px solid #edf0f4;
+  background: #fff;
+  color: #2d3b50;
+  text-align: left;
+}
+.notification-panel > div > button:last-child {
+  border-bottom: 0;
+}
+.notification-panel > div > button:hover,
+.notification-panel > div > button:focus-visible {
+  background: #f5f8fc;
+}
+.notification-panel > div > button > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8a96a7;
+}
+.notification-panel > div > button > span.danger {
+  background: #df4f5c;
+  box-shadow: 0 0 0 4px #fff0f1;
+}
+.notification-panel > div > button > span.warning {
+  background: #e89028;
+}
+.notification-panel > div > button > span.info {
+  background: #3979e5;
+}
+.notification-panel p {
+  margin: 0;
+}
+.notification-panel small,
+.notification-panel b,
+.notification-panel em {
+  display: block;
+}
+.notification-panel small {
+  color: #8a95a5;
+  font-size: 9px !important;
+}
+.notification-panel b {
+  margin-top: 2px;
+  font-size: 11px !important;
+}
+.notification-panel em {
+  margin-top: 4px;
+  color: #6c788b;
+  font-size: 9px !important;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.ard-checklist > section {
+  border-bottom: 1px solid #f0efee;
+}
+.ard-checklist > section > button {
+  display: flex;
+  width: 100%;
+  min-height: 55px;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.ard-checklist > section > button:hover,
+.ard-checklist > section > button:focus-visible {
+  background: #f8faff;
+}
+.ard-checklist > section > button > span {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  border-radius: 5px;
+  background: #f5f5f4;
+  color: #a8a29e;
+  font-size: 8px;
+  font-weight: 800;
+}
+.ard-checklist > section > button > p {
+  flex: 1;
+  margin: 0;
+}
+.ard-checklist > section > button i {
+  color: #5375a7;
+  font-style: normal;
+}
+.ard-checklist > section.current > button > span {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+.ard-checklist > section.waiting {
+  opacity: 0.68;
+}
+.ard-section-detail {
+  padding: 12px 14px 15px 36px;
+  border-top: 1px solid #e6ebf3;
+  background: #f7faff;
+}
+.ard-section-detail small {
+  color: #4977bb;
+  font-size: 8px !important;
+  font-weight: 800;
+}
+.ard-section-detail p {
+  margin: 6px 0 0;
+  color: #536176;
+  font-size: 10px !important;
+  line-height: 1.65;
+}
+
+@media (max-width: 980px) {
+  .sidebar {
+    width: 260px;
+    transform: translateX(-100%);
+    transition: 0.25s;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .main {
+    margin-left: 0;
+  }
+  .mobile-menu {
+    display: inline-grid;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    margin-right: 10px;
+  }
+  .nav-scrim {
+    display: block;
+    z-index: 29;
+  }
+  .page-heading,
+  .welcome {
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .page-heading > div:first-child,
+  .welcome > div:first-child {
+    min-width: 0;
+  }
+  .page-heading h1,
+  .welcome h1 {
+    word-break: keep-all;
+  }
+  .perspective-switch {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .intake-stage-line,
+  .definition-stage-line,
+  .delivery-stage-line,
+  .user-lifecycle-track.journey-v2 {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  .intake-stage-line > div,
+  .definition-stage-line > div,
+  .delivery-stage-line > div {
+    min-width: 126px;
+  }
+  .ops-table-scroll,
+  .user-chg-table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .notification-panel {
+    position: fixed;
+    top: 65px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+}

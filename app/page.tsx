@@ -299,6 +299,55 @@ const userJourney = [
 
 type UserProject = (typeof userProjects)[number] & { intakeAnswers?: string[] };
 
+const memberAdditionalProjects: UserProject[] = [
+  {
+    no: "2026-033",
+    name: "원부자재 인증서 확인 Agent",
+    stage: 1,
+    status: "내 작성 필요",
+    tone: "orange",
+    progress: 12,
+    owner: "김지은",
+    handler: "AI활성화팀 허정환 담당자",
+    updated: "어제 16:42",
+    nextAction: "대안 비교와 기대효과를 작성하고 FEA를 완료하세요",
+    description:
+      "현업 인터뷰를 마쳤으며 타당성 평가서[FEA]의 대안 비교와 기대효과 보완이 필요합니다.",
+    journeyStep: 1,
+    nextGate: "G1 착수 승인",
+    teamOwner: "AI활성화팀 허정환 담당자",
+    dueDate: "2026.08.18",
+    requestedDate: "2026.09.10",
+    committedDate: "G2 승인 후 확정",
+    scheduleState: "13일 지연 · 오늘 조치 필요",
+    checkpoints: "3/11",
+    route: "intake" as View,
+  },
+  {
+    no: "2026-011",
+    name: "QMS 품질 가이드",
+    stage: 6,
+    status: "AI활성화팀 진행 중",
+    tone: "green",
+    progress: 100,
+    owner: "윤지호",
+    handler: "AI활성화팀 허정환 담당자",
+    updated: "8.28 09:20",
+    nextAction: "9월 지식 최신성 점검을 준비하세요",
+    description:
+      "운영 전환이 완료되어 월간 OPS 점검과 지식 최신성 확인을 관리합니다.",
+    journeyStep: 9,
+    nextGate: "정기 재평가",
+    teamOwner: "AI활성화팀 허정환 담당자",
+    dueDate: "2026.09.05",
+    requestedDate: "2026.07.31",
+    committedDate: "2026.08.07",
+    scheduleState: "운영 정상",
+    checkpoints: "16/16",
+    route: "operations" as View,
+  },
+];
+
 const lifecycleOutputs = [
   {
     code: "INT",
@@ -560,7 +609,7 @@ const teamRequirements: TeamRequirement[] = [
     startDay: 11,
     dueDay: 18,
     priority: "보통",
-    risk: "정상",
+    risk: "지연 위험",
     nextAction: "대안 비교와 기대효과 확인",
     received: "어제 16:42",
   },
@@ -665,7 +714,7 @@ const teamRequirements: TeamRequirement[] = [
     title: "샘플 발송 현황 알림 Agent",
     requestTeam: "영업지원팀",
     requester: "이민지",
-    assignee: "박혜빈",
+    assignee: "이민지",
     status: "진행 중",
     stage: "파일럿",
     progress: 88,
@@ -772,6 +821,7 @@ export default function Home() {
   const [workflowTarget, setWorkflowTarget] = useState<string | undefined>(
     undefined,
   );
+  const [notificationOpen, setNotificationOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -860,8 +910,55 @@ export default function Home() {
   const go = (next: View) => {
     setView(next);
     setMobileNav(false);
+    setNotificationOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const openWorkflow = (next: View, projectNo: string) => {
+    setWorkflowTarget(projectNo);
+    go(next);
+  };
+
+  const notifications = role.includes("허정환")
+    ? [
+        {
+          projectNo: "2026-033",
+          title: "FEA 보완 · 13일 지연",
+          body: "대안 비교와 기대효과를 오늘 완료해야 합니다.",
+          view: "intake" as View,
+          tone: "danger",
+        },
+        {
+          projectNo: "2026-028",
+          title: "G2 보완 요청",
+          body: "ARD의 범위와 평가 기준을 보완한 뒤 재상신하세요.",
+          view: "definition" as View,
+          tone: "warning",
+        },
+        {
+          projectNo: "2026-021",
+          title: "회귀 평가 필요",
+          body: "EVR 실패 사례 12건의 원인과 조치를 확인하세요.",
+          view: "delivery" as View,
+          tone: "info",
+        },
+        {
+          projectNo: "2026-011",
+          title: "운영 점검 예정",
+          body: "9월 지식 최신성 점검이 5일 남았습니다.",
+          view: "operations" as View,
+          tone: "neutral",
+        },
+      ]
+    : [
+        {
+          projectNo: "2026-028",
+          title: "G2 보완 상태가 업데이트되었습니다",
+          body: "ARD 보완 내용과 승인 현황을 확인하세요.",
+          view: "definition" as View,
+          tone: "warning",
+        },
+      ];
 
   const openHub = (project?: (typeof projects)[0]) => {
     setHubProject(project || null);
@@ -1027,10 +1124,47 @@ export default function Home() {
                 <option>운영 담당자</option>
               </select>
             </label>
-            <button className="icon-button" aria-label="알림">
+            <button
+              className="icon-button"
+              aria-label="알림"
+              aria-expanded={notificationOpen}
+              aria-controls="notification-panel"
+              onClick={() => setNotificationOpen((current) => !current)}
+            >
               <Bell size={17} />
-              <i>4</i>
+              <i>{notifications.length}</i>
             </button>
+            {notificationOpen && (
+              <section
+                id="notification-panel"
+                className="notification-panel"
+                aria-label="업무 알림"
+              >
+                <header>
+                  <div>
+                    <b>업무 알림</b>
+                    <small>우선순위가 높은 순서입니다.</small>
+                  </div>
+                  <Pill tone="red">{notifications.length}건</Pill>
+                </header>
+                <div>
+                  {notifications.map((item) => (
+                    <button
+                      key={`${item.projectNo}-${item.title}`}
+                      onClick={() => openWorkflow(item.view, item.projectNo)}
+                    >
+                      <span className={item.tone} />
+                      <p>
+                        <small>{item.projectNo}</small>
+                        <b>{item.title}</b>
+                        <em>{item.body}</em>
+                      </p>
+                      <ArrowRight size={14} weight="bold" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
             <div className="avatar">
               {role === "일반 User"
                 ? "김"
@@ -1058,10 +1192,15 @@ export default function Home() {
               setGovernanceGate(gate);
               go("governance");
             }}
+            openWorkflow={openWorkflow}
           />
         )}
         {view === "teamboard" && role.includes("AI활성화팀") && (
-          <LegacyTeamWorkspaceDashboard role={role} setView={go} />
+          <LegacyTeamWorkspaceDashboard
+            role={role}
+            setView={go}
+            openWorkflow={openWorkflow}
+          />
         )}
         {view === "intake" && (
           <IntakeFeasibility
@@ -1283,6 +1422,7 @@ function Dashboard({
   setDetail,
   userProjectItems,
   openGovernance,
+  openWorkflow,
 }: {
   role: string;
   setView: (v: View) => void;
@@ -1290,6 +1430,7 @@ function Dashboard({
   setDetail: (p: (typeof projects)[0]) => void;
   userProjectItems: UserProject[];
   openGovernance: (gate: string) => void;
+  openWorkflow: (view: View, projectNo: string) => void;
 }) {
   if (
     [
@@ -1390,8 +1531,19 @@ function Dashboard({
       <UserDashboard
         role={role}
         setView={setView}
+        openWorkflow={openWorkflow}
         openNewRequest={() => setRequestOpen(true)}
-        projectItems={userProjectItems}
+        projectItems={
+          role.includes("허정환")
+            ? [
+                memberAdditionalProjects[0],
+                ...userProjectItems.filter((project) =>
+                  ["2026-028", "2026-021"].includes(project.no),
+                ),
+                memberAdditionalProjects[1],
+              ]
+            : userProjectItems
+        }
       />
     );
   return (
@@ -2141,9 +2293,11 @@ function TeamWorkspaceDashboard({
 function LegacyTeamWorkspaceDashboard({
   role,
   setView,
+  openWorkflow,
 }: {
   role: string;
   setView: (v: View) => void;
+  openWorkflow: (view: View, projectNo: string) => void;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
@@ -2481,7 +2635,7 @@ function LegacyTeamWorkspaceDashboard({
         {statusCard(
           "요구 정의",
           counts.definition,
-          "PIC 배정·FEA 시작 전",
+          "G1 통과·ARD 작성 및 보완",
           "violet",
           <FileText size={18} weight="bold" />,
           "요구 정의",
@@ -2615,6 +2769,7 @@ function LegacyTeamWorkspaceDashboard({
           item={popupItem}
           close={() => setPopupItem(null)}
           setView={setView}
+          openWorkflow={openWorkflow}
           route={routeFor(popupItem)}
         />
       )}
@@ -2809,11 +2964,13 @@ function TeamProjectModal({
   item,
   close,
   setView,
+  openWorkflow,
   route,
 }: {
   item: TeamRequirement;
   close: () => void;
   setView: (view: View) => void;
+  openWorkflow: (view: View, projectNo: string) => void;
   route: View;
 }) {
   useEffect(() => {
@@ -2826,6 +2983,11 @@ function TeamProjectModal({
   const go = (view: View) => {
     close();
     setView(view);
+  };
+
+  const goToWorkflow = () => {
+    close();
+    openWorkflow(route, item.id);
   };
 
   return (
@@ -2902,7 +3064,7 @@ function TeamProjectModal({
           <button className="secondary" onClick={() => go("hub")}>
             일정·작업 보기
           </button>
-          <button className="primary" onClick={() => go(route)}>
+          <button className="primary" onClick={goToWorkflow}>
             업무 화면 열기
           </button>
         </footer>
@@ -4589,7 +4751,10 @@ function GateDetailDialog({
                 : `${isG1 ? "착수" : "개발 착수"} 승인 근거`}
             </h2>
           </div>
-          <button aria-label="승인 근거 닫기" onClick={onClose}>
+          <button
+            aria-label={mode === "ard" ? "보완 중인 ARD 닫기" : "승인 근거 닫기"}
+            onClick={onClose}
+          >
             <X size={18} weight="bold" />
           </button>
         </header>
@@ -4677,17 +4842,20 @@ function GateApprovalResult({
   const isMember = role.includes("AI활성화팀") && role.includes("담당자");
   const isRequester = role === "일반 User";
   const canActOnG2 = isRequester || isMember || isLeader;
+  const isCompletedG2 = projectNo === "2026-021" && gate === "G2";
   const [detailMode, setDetailMode] = useState<"evidence" | "ard" | null>(null);
   const project =
-    userProjects.find((item) => item.no === projectNo) || userProjects[0];
+    [...memberAdditionalProjects, ...userProjects].find(
+      (item) => item.no === projectNo,
+    ) || userProjects[0];
   const [g1Decision, setG1Decision] = useState<
     "PENDING" | "GO" | "CONDITIONAL" | "DROP"
-  >(projectNo === "2026-031" ? "PENDING" : "GO");
+  >(["2026-031", "2026-033"].includes(projectNo) ? "PENDING" : "GO");
   const [g1DraftDecision, setG1DraftDecision] = useState<
     "PENDING" | "GO" | "CONDITIONAL" | "DROP"
   >("PENDING");
   const [g1Assignee, setG1Assignee] = useState(
-    projectNo === "2026-031"
+    ["2026-031", "2026-033"].includes(projectNo)
       ? "미배정"
       : project.teamOwner.replace("AI활성화팀 ", "").replace(" 담당자", ""),
   );
@@ -4758,8 +4926,16 @@ function GateApprovalResult({
           {
             role: "요구자",
             name: projectNo === "2026-021" ? "정수빈" : "김현우",
-            status: myG2Vote === "REWORK" && isRequester ? "반려" : "승인",
-            date: "2026.08.25",
+            status: isCompletedG2
+              ? "승인"
+              : isRequester
+                ? myG2Vote === "REWORK"
+                  ? "반려"
+                  : myG2Vote === "APPROVED"
+                    ? "승인"
+                    : "대기"
+                : "승인",
+            date: isCompletedG2 ? "2026.08.25" : isRequester ? "내 검토" : "2026.08.25",
             reason: myG2Vote === "REWORK" && isRequester ? g2Reason : undefined,
           },
           {
@@ -4769,19 +4945,46 @@ function GateApprovalResult({
               : project.teamOwner
                   .replace("AI활성화팀 ", "")
                   .replace(" 담당자", ""),
-            status: myG2Vote === "REWORK" && isMember ? "반려" : "승인",
-            date: "2026.08.25",
+            status: isCompletedG2
+              ? "승인"
+              : isMember
+                ? myG2Vote === "REWORK"
+                  ? "반려"
+                  : myG2Vote === "APPROVED"
+                    ? "승인"
+                    : "대기"
+                : projectNo === "2026-026"
+                  ? "승인"
+                  : "대기",
+            date: isCompletedG2 ? "2026.08.25" : isMember ? "내 검토" : "승인 전",
             reason: myG2Vote === "REWORK" && isMember ? g2Reason : undefined,
           },
           {
             role: "AI 활성화팀장",
             name: "최병두",
-            status: myG2Vote === "REWORK" && isLeader ? "반려" : "승인",
-            date: "2026.08.26",
+            status: isCompletedG2
+              ? "승인"
+              : isLeader
+                ? myG2Vote === "REWORK"
+                  ? "반려"
+                  : myG2Vote === "APPROVED"
+                    ? "승인"
+                    : "대기"
+                : "대기",
+            date: isCompletedG2 ? "2026.08.26" : isLeader ? "내 검토" : "선행 승인 후",
             reason: myG2Vote === "REWORK" && isLeader ? g2Reason : undefined,
           },
         ];
   const rejected = approvers.some((item) => item.status === "반려");
+  const g2Complete = !isG1 && approvers.every((item) => item.status === "승인");
+  const myApproverRole = isRequester
+    ? "요구자"
+    : isMember
+      ? "개발 담당자"
+      : "AI 활성화팀장";
+  const myApprovalPending = approvers.some(
+    (item) => item.role === myApproverRole && item.status === "대기",
+  );
   const g1StatusLabel =
     g1Decision === "PENDING"
       ? "판정 대기"
@@ -4790,7 +4993,9 @@ function GateApprovalResult({
         : g1Decision === "DROP"
           ? "Drop"
           : "Go";
-  const gatePending = isG1 && (g1Decision === "PENDING" || !basisReady);
+  const gatePending = isG1
+    ? g1Decision === "PENDING" || !basisReady
+    : !rejected && !g2Complete;
   return (
     <>
       <section
@@ -4815,7 +5020,9 @@ function GateApprovalResult({
               : !basisReady
                 ? "FEA 작성 완료 대기"
                 : gatePending
-                  ? "팀장 판정 대기"
+                  ? isG1
+                    ? "팀장 판정 대기"
+                    : "승인 진행 중"
                   : "게이트 통과"}
           </Pill>
         </header>
@@ -4842,7 +5049,9 @@ function GateApprovalResult({
                 : !basisReady
                   ? "선행 단계 필요"
                   : gatePending
-                    ? "판정 전"
+                    ? isG1
+                      ? "판정 전"
+                      : `${approvers.filter((item) => item.status === "승인").length}/3 승인`
                     : isG1
                       ? g1StatusLabel
                       : "3자 승인 완료"}
@@ -4853,7 +5062,9 @@ function GateApprovalResult({
                 : !basisReady
                   ? "FEA 작성 완료 후 팀장 판정이 열립니다"
                   : gatePending
-                    ? "팀장 결정과 담당자 지정 필요"
+                    ? isG1
+                      ? "팀장 결정과 담당자 지정 필요"
+                      : "세 명의 개별 검토가 모두 필요"
                     : "다음 단계 이동 가능"}
             </span>
           </div>
@@ -5097,7 +5308,7 @@ function GateApprovalResult({
             </p>
           </section>
         )}
-        {!isG1 && canActOnG2 && !rejected && myG2Vote === "PENDING" && (
+        {!isG1 && canActOnG2 && !rejected && myApprovalPending && (
           <section className="g2-role-action">
             <header>
               <div>
@@ -5622,11 +5833,39 @@ function getChangeDetail(row: ChangeRow) {
       reviewer: "정보보호 검토 완료 · AI활성화팀장 최종 확인",
     },
   };
+  const fallbackByType: Record<string, { before: string; scope: string }> = {
+    지식: {
+      before:
+        "직전 승인 버전의 지식 문서와 메타데이터가 운영 색인에 적용되어 있었습니다.",
+      scope:
+        "참조 문서 버전, 검색 색인, 근거 링크, 지식 기준일과 관련 회귀 평가셋",
+    },
+    프롬프트: {
+      before:
+        "직전 승인 프롬프트는 신고된 예외 상황의 확인 질문과 근거 표시 조건을 포함하지 않았습니다.",
+      scope:
+        "시스템 지침, 출력 형식, 예외 처리, 금칙 매핑과 사용자 응답 화면",
+    },
+    도구: {
+      before:
+        "직전 승인 도구 설정은 해당 실패 상황에서 재시도 또는 담당자 이관을 수행하지 않았습니다.",
+      scope: "도구 호출 권한, 실패 처리, 감사 로그와 사용자 상태 안내",
+    },
+    플랫폼: {
+      before:
+        "직전 승인 플랫폼 구성과 운영 정책이 적용되어 있었습니다.",
+      scope: "실행 환경, 데이터 경계, 로그·권한 정책과 전체 회귀 평가",
+    },
+  };
+  const fallback = fallbackByType[row[2]] ?? {
+    before: `직전 승인된 ${row[2]} 설정이 운영 환경에 적용되어 있었습니다.`,
+    scope: `${row[2]} 설정, 연관 산출물, 사용자 응답과 전체 회귀 평가`,
+  };
   return (
     details[row[0]] ?? {
-      before: "변경 전 상태가 개선 이력서에 기록되어 있습니다.",
+      before: fallback.before,
       after: row[3],
-      scope: "해당 Agent의 지침·지식·도구 및 사용자 응답",
+      scope: fallback.scope,
       verification: `${row[5]} · 보유 평가셋 전체 회귀 평가 완료`,
       reviewer: `${row[6]} 검토 및 승인`,
     }
@@ -6098,11 +6337,13 @@ function UserOperationsResult({ project }: { project: UserProject }) {
 function UserDashboard({
   role,
   setView,
+  openWorkflow,
   openNewRequest,
   projectItems,
 }: {
   role: string;
   setView: (v: View) => void;
+  openWorkflow: (view: View, projectNo: string) => void;
   openNewRequest: () => void;
   projectItems: UserProject[];
 }) {
@@ -6133,7 +6374,7 @@ function UserDashboard({
     const nextIndex = isAiTeamMember
       ? Math.max(
           0,
-          projectItems.findIndex((project) => project.no === "2026-028"),
+          projectItems.findIndex((project) => project.no === "2026-033"),
         )
       : 0;
     setSelected(nextIndex);
@@ -6168,7 +6409,7 @@ function UserDashboard({
     setFilter(next);
     if (next === "내 할 일") {
       const project = isAiTeamMember
-        ? projectItems.find((item) => item.no === "2026-028") || projectItems[0]
+        ? projectItems.find((item) => item.no === "2026-033") || projectItems[0]
         : projectItems.find((item) => item.status === "내 작성 필요") ||
           projectItems[0];
       setSelected(projectItems.indexOf(project));
@@ -6310,7 +6551,7 @@ function UserDashboard({
               </p>
             </div>
             {isAiTeamMember ? (
-              <button onClick={() => setView(current.route)}>
+              <button onClick={() => openWorkflow(current.route, current.no)}>
                 업무 화면 열기 <ArrowRight size={13} weight="bold" />
               </button>
             ) : (
@@ -6911,7 +7152,13 @@ function IntakeFeasibility({
   const [chatStep, setChatStep] = useState(2);
   const [chatInput, setChatInput] = useState("");
   const [selectedRequest, setSelectedRequest] = useState(
-    projectNo === "2026-030" ? 1 : projectNo === "2026-029" ? 2 : 0,
+    projectNo === "2026-033"
+      ? 0
+      : projectNo === "2026-030"
+        ? 2
+        : projectNo === "2026-029"
+          ? 3
+          : 1,
   );
   const [resolvedG1, setResolvedG1] = useState<{
     decision: "GO" | "CONDITIONAL" | "DROP";
@@ -6930,6 +7177,21 @@ function IntakeFeasibility({
     }
   };
   const intakeRequests = [
+    {
+      no: "2026-033",
+      name: "원부자재 인증서 확인 Agent",
+      dept: "구매팀",
+      requester: "김지은",
+      submitted: "어제 16:42",
+      score: 88,
+      risk: "중",
+      status: "FEA 보완 필요",
+      tone: "red",
+      work: "원부자재별 인증서 유효기간과 규격 충족 여부를 메일·공유폴더·구매시스템에서 수작업 확인",
+      volume: "월 60건 · 건당 18분 · 월 18시간",
+      outcome: "인증서 누락·만료·규격 불일치 후보와 원문 근거를 담당자 검토 목록으로 제공",
+      impact: "만료 또는 부적합 인증서를 놓치면 입고 지연과 품질 승인 보류 가능",
+    },
     {
       no: "2026-031",
       name: "개발 BOM 변경 영향 분석 Agent",
@@ -6978,6 +7240,24 @@ function IntakeFeasibility({
     },
   ];
   const current = intakeRequests[selectedRequest];
+  const isCertificateFea = current.no === "2026-033";
+  const requestedCompletion = isCertificateFea ? "2026.09.10" : "2026.10.30";
+  const alternativeFindings = isCertificateFea
+    ? [
+        "규정 보완만으로 분산된 인증서 수집·유효성 대조를 해소할 수 없음",
+        "구매시스템은 인증서 원문 판독과 규격별 조건 비교를 지원하지 않음",
+        "파일명·양식이 일정하지 않아 매크로 규칙을 안정적으로 유지하기 어려움",
+        "단순 검색만으로 만료일·규격 조건 판정과 근거 추적을 보장할 수 없음",
+      ]
+    : [
+        "시스템이 분리되어 수작업 대조 자체는 해소 불가",
+        "GMES 단독으로 문서 간 의미 관계 확인 불가",
+        "비정형 품질 문서와 연계 규칙을 지속 관리하기 어려움",
+        "변경 항목별 규칙 실행과 근거 추적이 필요",
+      ];
+  const feaConclusion = isCertificateFea
+    ? "네 가지 저비용 대안만으로는 분산된 인증서의 유효기간과 규격 조건을 근거와 함께 일관되게 판정하기 어려워, 읽기 전용 연동과 담당자 최종 확인을 포함한 Agent 개발이 타당합니다."
+    : "네 가지 저비용 대안만으로는 시스템 간 영향 관계와 근거 추적을 함께 해결할 수 없어, 읽기 전용 데이터 연동과 사람 검토를 포함한 Agent 개발이 타당합니다.";
   const sendChat = () => {
     if (!chatInput.trim()) return;
     setChatStep(Math.min(5, chatStep + 1));
@@ -7063,7 +7343,7 @@ function IntakeFeasibility({
           <CalendarBlank size={17} weight="duotone" />
           <p>
             <small>요청 시 희망 완료일</small>
-            <b>2026.10.30</b>
+            <b>{requestedCompletion}</b>
           </p>
         </div>
         <ArrowRight size={14} weight="bold" />
@@ -7475,38 +7755,34 @@ function IntakeFeasibility({
                     <input type="checkbox" defaultChecked />
                     <span>
                       <b>프로세스·규정 개선</b>
-                      <small>
-                        시스템이 분리되어 수작업 대조 자체는 해소 불가
-                      </small>
+                      <small>{alternativeFindings[0]}</small>
                     </span>
                   </label>
                   <label>
                     <input type="checkbox" defaultChecked />
                     <span>
                       <b>기존 시스템 기능·설정</b>
-                      <small>GMES 단독으로 문서 간 의미 관계 확인 불가</small>
+                      <small>{alternativeFindings[1]}</small>
                     </span>
                   </label>
                   <label>
                     <input type="checkbox" defaultChecked />
                     <span>
                       <b>매크로·Excel</b>
-                      <small>
-                        비정형 품질 문서와 연계 규칙을 지속 관리하기 어려움
-                      </small>
+                      <small>{alternativeFindings[2]}</small>
                     </span>
                   </label>
                   <label>
                     <input type="checkbox" defaultChecked />
                     <span>
                       <b>단순 LLM 챗·검색</b>
-                      <small>변경 항목별 규칙 실행과 근거 추적이 필요</small>
+                      <small>{alternativeFindings[3]}</small>
                     </span>
                   </label>
                 </div>
                 <label className="fea-conclusion">
                   에이전트 개발이 타당한 이유
-                  <textarea defaultValue="네 가지 저비용 대안만으로는 시스템 간 영향 관계와 근거 추적을 함께 해결할 수 없어, 읽기 전용 데이터 연동과 사람 검토를 포함한 Agent 개발이 타당합니다." />
+                  <textarea defaultValue={feaConclusion} />
                 </label>
               </article>
               <article>
@@ -7563,19 +7839,19 @@ function IntakeFeasibility({
                 <div className="roi-box">
                   <div>
                     <small>절감 산식</small>
-                    <b>20건 × 45분 × 1명</b>
-                    <p>월 15시간</p>
+                    <b>{isCertificateFea ? "60건 × 18분 × 1명" : "20건 × 45분 × 1명"}</b>
+                    <p>{isCertificateFea ? "월 18시간" : "월 15시간"}</p>
                   </div>
                   <span>→</span>
                   <div>
                     <small>예상 절감</small>
-                    <b>월 10.5시간</b>
-                    <p>70% 절감</p>
+                    <b>{isCertificateFea ? "월 12시간" : "월 10.5시간"}</b>
+                    <p>{isCertificateFea ? "67% 절감" : "70% 절감"}</p>
                   </div>
                   <div>
                     <small>품질 효과</small>
-                    <b>영향 문서 누락 0건 목표</b>
-                    <p>재작업·일정 지연 감소</p>
+                    <b>{isCertificateFea ? "만료·규격 누락 0건 목표" : "영향 문서 누락 0건 목표"}</b>
+                    <p>{isCertificateFea ? "입고 보류·승인 지연 감소" : "재작업·일정 지연 감소"}</p>
                   </div>
                   <div>
                     <small>개발 비용</small>
@@ -7747,7 +8023,7 @@ function IntakeFeasibility({
             projectNo={current.no}
             role={role}
             notify={notify}
-            basisReady={current.no !== "2026-031"}
+            basisReady={!(["2026-031", "2026-033"] as string[]).includes(current.no)}
             onG1Resolved={(decision, assignee, reason) =>
               setResolvedG1({ decision, assignee, reason })
             }
@@ -7780,6 +8056,7 @@ function RequirementDefinition({
   const [selectedArd, setSelectedArd] = useState(
     projectNo === "2026-026" ? 1 : projectNo === "2026-028" ? 2 : 0,
   );
+  const [expandedArdSection, setExpandedArdSection] = useState<number | null>(1);
   const [assignee, setAssignee] = useState("미배정");
   const [g2Decision, setG2Decision] = useState<"GO" | "CONDITIONAL" | "DROP">(
     "GO",
@@ -7839,6 +8116,16 @@ function RequirementDefinition({
     },
   ];
   const current = ardQueue[selectedArd];
+  const ardSectionDetails = [
+    "이 에이전트는 출장 신청 직원이 규정을 확인하고 기안할 때 승인된 근거를 찾아 비용 한도와 초안을 제공하며, 요구자·오너·개발·운영 책임자를 명시합니다.",
+    "현행 프로세스는 요청 유형 확인 → 규정 검색 → 비용 한도 계산 → 첨부자료 확인 → 기안 작성 순서입니다. 단계 수는 케이스별로 자유롭게 기록하며, Pain Point와 처리시간·월 건수 Baseline도 함께 남깁니다.",
+    "에이전트가 규정 검색·비용 계산·기안 초안을 담당하고 사용자가 근거와 금액을 확인합니다. 최종 제출과 승인은 Out of Scope입니다.",
+    "L1 초안 생성 수준입니다. 모든 결과는 사용자가 검토한 뒤 사용하며, 운영 3개월 정확도와 오류율이 기준을 충족할 때만 상향을 재검토합니다.",
+    "FR-01 규정 검색, FR-02 비용 한도 계산, FR-03 필수 첨부 확인, FR-04 기안 초안 생성으로 구성하며 각 요구에 입력 → Agent 행동 → 출력을 기록합니다.",
+    "출장 규정·FAQ·비용 기준표를 참조하고 경영지원팀 규정 담당자가 개정 시 지식을 갱신합니다. 승인된 읽기 전용 자료만 사용합니다.",
+    "작성시간 30분→10분, 평가셋 50건 정확도 90% 이상, 근거 제시율 100%, 금칙 위반 0건을 배포 기준으로 적용합니다.",
+    "오답·지식 최신성 오류·범위 밖 질문·프롬프트 주입을 필수 실패 유형으로 기록하고, 답변 보류·담당자 이관·입력 차단 방식을 각각 연결합니다.",
+  ];
   const advanceArd = () => {
     if (!chatInput.trim() && ardStep < 8) {
       notify("답변을 입력하거나 예시 답변을 선택해 주세요.");
@@ -8150,7 +8437,7 @@ function RequirementDefinition({
                       : `${Math.max(0, ardStep - 4)}/4 작성`,
                   ],
                 ].map((item, i) => (
-                  <div
+                  <section
                     className={
                       i < ardStep
                         ? "complete"
@@ -8160,13 +8447,37 @@ function RequirementDefinition({
                     }
                     key={item[0]}
                   >
-                    <span>{item[0]}</span>
-                    <p>
-                      <small>{item[1]}</small>
-                      <b>{item[2]}</b>
-                    </p>
-                    <i>{i < ardStep ? "✓" : i === ardStep ? "작성 중" : "–"}</i>
-                  </div>
+                    <button
+                      type="button"
+                      aria-expanded={expandedArdSection === i}
+                      onClick={() =>
+                        setExpandedArdSection((currentSection) =>
+                          currentSection === i ? null : i,
+                        )
+                      }
+                    >
+                      <span>{item[0]}</span>
+                      <p>
+                        <small>{item[1]}</small>
+                        <b>{item[2]}</b>
+                      </p>
+                      <i>
+                        {expandedArdSection === i
+                          ? "접기 ↑"
+                          : i < ardStep
+                            ? "완료 ›"
+                            : i === ardStep
+                              ? "작성 중 ›"
+                              : "예정 ›"}
+                      </i>
+                    </button>
+                    {expandedArdSection === i && (
+                      <div className="ard-section-detail">
+                        <small>{item[0]} 상세 내용</small>
+                        <p>{ardSectionDetails[i]}</p>
+                      </div>
+                    )}
+                  </section>
                 ))}
               </div>
               <div className="ard-blocker">
@@ -8727,7 +9038,7 @@ function DeliveryWorkplace({
   const [depChecks, setDepChecks] = useState(() =>
     projectNo === "2026-014" || projectNo === "2026-018"
       ? Array(9).fill(true)
-      : [true, true, true, true, true, true, true, false, false],
+      : [false, true, true, true, true, true, true, false, false],
   );
   const deliveryProjects = [
     {
@@ -8739,7 +9050,7 @@ function DeliveryWorkplace({
       reviewer: "이재승",
       track: "중",
       stage: "평가 진행",
-      progress: 72,
+      progress: 68,
       des: 88,
       evp: 100,
       evr: 64,
@@ -8803,7 +9114,7 @@ function DeliveryWorkplace({
       name: "출장 규정 문의 Agent",
       dept: "경영지원팀",
       owner: "경영지원팀장",
-      builder: "미배정",
+      builder: "허정환",
       reviewer: "미배정",
       track: "중",
       stage: "G2 보완",
@@ -8838,15 +9149,36 @@ function DeliveryWorkplace({
     setDepChecks(
       current.no === "2026-014" || current.no === "2026-018"
         ? Array(9).fill(true)
-        : [true, true, true, true, true, true, true, false, false],
+        : [
+            current.evr === 100 && current.guardrail === "0건",
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            false,
+            false,
+          ],
     );
-  }, [current.no]);
+  }, [current.no, current.evr, current.guardrail]);
   const isPlanned = lifecycleState === "생성 전";
   const isLeader = role.includes("최병두");
   const isAiTeamMember = role.includes("AI활성화팀") && role.includes("담당자");
   const isReviewer = role.includes("리뷰어");
   const isOwner = role.includes("현업 Owner");
   const isSecurity = role.includes("정보보호");
+  const visibleDeliveryProjectIndexes = deliveryProjects
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) =>
+      isAiTeamMember
+        ? item.builder === "허정환" && !item.stage.includes("G2")
+        : true,
+    );
+  const canEditCurrentProject =
+    isAiTeamMember &&
+    current.builder === "허정환" &&
+    !current.stage.includes("G2");
   const perspective = isLeader
     ? "leader"
     : isAiTeamMember
@@ -9875,10 +10207,11 @@ function DeliveryWorkplace({
                 setG4OwnerApproved(false);
               }}
             >
-              <option value={0}>2026-021 생산 품질 이슈 분석</option>
-              <option value={1}>2026-018 해외 출장기안 지원</option>
-              <option value={2}>2026-026 SAP 사용자 가이드</option>
-              <option value={3}>2026-014 샘플 발송 현황 알림</option>
+              {visibleDeliveryProjectIndexes.map(({ item, index }) => (
+                <option key={item.no} value={index}>
+                  {item.no} {item.name.replace(" Agent", "")}
+                </option>
+              ))}
             </select>
           </label>
         </section>
@@ -9929,10 +10262,10 @@ function DeliveryWorkplace({
                       : "역할에 맞는 검토·승인 대상을 선택합니다."}
                   </p>
                 </div>
-                <Pill tone="blue">{deliveryProjects.length}건</Pill>
+                <Pill tone="blue">{visibleDeliveryProjectIndexes.length}건</Pill>
               </div>
               <div className="delivery-project-list">
-                {deliveryProjects.map((item, i) => (
+                {visibleDeliveryProjectIndexes.map(({ item, index: i }) => (
                   <button
                     key={item.no}
                     className={selectedProject === i ? "selected" : ""}
@@ -10111,14 +10444,18 @@ function DeliveryWorkplace({
                 </div>
                 <button
                   className="primary"
-                  disabled={isPlanned || !isAiTeamMember}
+                  disabled={isPlanned || !canEditCurrentProject}
                   onClick={() =>
                     notify(
                       `${visibleDocData.title}[${activeDoc}]이 저장되었습니다.`,
                     )
                   }
                 >
-                  {isAiTeamMember ? "문서 저장" : "담당자 작성 문서"}
+                  {canEditCurrentProject
+                    ? "문서 저장"
+                    : isAiTeamMember
+                      ? "다른 담당자 문서 · 조회 전용"
+                      : "담당자 작성 문서"}
                 </button>
               </footer>
             </article>
