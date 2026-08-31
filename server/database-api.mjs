@@ -1,24 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
-import { closePool, getPool, validateDatabaseEnvironment, withTransaction } from "./db/pool.mjs";
-
-const host = process.env.PORTAL_GATEWAY_HOST || "0.0.0.0";
-const port = Number(process.env.PORTAL_GATEWAY_PORT || 8787);
-const gatewayToken = process.env.PORTAL_GATEWAY_TOKEN || "";
-const allowedOrigins = new Set(
-  (process.env.PORTAL_ALLOWED_ORIGINS || "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
-);
-
-validateDatabaseEnvironment();
-if (!gatewayToken || gatewayToken.startsWith("CHANGE_ME")) {
-  throw new Error("PORTAL_GATEWAY_TOKEN must be set to a long random value.");
-}
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new Error("PORTAL_GATEWAY_PORT must be a valid TCP port.");
-}
+import { getPool, withTransaction } from "./db/pool.mjs";
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -28,44 +8,6 @@ const statusToDatabase = {
   PUBLISHED: "published",
   REJECTED: "rejected",
 };
-
-function json(response, status, body, extraHeaders = {}) {
-  response.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    ...extraHeaders,
-  });
-  response.end(JSON.stringify(body));
-}
-
-function tokenMatches(value) {
-  const expected = createHash("sha256").update(gatewayToken).digest();
-  const actual = createHash("sha256").update(value || "").digest();
-  return timingSafeEqual(expected, actual);
-}
-
-function corsHeaders(request) {
-  const origin = request.headers.origin;
-  if (!origin || !allowedOrigins.has(origin)) return {};
-  return {
-    "access-control-allow-origin": origin,
-    "access-control-allow-headers": "content-type,x-portal-token",
-    "access-control-allow-methods": "GET,POST,PATCH,OPTIONS",
-    vary: "origin",
-  };
-}
-
-async function readJson(request) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > 1024 * 1024) throw new Error("Request body is too large.");
-    chunks.push(chunk);
-  }
-  if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
 
 async function findUser(client, email) {
   if (!email) return null;
@@ -124,8 +66,8 @@ const gallerySelect = `
   join agent_portal.users u on u.id = gs.submitted_by
   left join agent_portal.projects p on p.id = gs.project_id`;
 
-async function listGalleryApplications(url) {
-  const email = url.searchParams.get("email");
+async function listGalleryApplications(searchParams) {
+  const email = searchParams.get("email");
   const pool = getPool();
   const user = await findUser(pool, email);
   if (!user) return { status: 404, body: { error: "Active portal user not found." } };
@@ -245,7 +187,7 @@ async function createGalleryApplication(body) {
   });
 }
 
-async function reviewGalleryApplication(submissionNumber, body) {
+async function updateGalleryApplication(submissionNumber, body) {
   const databaseStatus = statusToDatabase[body.status];
   if (!databaseStatus) throw new Error("Invalid review status.");
   return withTransaction(async (client) => {
@@ -256,9 +198,7 @@ async function reviewGalleryApplication(submissionNumber, body) {
     );
     if (!existing.rows[0]) return { status: 404, body: { error: "Submission not found." } };
     const actor = await findUser(client, body.actorEmail);
-    if (!actor) {
-      return { status: 403, body: { error: "Active portal user not found." } };
-    }
+    if (!actor) return { status: 403, body: { error: "Active portal user not found." } };
 
     if (databaseStatus === "submitted") {
       if (actor.app_role !== "general_user" || actor.id !== existing.rows[0].submitted_by) {
@@ -294,65 +234,60 @@ async function reviewGalleryApplication(submissionNumber, body) {
           Array.isArray(body.evidence) ? JSON.stringify(body.evidence) : null,
         ],
       );
-      const resubmitted = await client.query(
-        `${gallerySelect} where gs.submission_number = $1`,
-        [submissionNumber],
+    } else {
+      if (!["team_member", "team_leader"].includes(actor.app_role)) {
+        return { status: 403, body: { error: "AI Enablement Team review permission is required." } };
+      }
+      if (databaseStatus === "published" && actor.app_role !== "team_leader") {
+        return { status: 403, body: { error: "Only the AI Enablement Team leader can publish." } };
+      }
+      const decision = {
+        changes_requested: "changes_requested",
+        recommended: "recommended",
+        published: "published",
+        rejected: "rejected",
+      }[databaseStatus];
+      if (decision) {
+        await client.query(
+          `insert into agent_portal.gallery_reviews (
+            gallery_submission_id, reviewer_id, review_role, decision,
+            access_verified, data_policy_verified, safety_notice_verified,
+            operation_owner_verified, review_note
+          ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [
+            existing.rows[0].id,
+            actor.id,
+            actor.app_role,
+            decision,
+            Boolean(body.checks?.access),
+            Boolean(body.checks?.dataPolicy),
+            Boolean(body.checks?.safetyNotice),
+            Boolean(body.checks?.operationOwner),
+            body.reviewerNote || null,
+          ],
+        );
+      }
+      await client.query(
+        `update agent_portal.gallery_submissions
+            set submission_status = $2, reviewer_note = $3
+          where submission_number = $1`,
+        [submissionNumber, databaseStatus, body.reviewerNote || null],
       );
-      return { status: 200, body: { application: resubmitted.rows[0] } };
+      if (databaseStatus === "published") {
+        const slug = `agent-${submissionNumber.toLowerCase()}`;
+        await client.query(
+          `insert into agent_portal.gallery_entries (
+            gallery_submission_id, slug, published_by, visibility
+          ) values ($1,$2,$3,'company')
+          on conflict (gallery_submission_id) do update set
+            published_by = excluded.published_by,
+            retired_at = null,
+            updated_at = now()`,
+          [existing.rows[0].id, slug, actor.id],
+        );
+      }
     }
 
-    const reviewer = actor;
-    if (!["team_member", "team_leader"].includes(reviewer.app_role)) {
-      return { status: 403, body: { error: "AI Enablement Team review permission is required." } };
-    }
-    if (databaseStatus === "published" && reviewer.app_role !== "team_leader") {
-      return { status: 403, body: { error: "Only the AI Enablement Team leader can publish." } };
-    }
-    const decision = {
-      changes_requested: "changes_requested",
-      recommended: "recommended",
-      published: "published",
-      rejected: "rejected",
-    }[databaseStatus];
-    if (decision) {
-      await client.query(
-        `insert into agent_portal.gallery_reviews (
-          gallery_submission_id, reviewer_id, review_role, decision,
-          access_verified, data_policy_verified, safety_notice_verified,
-          operation_owner_verified, review_note
-        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [
-          existing.rows[0].id,
-          reviewer.id,
-          reviewer.app_role,
-          decision,
-          Boolean(body.checks?.access),
-          Boolean(body.checks?.dataPolicy),
-          Boolean(body.checks?.safetyNotice),
-          Boolean(body.checks?.operationOwner),
-          body.reviewerNote || null,
-        ],
-      );
-    }
-    await client.query(
-      `update agent_portal.gallery_submissions
-          set submission_status = $2, reviewer_note = $3
-        where submission_number = $1`,
-      [submissionNumber, databaseStatus, body.reviewerNote || null],
-    );
-    if (databaseStatus === "published") {
-      const slug = `agent-${submissionNumber.toLowerCase()}`;
-      await client.query(
-        `insert into agent_portal.gallery_entries (
-          gallery_submission_id, slug, published_by, visibility
-        ) values ($1,$2,$3,'company')
-        on conflict (gallery_submission_id) do update set
-          published_by = excluded.published_by,
-          retired_at = null,
-          updated_at = now()`,
-        [existing.rows[0].id, slug, reviewer.id],
-      );
-    }
     const updated = await client.query(
       `${gallerySelect} where gs.submission_number = $1`,
       [submissionNumber],
@@ -371,49 +306,18 @@ async function health() {
   return { status: 200, body: { ok: true, ...result.rows[0] } };
 }
 
-const server = createServer(async (request, response) => {
-  const headers = corsHeaders(request);
-  if (request.method === "OPTIONS") {
-    response.writeHead(204, headers);
-    response.end();
-    return;
+export async function handleDatabaseRequest({ method, pathname, searchParams, body = {} }) {
+  if (method === "GET" && pathname === "/health") return health();
+  if (method === "GET" && pathname === "/gallery/applications") {
+    return listGalleryApplications(searchParams);
   }
-  if (!tokenMatches(request.headers["x-portal-token"])) {
-    json(response, 401, { error: "Unauthorized." }, headers);
-    return;
+  if (method === "POST" && pathname === "/gallery/applications") {
+    return createGalleryApplication(body);
   }
-  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
-  try {
-    let result;
-    if (request.method === "GET" && url.pathname === "/health") {
-      result = await health();
-    } else if (request.method === "GET" && url.pathname === "/gallery/applications") {
-      result = await listGalleryApplications(url);
-    } else if (request.method === "POST" && url.pathname === "/gallery/applications") {
-      result = await createGalleryApplication(await readJson(request));
-    } else if (request.method === "PATCH" && url.pathname.startsWith("/gallery/applications/")) {
-      const id = decodeURIComponent(url.pathname.split("/").filter(Boolean).at(-1) || "");
-      if (!id) throw new Error("Submission number is required.");
-      result = await reviewGalleryApplication(id, await readJson(request));
-    } else {
-      result = { status: 404, body: { error: "Route not found." } };
-    }
-    json(response, result.status, result.body, headers);
-  } catch (error) {
-    console.error("Gateway request failed:", error.message);
-    json(response, 500, { error: "Database request failed." }, headers);
+  if (method === "PATCH" && pathname.startsWith("/gallery/applications/")) {
+    const id = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "");
+    if (!id) throw new Error("Submission number is required.");
+    return updateGalleryApplication(id, body);
   }
-});
-
-server.listen(port, host, () => {
-  console.log(`PostgreSQL gateway listening on http://${host}:${port}`);
-});
-
-async function shutdown() {
-  server.close();
-  await closePool();
-  process.exit(0);
+  return { status: 404, body: { error: "Route not found." } };
 }
-
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);

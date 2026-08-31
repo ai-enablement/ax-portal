@@ -55,7 +55,7 @@ export function getPool() {
         1000,
         120000,
       ),
-      application_name: "agent-governance-portal-gateway",
+      application_name: "agent-governance-portal-webapp",
     });
     pool.on("error", (error) => {
       console.error("Unexpected idle PostgreSQL client error:", error.message);

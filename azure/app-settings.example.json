@@ -1,0 +1,15 @@
+[
+  { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true", "slotSetting": false },
+  { "name": "NODE_ENV", "value": "production", "slotSetting": false },
+  { "name": "PGHOST", "value": "CHANGE_ME_TO_HYBRID_CONNECTION_HOST", "slotSetting": true },
+  { "name": "PGPORT", "value": "5432", "slotSetting": true },
+  { "name": "PGDATABASE", "value": "agent_governance_portal", "slotSetting": true },
+  { "name": "PGUSER", "value": "agent_portal_app", "slotSetting": true },
+  { "name": "PGPASSWORD", "value": "CHANGE_ME", "slotSetting": true },
+  { "name": "PGSSLMODE", "value": "disable", "slotSetting": true },
+  { "name": "PGPOOL_MAX", "value": "10", "slotSetting": false },
+  { "name": "PGIDLE_TIMEOUT_MS", "value": "30000", "slotSetting": false },
+  { "name": "PGCONNECTION_TIMEOUT_MS", "value": "5000", "slotSetting": false },
+  { "name": "PGSTATEMENT_TIMEOUT_MS", "value": "15000", "slotSetting": false },
+  { "name": "NEXT_PUBLIC_APP_URL", "value": "https://CHANGE_ME.azurewebsites.net", "slotSetting": false }
+]

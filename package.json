@@ -6,15 +6,12 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "install:ci": "bash scripts/install-ci.sh",
-    "dev": "vite",
-    "dev:with-db": "node scripts/write-dev-vars.mjs && npm run dev",
-    "db:gateway": "node --env-file=.env server/postgres-gateway.mjs",
+    "dev": "next dev --hostname 0.0.0.0 --port 4180",
+    "dev:with-db": "npm run dev",
     "db:check": "node --env-file=.env server/check-database.mjs",
-    "build": "node scripts/build-verified.mjs",
-    "start": "vinext start",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
@@ -25,21 +22,14 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
-    "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
-    "typescript": "5.9.3",
-    "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "typescript": "5.9.3"
   },
   "type": "module",
   "displayName": "Agent Governance Portal"

@@ -12,28 +12,28 @@ AI 에이전트 과제의 요구 접수부터 타당성 평가, 승인, 설계·
 - 단계별 산출물 상세보기와 승인·반려 이력 시각화
 - 요구 접수 단계의 사용자 삭제 및 Admin 전체 관리 기능
 
-## PostgreSQL 연결 구조
+## Azure Web App + PostgreSQL 연결 구조
 
-포털에는 온프레미스 PostgreSQL 연결 계층이 포함되어 있습니다.
-DB 비밀번호는 브라우저나 배포 번들에 넣지 않고, 사내 API 게이트웨이에서만
-사용합니다.
+포털은 표준 Next.js Node.js 애플리케이션으로 실행되며, 같은 Web App의
+`/api/database` 서버 API가 온프레미스 PostgreSQL에 접속합니다. DB 비밀번호는
+브라우저나 정적 번들에 포함되지 않습니다.
 
 ```text
 사용자 브라우저
-  → 포털의 /api/database (비밀값 비노출)
-  → 사내 PostgreSQL 게이트웨이
+  → Azure Web App의 /api/database (Node.js 서버 API)
+  → Azure Hybrid Connection (PostgreSQL 호스트:5432)
   → 온프레미스 PostgreSQL (SSL 미사용)
 ```
 
-현재 Agent Gallery 신청·검토·등록 흐름이 이 API를 우선 사용합니다. 게이트웨이가
-아직 설정되지 않았거나 접속할 수 없으면 기존 목업 데이터와 브라우저 임시 저장소로
+현재 Agent Gallery 신청·검토·등록 흐름이 이 API를 우선 사용합니다. DB에
+아직 접속할 수 없으면 기존 목업 데이터와 브라우저 임시 저장소로
 자동 전환되어 UI 검토를 계속할 수 있습니다.
 
 ## `.env` 설정
 
 저장소 루트에 [`.env.example`](.env.example)과 로컬 전용 `.env` 양식이 준비되어
 있습니다. `.env`의 `CHANGE_ME` 값과 PostgreSQL 주소를 실제 값으로 교체하세요.
-완성된 `.env`와 자동 생성되는 `.dev.vars`는 Git에 포함되지 않습니다.
+완성된 `.env`는 Git에 포함되지 않습니다.
 
 ```dotenv
 PGHOST=사내_DB_주소
@@ -42,31 +42,22 @@ PGDATABASE=agent_governance_portal
 PGUSER=agent_portal_app
 PGPASSWORD=실제_비밀번호
 PGSSLMODE=disable
-
-PORTAL_GATEWAY_TOKEN=충분히_긴_임의_문자열
-DATABASE_GATEWAY_URL=http://사내_게이트웨이_주소:8787
-DATABASE_GATEWAY_TOKEN=PORTAL_GATEWAY_TOKEN과_동일한_값
+NEXT_PUBLIC_APP_URL=http://localhost:4180
 ```
 
 초기 스키마는
 [`database/postgresql/agent_governance_portal_schema.sql`](database/postgresql/agent_governance_portal_schema.sql)을
-온프레미스 DB에서 먼저 실행합니다. 그 후 아래 순서로 연결을 확인합니다.
+온프레미스 DB에서 먼저 실행합니다. 그 후 연결을 확인합니다.
 
 ```bash
 npm run db:check
-npm run db:gateway
-```
-
-다른 터미널에서 포털을 실행합니다.
-
-```bash
 npm run dev:with-db
 ```
 
-배포 사이트에서는 `.env` 파일을 업로드하지 않습니다. Sites 환경변수에는
-`DATABASE_GATEWAY_TOKEN`만 비밀값으로 등록하고, 사내 게이트웨이는 private HTTP
-tunnel 또는 사내에서 승인된 HTTPS 엔드포인트로 연결해야 합니다. PostgreSQL의
-`PGPASSWORD`는 계속 사내 게이트웨이에만 보관합니다.
+Azure 배포에서는 `.env` 파일을 업로드하지 않습니다. 동일한 항목을 Azure Web App의
+환경 변수에 등록합니다. `PGHOST`와 `PGPORT`는 Azure Hybrid Connection에 등록한
+Endpoint Host 및 Endpoint Port와 정확히 같아야 합니다. 자세한 절차는
+[`azure/README.md`](azure/README.md)를 참고하세요.
 
 ## 실행 방법
 
@@ -77,7 +68,7 @@ npm ci
 npm run dev:with-db
 ```
 
-기본 개발 주소는 Vite가 출력하는 로컬 URL을 사용합니다.
+기본 개발 주소는 `http://localhost:4180`입니다.
 
 ## 검증
 
@@ -92,16 +83,16 @@ npm run lint
 
 ```text
 app/                  화면과 역할별 업무 흐름
+app/api/database/     Azure Web App에서 실행되는 PostgreSQL API
+azure/                Azure App Settings·Hybrid Connection 배포 안내
 database/postgresql/  온프레미스 PostgreSQL 초기 스키마
 public/               정적 자산
-scripts/              Sites 빌드·검증 도구
+server/               PostgreSQL 연결 풀과 데이터 처리 로직
 tests/                역할·문서·사용자 흐름 회귀 테스트
-worker/               Cloudflare Worker 진입점
-.openai/hosting.json  Sites 프로젝트 연결 설정
 ```
 
 ## 배포
 
-운영 사이트는 OpenAI Sites에서 관리합니다. `.openai/hosting.json`의
-`project_id`를 임의로 변경하지 마세요. 운영 배포 전에는 전체 테스트를
-통과하고, 승인된 커밋만 별도 버전으로 저장해 배포해야 합니다.
+운영 사이트는 Azure Web App의 Node.js 22 런타임에서 실행합니다. 빌드 명령은
+`npm run build`, 시작 명령은 `npm start`입니다. 운영 배포 전에는 전체 테스트를
+통과하고 Azure Hybrid Connection 상태가 `Connected`인지 확인해야 합니다.

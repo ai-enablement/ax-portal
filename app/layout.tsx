@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://agent-governance-portal-roleflow.ax-gpt.chatgpt.site"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:4180"),
   title: "Agent Governance Portal",
   description: "Agent 요청부터 평가, 배포, 운영과 AI활성화팀 요구 포트폴리오 관리까지 연결하는 사내 통합 Portal",
   openGraph: {
