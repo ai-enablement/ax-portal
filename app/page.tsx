@@ -12,13 +12,10 @@ import {
   ChartBar,
   Check,
   CheckCircle,
-  Clock,
   ClipboardText,
   Info,
   FileText,
   List,
-  MagnifyingGlass,
-  Play,
   Plus,
   ShieldCheck,
   Target,
@@ -1054,6 +1051,8 @@ export default function Home() {
       const saved = window.localStorage.getItem(
         "agent-portal-submitted-projects",
       );
+      // Restore the browser-local prototype state after hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved) setSubmittedProjects(JSON.parse(saved));
       const deleted = window.localStorage.getItem(
         "agent-portal-deleted-projects",
@@ -1503,13 +1502,11 @@ export default function Home() {
               if (gate === "G2") return go("definition");
               go("delivery");
             }}
-            openWorkflow={openWorkflow}
             notify={notify}
           />
         )}
         {view === "teamboard" && role.includes("AI활성화팀") && (
           <LegacyTeamWorkspaceDashboard
-            role={role}
             setView={go}
             openWorkflow={openWorkflow}
           />
@@ -1735,7 +1732,6 @@ function Dashboard({
   setDetail,
   userProjectItems,
   openGovernance,
-  openWorkflow,
   notify,
 }: {
   role: string;
@@ -1746,7 +1742,6 @@ function Dashboard({
   setDetail: (p: (typeof projects)[0]) => void;
   userProjectItems: UserProject[];
   openGovernance: (gate: string) => void;
-  openWorkflow: (view: View, projectNo: string) => void;
   notify: (message: string) => void;
 }) {
   const baseProjectItems =
@@ -1780,7 +1775,6 @@ function Dashboard({
         projectNo={projectNo}
         onDeleteProject={onDeleteProject}
         setView={setView}
-        openWorkflow={openWorkflow}
         openNewRequest={() => setRequestOpen(true)}
         projectItems={homeProjectItems}
         notify={notify}
@@ -2006,548 +2000,10 @@ function Dashboard({
   );
 }
 
-function TeamWorkspaceDashboard({
-  role,
-  setView,
-}: {
-  role: string;
-  setView: (v: View) => void;
-}) {
-  const assignedProjects: TeamRequirement[] = [
-    {
-      id: "2026-021",
-      title: "생산 품질 이슈 분석 Agent",
-      requestTeam: "품질관리팀",
-      requester: "박서연",
-      assignee: "허정환",
-      status: "진행 중",
-      stage: "평가 진행",
-      progress: 72,
-      startDay: 1,
-      dueDay: 29,
-      priority: "높음",
-      risk: "정상",
-      nextAction: "실패 사례 12건 회귀 평가",
-      received: "7.24",
-    },
-    {
-      id: "2026-024",
-      title: "구매계약 검토 Agent",
-      requestTeam: "구매팀",
-      requester: "박지수",
-      assignee: "이재승",
-      status: "진행 중",
-      stage: "G2 서명 대기",
-      progress: 54,
-      startDay: 1,
-      dueDay: 30,
-      priority: "높음",
-      risk: "확인 필요",
-      nextAction: "개발 담당자 서명 재알림",
-      received: "7.28",
-    },
-    {
-      id: "2026-026",
-      title: "SAP 사용자 가이드 Agent",
-      requestTeam: "IT기획팀",
-      requester: "최준호",
-      assignee: "허시영",
-      status: "진행 중",
-      stage: "설계·개발",
-      progress: 38,
-      startDay: 1,
-      dueDay: 3,
-      priority: "보통",
-      risk: "정상",
-      nextAction: "DES 아키텍처 항목 작성",
-      received: "8.01",
-    },
-    {
-      id: "2026-018",
-      title: "해외 출장기안 지원 Agent",
-      requestTeam: "경영지원팀",
-      requester: "오세훈",
-      assignee: "최병두",
-      status: "진행 중",
-      stage: "G3 검토",
-      progress: 91,
-      startDay: 1,
-      dueDay: 28,
-      priority: "높음",
-      risk: "지연 위험",
-      nextAction: "EVR 승인 근거 보완",
-      received: "7.18",
-    },
-    {
-      id: "2026-033",
-      title: "원가 시뮬레이션 Agent",
-      requestTeam: "구매기획팀",
-      requester: "김지은",
-      assignee: "허정환",
-      status: "진행 중",
-      stage: "요구 정의",
-      progress: 31,
-      startDay: 11,
-      dueDay: 27,
-      priority: "높음",
-      risk: "지연 위험",
-      nextAction: "원가 데이터 범위와 Owner 확정",
-      received: "8.11",
-    },
-    {
-      id: "2026-014",
-      title: "샘플 발송 현황 알림 Agent",
-      requestTeam: "영업지원팀",
-      requester: "이민지",
-      assignee: "박혜빈",
-      status: "진행 중",
-      stage: "파일럿",
-      progress: 88,
-      startDay: 5,
-      dueDay: 5,
-      priority: "보통",
-      risk: "정상",
-      nextAction: "파일럿 의견 취합 · G4 준비",
-      received: "7.10",
-    },
-  ];
-  const [selectedId, setSelectedId] = useState("2026-033");
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("전체");
-  const [sort, setSort] = useState("마감일 임박순");
-  const [delayFirst, setDelayFirst] = useState(true);
-  const [checks, setChecks] = useState([false, false, false]);
-  const [message, setMessage] = useState("");
-
-  const routeFor = (item: TeamRequirement): View =>
-    item.stage.includes("접수") || item.stage.includes("타당성")
-      ? "intake"
-      : item.stage.includes("요구") || item.stage.includes("G2")
-        ? "definition"
-        : item.stage.includes("파일럿") ||
-            item.stage.includes("설계") ||
-            item.stage.includes("평가") ||
-            item.stage.includes("G3")
-          ? "delivery"
-          : "operations";
-  const dueLabel = (item: TeamRequirement) =>
-    item.id === "2026-026"
-      ? "9.03 (목)"
-      : item.id === "2026-014"
-        ? "9.05 (토)"
-        : `8.${String(item.dueDay).padStart(2, "0")} (${item.id === "2026-021" ? "금" : item.id === "2026-024" ? "토" : item.id === "2026-018" ? "목" : "수"})`;
-  const delayDays = (item: TeamRequirement) =>
-    item.id === "2026-033" ? 2 : item.id === "2026-018" ? 1 : 0;
-  const stageIndex = (item: TeamRequirement) =>
-    item.stage.includes("접수")
-      ? 0
-      : item.stage.includes("타당성")
-        ? 1
-        : item.stage.includes("G2")
-          ? 4
-          : item.stage.includes("요구")
-            ? 3
-            : item.stage.includes("설계") || item.stage.includes("평가")
-              ? 5
-              : item.stage.includes("G3")
-                ? 6
-                : 7;
-  const journey = [
-    { label: "요구 접수", marker: "1" },
-    { label: "타당성 평가", marker: "2" },
-    { label: "G1", marker: "G1" },
-    { label: "요구 정의", marker: "4" },
-    { label: "G2", marker: "G2" },
-    { label: "설계·개발", marker: "6" },
-    { label: "G3", marker: "G3" },
-  ];
-  const filtered = useMemo(() => {
-    const list = assignedProjects.filter((item) => {
-      const matchQuery =
-        `${item.id} ${item.title} ${item.assignee} ${item.requestTeam}`
-          .toLowerCase()
-          .includes(query.toLowerCase());
-      const matchStatus =
-        status === "전체" ||
-        (status === "지연"
-          ? item.risk === "지연 위험"
-          : status === "진행 중"
-            ? item.status === "진행 중"
-            : item.status === "완료");
-      return matchQuery && matchStatus;
-    });
-    return [...list].sort((a, b) => {
-      if (delayFirst && delayDays(a) !== delayDays(b))
-        return delayDays(b) - delayDays(a);
-      return sort === "진행률 높은순"
-        ? b.progress - a.progress
-        : a.dueDay - b.dueDay;
-    });
-    // assignedProjects is fixed mock data for this dashboard.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, status, sort, delayFirst]);
-  const selected =
-    assignedProjects.find((item) => item.id === selectedId) ||
-    assignedProjects[0];
-  const selectedDelay = delayDays(selected);
-  const currentIndex = stageIndex(selected);
-  const notify = (text: string) => {
-    setMessage(text);
-    window.setTimeout(() => setMessage(""), 2200);
-  };
-
-  return (
-    <div className="page team-workspace-page assigned-agent-page">
-      <section className="assigned-agent-hero">
-        <div>
-          <p className="eyebrow">
-            <ShieldCheck size={13} weight="fill" /> AI ACTIVATION TEAM · PRIVATE
-            WORKSPACE
-          </p>
-          <h1>내 담당 Agent 과제</h1>
-          <p>
-            일정, 게이트, 문서, 다음 행동을 한눈에 확인하고 즉시 조치하세요.
-          </p>
-        </div>
-      </section>
-
-      <section className="assigned-toolbar" aria-label="담당 과제 요약과 필터">
-        <div className="assigned-metrics">
-          <button
-            className={status === "전체" ? "active" : ""}
-            onClick={() => setStatus("전체")}
-          >
-            <List size={21} />
-            <span>
-              <b>{assignedProjects.length}</b>
-              <small>전체 과제</small>
-            </span>
-          </button>
-          <button
-            className={status === "진행 중" ? "active" : ""}
-            onClick={() => setStatus("진행 중")}
-          >
-            <Play size={21} />
-            <span>
-              <b>4</b>
-              <small>진행 중</small>
-            </span>
-          </button>
-          <button
-            className={status === "지연" ? "active danger" : "danger"}
-            onClick={() => setStatus("지연")}
-          >
-            <WarningCircle size={22} weight="fill" />
-            <span>
-              <b>2</b>
-              <small>지연 위험</small>
-            </span>
-          </button>
-          <button onClick={() => setSort("마감일 임박순")}>
-            <CalendarBlank size={21} />
-            <span>
-              <b>3</b>
-              <small>오늘 확인</small>
-            </span>
-          </button>
-        </div>
-        <div className="assigned-filters">
-          <label className="assigned-search">
-            <MagnifyingGlass size={18} />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="과제명, ID, 담당자 검색"
-            />
-          </label>
-          <select
-            aria-label="상태 필터"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
-            <option>전체</option>
-            <option>진행 중</option>
-            <option>지연</option>
-            <option>완료</option>
-          </select>
-          <select
-            aria-label="정렬"
-            value={sort}
-            onChange={(event) => setSort(event.target.value)}
-          >
-            <option>마감일 임박순</option>
-            <option>진행률 높은순</option>
-          </select>
-          <label className="delay-first">
-            지연 위험 먼저{" "}
-            <input
-              type="checkbox"
-              checked={delayFirst}
-              onChange={(event) => setDelayFirst(event.target.checked)}
-            />
-            <span />
-          </label>
-        </div>
-      </section>
-
-      <section className="assigned-master-detail">
-        <article className="panel assigned-project-list">
-          <header>
-            <h2>내 담당 과제 {filtered.length}건</h2>
-          </header>
-          <div className="assigned-list-head">
-            <span>ID / 과제명</span>
-            <span>단계 / 게이트</span>
-            <span>담당 조직</span>
-            <span>마감일</span>
-            <span>진행률</span>
-            <span>위험</span>
-          </div>
-          <div className="assigned-list-body">
-            {filtered.map((item) => (
-              <button
-                key={item.id}
-                className={`${selected.id === item.id ? "selected" : ""} ${item.risk === "지연 위험" ? "delayed" : ""}`}
-                onClick={() => setSelectedId(item.id)}
-              >
-                <span>
-                  <small>{item.id}</small>
-                  <b>{item.title}</b>
-                </span>
-                <span>
-                  <Pill
-                    tone={
-                      item.risk === "지연 위험"
-                        ? "red"
-                        : item.stage.includes("파일럿")
-                          ? "green"
-                          : "blue"
-                    }
-                  >
-                    {item.stage}
-                  </Pill>
-                </span>
-                <span>{item.requestTeam}</span>
-                <span className={delayDays(item) ? "urgent" : ""}>
-                  {dueLabel(item)}
-                </span>
-                <span>
-                  <b>{item.progress}%</b>
-                  <Progress value={item.progress} />
-                </span>
-                <span>
-                  <Pill
-                    tone={
-                      delayDays(item)
-                        ? "red"
-                        : item.risk === "확인 필요"
-                          ? "orange"
-                          : "green"
-                    }
-                  >
-                    {delayDays(item) ? `${delayDays(item)}일 지연` : item.risk}
-                  </Pill>
-                </span>
-              </button>
-            ))}
-          </div>
-          {!filtered.length && (
-            <p className="assigned-empty">조건에 맞는 담당 과제가 없습니다.</p>
-          )}
-          <footer>
-            1 – {filtered.length} / {filtered.length}
-          </footer>
-        </article>
-
-        <article className="panel selected-project-status oneview-status assigned-project-detail">
-          <header>
-            <div>
-              <div className="assigned-title-row">
-                <h2>{selected.title}</h2>
-                {selectedDelay > 0 && (
-                  <Pill tone="red">{selectedDelay}일 지연</Pill>
-                )}
-              </div>
-              <p>
-                ID {selected.id} <span>·</span> 현재 단계:{" "}
-                <b>{selected.stage}</b>
-              </p>
-            </div>
-            <button
-              className="primary"
-              onClick={() => openWorkflow("home", selected.id)}
-            >
-              홈에서 Agent 과제 보기 <ArrowRight size={14} />
-            </button>
-          </header>
-          {selectedDelay > 0 && (
-            <div className="assigned-delay-alert">
-              <WarningCircle size={28} weight="fill" />
-              <p>
-                <b>마감 {selectedDelay}일 초과 · 오늘 조치 필요</b>
-                <span>차단 사유: 원가 기준 데이터 Owner 확인 지연</span>
-              </p>
-              <button onClick={() => notify("Owner 확인 요청을 기록했습니다.")}>
-                Owner 확인 요청
-              </button>
-            </div>
-          )}
-          <div className="user-lifecycle-track journey-v2 oneview-journey assigned-journey">
-            {journey.map((step, index) => (
-              <button
-                key={step.label}
-                className={`${index < currentIndex ? "done" : index === currentIndex ? "current" : ""} ${step.marker.startsWith("G") ? "gate" : ""}`}
-                onClick={() =>
-                  notify(`${step.label} 산출물 현황을 선택했습니다.`)
-                }
-              >
-                <span>
-                  {index < currentIndex ? (
-                    <Check size={14} weight="bold" />
-                  ) : (
-                    step.marker
-                  )}
-                </span>
-                <b>{step.label}</b>
-                <small>
-                  {index < currentIndex
-                    ? "완료"
-                    : index === currentIndex
-                      ? "진행 중"
-                      : "대기"}
-                </small>
-              </button>
-            ))}
-          </div>
-          <div className="assigned-detail-grid">
-            <section>
-              <h3>
-                <CalendarBlank size={17} /> 1. 일정
-              </h3>
-              <dl>
-                <div>
-                  <dt>희망 완료일</dt>
-                  <dd>8.25 (화)</dd>
-                </div>
-                <div>
-                  <dt>확정 마감</dt>
-                  <dd>8.27 (목)</dd>
-                </div>
-                <div>
-                  <dt>현재 상태</dt>
-                  <dd className={selectedDelay ? "red" : "green"}>
-                    {selectedDelay ? `${selectedDelay}일 지연` : "일정 정상"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>변경 승인 필요</dt>
-                  <dd>최병두 팀장</dd>
-                </div>
-              </dl>
-            </section>
-            <section>
-              <h3>
-                <ClipboardText size={17} /> 2. 오늘의 다음 행동
-              </h3>
-              <strong>{selected.nextAction}</strong>
-              <dl>
-                <div>
-                  <dt>Owner</dt>
-                  <dd>{selected.requestTeam}장</dd>
-                </div>
-                <div>
-                  <dt>기한</dt>
-                  <dd>오늘 15:00</dd>
-                </div>
-              </dl>
-              <button
-                className="secondary"
-                onClick={() => notify("과제 상세 작업을 열었습니다.")}
-              >
-                작업 상세 보기
-              </button>
-            </section>
-            <section>
-              <h3>
-                <FileText size={17} /> 3. 산출물 진행
-              </h3>
-              <div className="assigned-doc-progress">
-                <span>
-                  ARD <b>7 / 10</b>
-                </span>
-                <Progress value={70} />
-                <strong>70%</strong>
-              </div>
-              <p className="required-note">필수 미완료</p>
-              <small>성공 기준 · 데이터 Owner · Out of Scope</small>
-            </section>
-            <section>
-              <h3>
-                <Clock size={17} /> 4. 최근 업데이트
-              </h3>
-              <p>8.28 09:20</p>
-              <strong>Owner 재요청</strong>
-              <p>8.27 16:10</p>
-              <strong>일정 초과 알림</strong>
-              <button
-                className="text-link"
-                onClick={() => notify("전체 이력 8건을 불러왔습니다.")}
-              >
-                전체 이력 보기 →
-              </button>
-            </section>
-          </div>
-          <footer className="assigned-action-footer">
-            <div>
-              <h3>지연 해소 체크</h3>
-              <div>
-                {[
-                  "Owner 확인 완료 및 범위 확정",
-                  "일정 재조정 승인 완료",
-                  "핵심 산출물 보완 및 승인 진행",
-                ].map((label, index) => (
-                  <label key={label}>
-                    <input
-                      type="checkbox"
-                      checked={checks[index]}
-                      onChange={(event) =>
-                        setChecks((current) =>
-                          current.map((value, i) =>
-                            i === index ? event.target.checked : value,
-                          ),
-                        )
-                      }
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <button
-              className="primary"
-              onClick={() => notify("조치 기록을 저장했습니다.")}
-            >
-              조치 기록 저장
-            </button>
-          </footer>
-        </article>
-      </section>
-      {message && (
-        <div className="assigned-inline-toast" role="status">
-          <Check size={14} weight="bold" />
-          {message}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function LegacyTeamWorkspaceDashboard({
-  role,
   setView,
   openWorkflow,
 }: {
-  role: string;
   setView: (v: View) => void;
   openWorkflow: (view: View, projectNo: string) => void;
 }) {
@@ -2593,14 +2049,6 @@ function LegacyTeamWorkspaceDashboard({
     done: teamRequirements.filter((item) => item.status === "완료").length,
     risk: teamRequirements.filter((item) => item.risk === "지연 위험").length,
   };
-  const routeFor = (item: TeamRequirement): View =>
-    item.stage.includes("접수") || item.stage.includes("타당성")
-      ? "intake"
-      : item.stage.includes("요구") || item.stage.includes("G2")
-        ? "definition"
-        : item.stage.includes("운영")
-          ? "operations"
-          : "delivery";
   const choose = (item: TeamRequirement) => setSelectedId(item.id);
   const openProject = (item: TeamRequirement) => {
     choose(item);
@@ -3306,354 +2754,6 @@ function TeamProjectModal({
             홈에서 Agent 과제 보기
           </button>
         </footer>
-      </section>
-    </div>
-  );
-}
-
-function TeamDashboard({
-  setView,
-  setDetail,
-}: {
-  setView: (v: View) => void;
-  setDetail: (p: (typeof projects)[0]) => void;
-}) {
-  const workQueue = [
-    {
-      project: projects[3],
-      type: "신규 접수",
-      action: "담당자 배정·인터뷰 예약",
-      due: "오늘 14:00",
-      tone: "orange",
-    },
-    {
-      project: projects[2],
-      type: "문서 보완",
-      action: "ARD 실패 시나리오 검토",
-      due: "오늘 17:00",
-      tone: "violet",
-    },
-    {
-      project: projects[1],
-      type: "평가 진행",
-      action: "평가셋 12건 검토",
-      due: "내일",
-      tone: "blue",
-    },
-  ];
-
-  return (
-    <div className="page team-home">
-      <section className="welcome">
-        <div>
-          <p className="eyebrow">AI ACTIVATION TEAM · MY WORK QUEUE</p>
-          <h1>
-            허정환님, 오늘 우선 처리할
-            <br />
-            <span>Agent 업무 6건이 있습니다.</span>
-          </h1>
-        </div>
-        <button className="primary" onClick={() => setView("intake")}>
-          접수·평가 업무 열기
-        </button>
-      </section>
-
-      <section className="metrics team-metrics">
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon orange">
-              <WarningCircle size={17} weight="fill" />
-            </span>
-            <Pill tone="orange">SLA 임박 2</Pill>
-          </div>
-          <strong>4</strong>
-          <p>신규 접수</p>
-          <small>미배정 1 · 인터뷰 대기 3</small>
-        </article>
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon blue">
-              <ArrowsClockwise size={17} weight="bold" />
-            </span>
-            <Pill tone="blue">내 담당</Pill>
-          </div>
-          <strong>6</strong>
-          <p>검토·작성 업무</p>
-          <small>FEA 2 · ARD 2 · 평가 2</small>
-        </article>
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon violet">
-              <UserCircle size={17} weight="fill" />
-            </span>
-            <Pill tone="violet">후속 확인</Pill>
-          </div>
-          <strong>3</strong>
-          <p>사용자 응답 대기</p>
-          <small>평균 대기 1.6일</small>
-        </article>
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon green">
-              <CheckCircle size={17} weight="fill" />
-            </span>
-            <Pill tone="green">제출 가능</Pill>
-          </div>
-          <strong>2</strong>
-          <p>게이트 준비 완료</p>
-          <small>G1 1 · G3 1</small>
-        </article>
-      </section>
-
-      <section className="team-dashboard-grid">
-        <article className="panel team-work-queue">
-          <div className="panel-title">
-            <div>
-              <h2>내 업무 큐</h2>
-              <p>마감과 정책 위험을 기준으로 정렬했습니다.</p>
-            </div>
-            <button className="text-link" onClick={() => setView("delivery")}>
-              전체 업무 보기 →
-            </button>
-          </div>
-          <div className="team-queue-head">
-            <span>업무·과제</span>
-            <span>현재 단계</span>
-            <span>마감</span>
-            <span>다음 행동</span>
-          </div>
-          {workQueue.map((item) => (
-            <button
-              key={`${item.project.no}-${item.type}`}
-              className="team-queue-row"
-              onClick={() => setDetail(item.project)}
-            >
-              <span>
-                <Pill tone={item.tone}>{item.type}</Pill>
-                <b>{item.project.name}</b>
-                <small>
-                  {item.project.no} · {item.project.dept}
-                </small>
-              </span>
-              <span>
-                <b>{item.project.step}</b>
-                <small>필수 문서 확인</small>
-              </span>
-              <span className={item.due.includes("오늘") ? "urgent" : ""}>
-                {item.due}
-              </span>
-              <span>
-                <b>{item.action}</b>
-                <ArrowRight size={14} weight="bold" />
-              </span>
-            </button>
-          ))}
-        </article>
-
-        <article className="panel team-side-panel">
-          <div className="panel-title">
-            <div>
-              <h2>병목과 알림</h2>
-              <p>내 과제의 진행 차단 요인</p>
-            </div>
-          </div>
-          <button onClick={() => setView("intake")}>
-            <span className="summary-symbol orange">
-              <WarningCircle size={18} weight="fill" />
-            </span>
-            <div>
-              <b>FEA SLA가 임박했습니다</b>
-              <small>2026-026 · 오늘 17:00</small>
-            </div>
-            <ArrowRight size={14} />
-          </button>
-          <button onClick={() => setView("definition")}>
-            <span className="summary-symbol violet">
-              <UserCircle size={18} weight="fill" />
-            </span>
-            <div>
-              <b>현업 답변을 기다리고 있습니다</b>
-              <small>3개 과제 · 평균 1.6일</small>
-            </div>
-            <ArrowRight size={14} />
-          </button>
-          <button onClick={() => setView("governance")}>
-            <span className="summary-symbol green">
-              <CheckCircle size={18} weight="fill" />
-            </span>
-            <div>
-              <b>G3 제출 준비가 완료됐습니다</b>
-              <small>2026-018 · 근거 16/16</small>
-            </div>
-            <ArrowRight size={14} />
-          </button>
-        </article>
-      </section>
-    </div>
-  );
-}
-
-function OperatorDashboard({
-  setView,
-  setDetail,
-}: {
-  setView: (v: View) => void;
-  setDetail: (p: (typeof projects)[0]) => void;
-}) {
-  const operatingProjects = [projects[0], projects[1], projects[3]];
-  return (
-    <div className="page role-home">
-      <section className="welcome">
-        <div>
-          <p className="eyebrow">OPERATIONS · QUALITY & FRESHNESS</p>
-          <h1>
-            운영 중인 Agent의 이상 징후와
-            <br />
-            <span>오늘의 점검 업무를 확인하세요.</span>
-          </h1>
-        </div>
-        <button className="primary" onClick={() => setView("operations")}>
-          운영 점검 열기
-        </button>
-      </section>
-      <section className="metrics team-metrics">
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon orange">
-              <WarningCircle size={17} weight="fill" />
-            </span>
-            <Pill tone="orange">기한 초과</Pill>
-          </div>
-          <strong>1</strong>
-          <p>지식 최신성 점검</p>
-          <small>90일 기준 초과</small>
-        </article>
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon red">
-              <WarningCircle size={17} weight="fill" />
-            </span>
-            <Pill tone="red">조치 필요</Pill>
-          </div>
-          <strong>2</strong>
-          <p>품질·오류 이슈</p>
-          <small>치명 0 · 일반 2</small>
-        </article>
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon blue">
-              <ArrowsClockwise size={17} weight="bold" />
-            </span>
-            <Pill tone="blue">30일 이내</Pill>
-          </div>
-          <strong>3</strong>
-          <p>재평가 예정</p>
-          <small>평가셋 재실행 필요</small>
-        </article>
-        <article>
-          <div className="metric-head">
-            <span className="metric-icon green">
-              <CheckCircle size={17} weight="fill" />
-            </span>
-            <Pill tone="green">정상</Pill>
-          </div>
-          <strong>16</strong>
-          <p>월간 점검 완료</p>
-          <small>사용량·오류·최신성</small>
-        </article>
-      </section>
-      <section className="team-dashboard-grid">
-        <article className="panel team-work-queue">
-          <div className="panel-title">
-            <div>
-              <h2>오늘의 운영 큐</h2>
-              <p>영향도와 기한을 기준으로 정렬했습니다.</p>
-            </div>
-            <button className="text-link" onClick={() => setView("operations")}>
-              운영 대장 보기 →
-            </button>
-          </div>
-          <div className="team-queue-head">
-            <span>Agent</span>
-            <span>점검 유형</span>
-            <span>상태</span>
-            <span>다음 행동</span>
-          </div>
-          {operatingProjects.map((project, index) => (
-            <button
-              key={project.no}
-              className="team-queue-row"
-              onClick={() => setDetail(project)}
-            >
-              <span>
-                <Pill
-                  tone={index === 0 ? "red" : index === 1 ? "orange" : "blue"}
-                >
-                  {index === 0 ? "최신성" : index === 1 ? "품질" : "재평가"}
-                </Pill>
-                <b>{project.name}</b>
-                <small>
-                  {project.no} · {project.dept}
-                </small>
-              </span>
-              <span>
-                <b>
-                  {index === 0
-                    ? "지식 기준일 초과"
-                    : index === 1
-                      ? "실패 사례 회귀"
-                      : "파일럿 사용량 확인"}
-                </b>
-                <small>운영 대장[OPS] 근거</small>
-              </span>
-              <span className={index === 0 ? "urgent" : ""}>
-                {index === 0 ? "기한 초과" : index === 1 ? "오늘" : "D-14"}
-              </span>
-              <span>
-                <b>점검 기록 열기</b>
-                <ArrowRight size={14} weight="bold" />
-              </span>
-            </button>
-          ))}
-        </article>
-        <article className="panel team-side-panel">
-          <div className="panel-title">
-            <div>
-              <h2>운영 원칙</h2>
-              <p>변경과 재심사의 구분</p>
-            </div>
-          </div>
-          <button onClick={() => setView("operations")}>
-            <span className="summary-symbol orange">
-              <WarningCircle size={18} weight="fill" />
-            </span>
-            <div>
-              <b>일반 변경은 재평가 후 반영</b>
-              <small>개선 이력서[CHG] 필수</small>
-            </div>
-            <ArrowRight size={14} />
-          </button>
-          <button onClick={() => setView("operations")}>
-            <span className="summary-symbol violet">
-              <Target size={18} weight="fill" />
-            </span>
-            <div>
-              <b>자율성 상향은 재심사</b>
-              <small>ARD 개정 · 재평가 · G3 재승인</small>
-            </div>
-            <ArrowRight size={14} />
-          </button>
-          <button onClick={() => setView("hub")}>
-            <span className="summary-symbol green">
-              <CheckCircle size={18} weight="fill" />
-            </span>
-            <div>
-              <b>실행 작업 연동</b>
-              <small>AX Projects Hub에서 일정 확인</small>
-            </div>
-            <ArrowRight size={14} />
-          </button>
-        </article>
       </section>
     </div>
   );
@@ -7045,7 +6145,6 @@ function UserDashboard({
   projectNo,
   onDeleteProject,
   setView,
-  openWorkflow,
   openNewRequest,
   projectItems,
   notify,
@@ -7054,7 +6153,6 @@ function UserDashboard({
   projectNo?: string;
   onDeleteProject: (projectNo: string) => void;
   setView: (v: View) => void;
-  openWorkflow: (view: View, projectNo: string) => void;
   openNewRequest: () => void;
   projectItems: UserProject[];
   notify: (message: string) => void;
@@ -7113,8 +6211,13 @@ function UserDashboard({
               projectItems.findIndex((project) => project.no === "2026-033"),
             )
           : 0;
+    // Synchronize an externally selected project with the local master-detail view.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(nextIndex);
     setSelectedJourney(projectItems[nextIndex].journeyStep);
+    // projectItems is rebuilt by the role filter; its length and projectNo are
+    // the stable synchronization inputs for this master-detail selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAiTeam, role, projectNo, projectItems.length]);
   const current = projectItems[selected] || projectItems[0];
   const canDeleteCurrent =
@@ -8258,10 +7361,14 @@ function IntakeFeasibility({
   ] as const;
 
   useEffect(() => {
+    // Keep the editable draft aligned with deterministic engine output.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTrackDraft(engineTrack.track);
   }, [engineTrack.track]);
 
   useEffect(() => {
+    // A newly selected request must not inherit another request's ROI draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setToBeMinutes("");
   }, [selectedRequest]);
   const sendChat = () => {
@@ -10317,6 +9424,8 @@ function DeliveryWorkplace({
   const reviewerDraft =
     reviewerDrafts[current.no] || assignedReviewer || reviewerCandidates[0];
   useEffect(() => {
+    // Reset the checklist when the selected delivery project changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDepChecks(
       current.no === "2026-014" || current.no === "2026-018"
         ? Array(9).fill(true)
@@ -10351,17 +9460,6 @@ function DeliveryWorkplace({
     );
   const canEditCurrentProject =
     isDeveloper && !current.stage.includes("G2");
-  const perspective = isLeader
-    ? "leader"
-    : isReviewer
-        ? "reviewer"
-        : isDeveloper
-          ? "builder"
-        : isOwner
-          ? "owner"
-          : isSecurity
-            ? "security"
-            : "viewer";
   const deliveryDocSections = {
     DES: [
       {
@@ -14148,113 +13246,6 @@ function Governance({
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function MasterTable({
-  onDetail,
-}: {
-  onDetail: (p: (typeof projects)[0]) => void;
-}) {
-  return (
-    <div className="admin-content">
-      <div className="master-note">
-        <span>◎</span>
-        <p>
-          <strong>Agent Master가 기준정보의 Source of Truth입니다.</strong>
-          <br />
-          Projects Hub의 상태와 진행률은 실행 현황을 보여주는 캐시이며 게이트를
-          자동 승인하지 않습니다.
-        </p>
-      </div>
-      <div className="approval-table master">
-        <div className="approval-head">
-          <span>Agent</span>
-          <span>트랙 / 자율성</span>
-          <span>생애주기</span>
-          <span>Owner</span>
-          <span>다음 재평가</span>
-          <span />
-        </div>
-        {projects.map((p, i) => (
-          <button key={p.no} onClick={() => onDetail(p)}>
-            <span>
-              <b>{p.name}</b>
-              <small>
-                AGT-{p.no} · {p.dept}
-              </small>
-            </span>
-            <span>
-              <Pill tone={p.tone}>{p.track}</Pill> <Pill>{p.autonomy}</Pill>
-            </span>
-            <span>{i === 0 ? "운영" : p.step}</span>
-            <span>{p.owner}</span>
-            <span>{i === 0 ? "2026.09.01" : "개발 중"}</span>
-            <span>›</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Operations() {
-  return (
-    <div className="admin-content operations">
-      <div className="ops-grid">
-        <article>
-          <Pill tone="red">기한 초과 1</Pill>
-          <h3>지식 최신성 점검</h3>
-          <p>QMS 품질 가이드의 기준일이 90일을 초과했습니다.</p>
-          <button>운영 대장[OPS] 점검 기록</button>
-        </article>
-        <article>
-          <Pill tone="orange">30일 이내 3</Pill>
-          <h3>분기 재평가 예정</h3>
-          <p>평가셋 재실행과 실패 사례 회귀 검증이 필요합니다.</p>
-          <button>평가 일정 보기</button>
-        </article>
-        <article>
-          <Pill tone="green">정상 16</Pill>
-          <h3>월간 점검 완료</h3>
-          <p>사용량·오류·지식 최신성 점검이 정상 완료되었습니다.</p>
-          <button>운영 대장[OPS] 보기</button>
-        </article>
-      </div>
-    </div>
-  );
-}
-
-function Changes({ notify }: { notify: (s: string) => void }) {
-  return (
-    <div className="admin-content">
-      <div className="change-split">
-        <article>
-          <span className="change-icon">변경</span>
-          <h3>일반 변경 · 개선 이력서[CHG]</h3>
-          <p>
-            프롬프트, 지식, 도구, 플랫폼 변경은 영향도 검토 후 회귀 평가를
-            수행합니다.
-          </p>
-          <button
-            onClick={() => notify("개선 이력서[CHG] 작성을 시작했습니다.")}
-          >
-            변경 요청 시작
-          </button>
-        </article>
-        <article className="reassess">
-          <span className="change-icon">L↑</span>
-          <h3>자율성 상향은 재심사</h3>
-          <p>
-            에이전트 요구사항 정의서[ARD] 개정 → 3자 재확인 → 전체 재평가 → G3
-            재승인 절차를 다시 거칩니다.
-          </p>
-          <button onClick={() => notify("자율성 재심사 절차를 열었습니다.")}>
-            재심사 시작
-          </button>
-        </article>
-      </div>
     </div>
   );
 }

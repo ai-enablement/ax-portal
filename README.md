@@ -1,108 +1,58 @@
-# vinext-starter
+# Agent Governance Portal
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+AI 에이전트 과제의 요구 접수부터 타당성 평가, 승인, 설계·개발·평가,
+배포, 파일럿, 운영·개선까지 한 화면에서 관리하는 역할 기반 포털입니다.
 
-## Prerequisites
+## 주요 기능
 
-- Node.js `>=22.13.0`
-- Linux with `flock`, `curl`, and GNU `timeout`
+- 일반 User: 과제 요청, 산출물 확인, 승인 참여, 운영 문서 조회
+- AI 활성화팀 팀원: 배정 과제 수행, FEA·ARD·DES·EVP·EVR·DEP·UG 작성
+- AI 활성화팀 팀장: G1~G4 게이트 판단, 담당자·리뷰어 배정, 일정 변경 승인
+- Admin: 전체 과제 조회·수정·삭제
+- 단계별 산출물 상세보기와 승인·반려 이력 시각화
+- 요구 접수 단계의 사용자 삭제 및 Admin 전체 관리 기능
 
-## Sites Lifecycle
+## 현재 데이터 방식
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
+현재 버전은 UI/UX 검증용 프로토타입이며 입력·변경 데이터는 브라우저의
+`localStorage`에 저장됩니다. 온프레미스 PostgreSQL용 초기 스키마는
+[`database/postgresql/agent_governance_portal_schema.sql`](database/postgresql/agent_governance_portal_schema.sql)에
+있으며, 서버 API와의 실제 연동은 별도 작업이 필요합니다.
 
-This starter does not use `wrangler.jsonc`.
+## 실행 방법
 
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout and then validates the Sites artifact. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
+필수 환경은 Node.js 22.13 이상입니다.
 
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
-
-## Included Shape
-
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm ci
+npm run dev
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+기본 개발 주소는 Vite가 출력하는 로컬 URL을 사용합니다.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+## 검증
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+```bash
+npm test
+npm run lint
+```
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+`npm test`는 배포용 빌드와 전체 사용자 흐름 테스트를 함께 실행합니다.
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+## 주요 디렉터리
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+```text
+app/                  화면과 역할별 업무 흐름
+database/postgresql/  온프레미스 PostgreSQL 초기 스키마
+public/               정적 자산
+scripts/              Sites 빌드·검증 도구
+tests/                역할·문서·사용자 흐름 회귀 테스트
+worker/               Cloudflare Worker 진입점
+.openai/hosting.json  Sites 프로젝트 연결 설정
+```
 
-## Diagnostic Commands
+## 배포
 
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build and validate the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build, validate, and verify the rendered development-preview metadata
-- `npm run validate:artifact`: recheck an existing artifact's manifest and ESM `default.fetch` export
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-Use build and validation commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
-
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+운영 사이트는 OpenAI Sites에서 관리합니다. `.openai/hosting.json`의
+`project_id`를 임의로 변경하지 마세요. 운영 배포 전에는 전체 테스트를
+통과하고, 승인된 커밋만 별도 버전으로 저장해 배포해야 합니다.
