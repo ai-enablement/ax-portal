@@ -17,9 +17,10 @@ test("persists submitted intake and advances to FEA waiting", () => {
   assert.ok(page.includes("onSubmit([...answers], requestTitle)"));
 });
 
-test("keeps FEA read-only for leaders and locks G1 until complete", () => {
+test("lets AI team roles write FEA and locks G1 until complete", () => {
   assert.ok(page.includes('className="fea-grid"'));
   assert.ok(page.includes("disabled={!canEditFea}"));
+  assert.ok(page.includes("isLeader || hasProjectRelationship"));
   assert.ok(page.includes('["2026-031", "2026-033"]'));
   assert.ok(page.includes("FEA가 아직 작성 중입니다"));
   assert.ok(page.includes('g1DraftDecision === "PENDING"'));

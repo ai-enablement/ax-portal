@@ -1638,6 +1638,18 @@ function Dashboard({
         </article>
       </section>
 
+      <section className="leader-home-fea-slot" aria-label="팀장 타당성 평가 작성">
+        <div className="leader-home-fea-title">
+          <div>
+            <p className="eyebrow">FEASIBILITY WORKSPACE</p>
+            <h2>타당성 평가 작성</h2>
+            <span>신규 접수서와 인터뷰 결과를 확인하고 홈에서 바로 FEA를 작성합니다.</span>
+          </div>
+          <Pill tone="orange">작성 필요 1건</Pill>
+        </div>
+        <HomeFeasibilityEditor project={memberAdditionalProjects[0]} role={role} />
+      </section>
+
       <section className="dashboard-grid">
         <article className="panel wide">
           <div className="panel-title">
@@ -3519,16 +3531,239 @@ const travelFeasibility = {
   ],
 };
 
+function HomeFeasibilityEditor({
+  project,
+  role,
+}: {
+  project: UserProject;
+  role: string;
+}) {
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  const author = isLeader ? "최병두 팀장" : "허정환 담당자";
+  const [summary, setSummary] = useState(
+    `${project.description} 현업 인터뷰를 통해 현재 업무량과 기대 결과를 확인하고 있습니다.`,
+  );
+  const [alternatives, setAlternatives] = useState([
+    "규정 정비만으로 분산 자료의 수집·대조 업무를 해소하기 어렵습니다.",
+    "기존 시스템은 원문 판독과 조건별 비교·근거 추적을 지원하지 않습니다.",
+    "비정형 문서와 변경 규칙이 많아 매크로를 안정적으로 유지하기 어렵습니다.",
+    "단순 챗은 승인 데이터 접근·버전 통제·감사 추적을 보장할 수 없습니다.",
+  ]);
+  const [conclusion, setConclusion] = useState(
+    "네 가지 저비용 대안만으로는 근거가 포함된 일관된 결과를 만들기 어려워, 읽기 전용 연동과 사람의 최종 확인을 포함한 Agent 개발이 타당합니다.",
+  );
+  const [fitGrades, setFitGrades] = useState(["상", "중", "중", "상", "상"]);
+  const [countPerMonth, setCountPerMonth] = useState("60");
+  const [asIsMinutes, setAsIsMinutes] = useState("18");
+  const [people, setPeople] = useState("1");
+  const [toBeMinutes, setToBeMinutes] = useState("");
+  const [writeExec, setWriteExec] = useState(false);
+  const [sensitive, setSensitive] = useState(true);
+  const [scope, setScope] = useState("COMPANY");
+  const [damageFinancial, setDamageFinancial] = useState(true);
+  const [autonomy, setAutonomy] = useState("L0");
+  const [saveState, setSaveState] = useState("자동 저장됨");
+  const [completionMessage, setCompletionMessage] = useState("");
+  const track = useMemo(
+    () =>
+      judgeFeasibilityTrack({
+        writeExec,
+        sensitive,
+        scope,
+        damageFinancial,
+        autonomy,
+      }),
+    [autonomy, damageFinancial, scope, sensitive, writeExec],
+  );
+  const roi = useMemo(
+    () =>
+      calculateFeasibilityRoi({
+        countPerMonth: Number(countPerMonth),
+        asIsMinutes: Number(asIsMinutes),
+        people: Number(people),
+        toBeMinutes,
+      }),
+    [asIsMinutes, countPerMonth, people, toBeMinutes],
+  );
+  const updateAlternative = (index: number, value: string) =>
+    setAlternatives((items) =>
+      items.map((item, itemIndex) => (itemIndex === index ? value : item)),
+    );
+  const saveDocument = () => {
+    setSaveState("방금 저장됨");
+    setCompletionMessage("작성 내용과 판정 근거가 저장되었습니다.");
+  };
+  const completeDocument = () => {
+    if (!roi.computed) {
+      setCompletionMessage(
+        "To-Be 시간/건이 미확보 상태입니다. 수치를 확인한 뒤 FEA 작성을 완료해 주세요.",
+      );
+      return;
+    }
+    setSaveState("작성 완료");
+    setCompletionMessage("FEA가 작성 완료되어 G1 착수 승인 대기로 이동했습니다.");
+  };
+  const alternativeLabels = [
+    "프로세스·규정 개선",
+    "기존 시스템 기능·설정",
+    "매크로·Excel",
+    "단순 LLM 챗·검색",
+  ];
+  const fitLabels = [
+    "판단 규칙 문서화",
+    "데이터 접근성",
+    "오류 허용도",
+    "반복성·볼륨",
+    "정치적 이슈",
+  ];
+  const recommendation = roi.computed ? "Go 권고" : "Conditional Go 권고";
+
+  return (
+    <section className="home-fea-editor" aria-label="홈 타당성 평가서 작성">
+      <header className="home-fea-editor-head">
+        <div>
+          <small>{project.no}-FEA · 작성 중</small>
+          <h3>타당성 평가서[FEA]</h3>
+          <p>접수서와 인터뷰 결과를 읽으면서 대안·적합성·효과·위험을 이 화면에서 함께 작성합니다.</p>
+        </div>
+        <div>
+          <span>작성자 {author}</span>
+          <Pill tone={isLeader ? "violet" : "blue"}>{isLeader ? "팀장 작성" : "담당자 작성"}</Pill>
+          <b>72%</b>
+        </div>
+      </header>
+
+      <section className="home-fea-engine" aria-label="타당성 판정 엔진 결과">
+        <header>
+          <span><ShieldCheck size={17} weight="fill" /></span>
+          <div>
+            <b>타당성 판정 엔진</b>
+            <small>결정적 규칙이 계산하고, LLM은 결과를 바꾸지 않습니다.</small>
+          </div>
+          <Pill tone="blue">표준체계 v1.0</Pill>
+          <small>기준 2026.07.30 · SHA 3fa0cb3db344</small>
+        </header>
+        <div className="home-fea-engine-grid">
+          <article>
+            <small>규칙 트랙 판정</small>
+            <strong>{track.label} 트랙</strong>
+            <p>{track.signals.join(" · ")}</p>
+            <span>{track.citation}</span>
+          </article>
+          <article>
+            <small>Agent 유형 판정</small>
+            <strong>혼합형</strong>
+            <p>규칙 대조 + 비정형 문서 해석</p>
+            <span>표준체계 0.4절</span>
+          </article>
+          <article>
+            <small>자율성 정합성</small>
+            <strong>{autonomy} · 정합</strong>
+            <p>정보 제공·초안 작성 후 사람 검토</p>
+            <span>자율성-트랙 기준표</span>
+          </article>
+          <article className="recommendation">
+            <small>엔진 권고 · 참고용</small>
+            <strong>{recommendation}</strong>
+            <p>{roi.computed ? "대안과 정량 효과를 확인했습니다." : "To-Be 처리시간 확인이 필요합니다."}</p>
+            <span>최종 결정은 G1에서 팀장이 확정</span>
+          </article>
+        </div>
+        <footer>
+          {["G-1 상 트랙 전건 검사", "G-2 권고·확정 분리", "G-3 미확보 수치 추정 금지", "G-4 근거 조항 표시", "G-5 Drop 대안", "G-6 민감정보 차단", "G-7 범위 밖 실행 거절"].map((item) => (
+            <span key={item}><Check size={11} weight="bold" /> {item}</span>
+          ))}
+          <b>규칙 회귀 40/40</b>
+        </footer>
+      </section>
+
+      <div className="home-fea-form-grid">
+        <section>
+          <header><span>01</span><div><b>요구 요약</b><small>접수서 핵심 내용을 3줄로 요약</small></div><Pill tone="green">완료</Pill></header>
+          <textarea value={summary} onChange={(event) => setSummary(event.target.value)} />
+        </section>
+        <section>
+          <header><span>02</span><div><b>대안 검토</b><small>낮은 비용 대안부터 순서대로 검토</small></div><Pill tone="blue">4건 필수</Pill></header>
+          <div className="home-fea-alternatives">
+            {alternativeLabels.map((label, index) => (
+              <label key={label}>
+                <input type="checkbox" checked readOnly />
+                <span><b>{label}</b><input value={alternatives[index]} onChange={(event) => updateAlternative(index, event.target.value)} /></span>
+              </label>
+            ))}
+          </div>
+          <label className="home-fea-conclusion"><span>에이전트 개발이 타당한 이유</span><textarea value={conclusion} onChange={(event) => setConclusion(event.target.value)} /></label>
+        </section>
+        <section>
+          <header><span>03</span><div><b>에이전트 적합성 진단</b><small>5개 기준을 상·중·하로 판단</small></div><Pill tone="green">적합</Pill></header>
+          <div className="home-fea-fit">
+            {fitLabels.map((label, index) => (
+              <label key={label}><span>{label}</span><select value={fitGrades[index]} onChange={(event) => setFitGrades((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}><option>상</option><option>중</option><option>하</option></select><input defaultValue={`${label} 판단 근거를 인터뷰 내용으로 기록`} /></label>
+            ))}
+          </div>
+        </section>
+        <section>
+          <header><span>04</span><div><b>기대효과·ROI</b><small>확보된 수치로만 규칙 계산</small></div><Pill tone={roi.computed ? "green" : "orange"}>{roi.computed ? "산출" : "보완 필요"}</Pill></header>
+          <div className="home-fea-roi-inputs">
+            <label>건수/월<input type="number" value={countPerMonth} onChange={(event) => setCountPerMonth(event.target.value)} /></label>
+            <label>As-Is 분/건<input type="number" value={asIsMinutes} onChange={(event) => setAsIsMinutes(event.target.value)} /></label>
+            <label>인원<input type="number" value={people} onChange={(event) => setPeople(event.target.value)} /></label>
+            <label>To-Be 분/건<input type="number" value={toBeMinutes} onChange={(event) => setToBeMinutes(event.target.value)} placeholder="⬜ 미확보" /></label>
+          </div>
+          <div className={`home-fea-roi-result ${roi.computed ? "computed" : "missing"}`}>
+            <small>규칙 계산 결과</small>
+            <b>{roi.computed ? `월 ${roi.savedHours}시간 · 연 ${roi.savedMdYear} M/D 절감` : "⬜ 미확보"}</b>
+            <p>{roi.computed ? roi.formula : roi.reason}</p>
+          </div>
+          <label className="home-fea-cost">개발 비용 추정<input placeholder="인력 M/D + 플랫폼/API 비용 · 확인된 값만 입력" /></label>
+        </section>
+        <section>
+          <header><span>05</span><div><b>위험 식별·유형·트랙 판정</b><small>5개 응답을 전건 검사해 자동 판정</small></div><Pill tone={track.track === "HIGH" ? "red" : "orange"}>{track.label} 트랙</Pill></header>
+          <div className="home-fea-risk-grid">
+            <label>쓰기·실행 권한<select value={writeExec ? "YES" : "NO"} onChange={(event) => setWriteExec(event.target.value === "YES")}><option value="NO">아니오</option><option value="YES">예</option></select></label>
+            <label>개인정보·기밀<select value={sensitive ? "YES" : "NO"} onChange={(event) => setSensitive(event.target.value === "YES")}><option value="NO">아니오</option><option value="YES">예 · 마스킹 필요</option></select></label>
+            <label>사용 범위<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="PERSONAL">개인</option><option value="TEAM">팀</option><option value="DEPT">부서</option><option value="COMPANY">전사</option></select></label>
+            <label>오답 피해<select value={damageFinancial ? "YES" : "NO"} onChange={(event) => setDamageFinancial(event.target.value === "YES")}><option value="NO">회복 가능한 운영 불편</option><option value="YES">금전·법적 피해 가능</option></select></label>
+            <label>Agent 유형<select value="HYBRID" disabled><option value="HYBRID">혼합형 · 규칙+판단</option></select></label>
+            <label>자율성 초안<select value={autonomy} onChange={(event) => setAutonomy(event.target.value)}><option>L0</option><option>L1</option><option>L2</option><option>L3</option><option>L4</option></select></label>
+          </div>
+        </section>
+        <section>
+          <header><span>06</span><div><b>G1 착수 판정 반영</b><small>FEA 작성과 공식 승인을 분리</small></div><Pill tone="orange">판정 대기</Pill></header>
+          <div className="home-fea-g1-waiting"><ShieldCheck size={23} weight="duotone" /><div><b>공식 Go·Conditional Go·Drop은 아직 확정하지 않습니다.</b><p>이 화면에서는 FEA 근거를 작성합니다. 작성 완료 후 최병두 팀장이 G1에서 추진 여부와 개발 담당자를 확정하면 결과가 자동 반영됩니다.</p></div></div>
+        </section>
+      </div>
+
+      <footer className="home-fea-actions">
+        <span><CheckCircle size={15} weight="fill" /> {saveState}</span>
+        {completionMessage && <p role="status">{completionMessage}</p>}
+        <button className="secondary" onClick={saveDocument}>임시 저장</button>
+        <button className="primary" onClick={completeDocument}>FEA 작성 완료 · G1 요청</button>
+      </footer>
+    </section>
+  );
+}
+
 function FeasibilityResult({
   projectNo,
   state,
+  editable = false,
+  role = ACCOUNT_ROLES.user,
+  projectItem,
 }: {
   projectNo: string;
   state: string;
+  editable?: boolean;
+  role?: string;
+  projectItem?: UserProject;
 }) {
   const [activeSection, setActiveSection] = useState(0);
   const project =
-    userProjects.find((item) => item.no === projectNo) || userProjects[0];
+    projectItem ||
+    [...memberAdditionalProjects, ...userProjects].find(
+      (item) => item.no === projectNo,
+    ) ||
+    userProjects[0];
   const impact = (
     {
       "2026-028": {
@@ -3615,6 +3850,8 @@ function FeasibilityResult({
   ];
   const waitingForFea = state === "진행 중";
   const ready = state === "완료";
+  if (editable && !ready)
+    return <HomeFeasibilityEditor project={project} role={role} />;
   if (!ready)
     return (
       <section className="fea-result upcoming" aria-label="타당성 평가서">
@@ -6893,6 +7130,9 @@ function UserDashboard({
             <FeasibilityResult
               projectNo={current.no}
               state={selectedOutputState}
+              editable={isAiTeamMember}
+              role={role}
+              projectItem={current}
             />
           ) : (selectedJourney === 2 || selectedJourney === 4) &&
             (selectedOutputState !== "생성 전" ||
@@ -7388,7 +7628,8 @@ function IntakeFeasibility({
     },
   ];
   const current = intakeRequests[selectedRequest];
-  const canEditFea = hasProjectRelationship(role, current.no, ["DEVELOPER"]);
+  const canEditFea =
+    isLeader || hasProjectRelationship(role, current.no, ["DEVELOPER"]);
   const isCertificateFea = current.no === "2026-033";
   const requestedCompletion = isCertificateFea ? "2026.09.10" : "2026.10.30";
   const alternativeFindings = isCertificateFea

@@ -26,3 +26,12 @@ test("shows inherited guardrail and verification readiness", () => {
   assert.ok(page.includes("리뷰어 정답 라벨 0/15"));
   assert.ok(css.includes(".feasibility-engine"));
 });
+
+test("embeds a writable FEA workspace in AI team home screens", () => {
+  assert.ok(page.includes("function HomeFeasibilityEditor"));
+  assert.ok(page.includes('editable={isAiTeamMember}'));
+  assert.ok(page.includes("팀장 타당성 평가 작성"));
+  assert.ok(page.includes("FEA 작성 완료 · G1 요청"));
+  assert.ok(page.includes("접수서와 인터뷰 결과를 읽으면서"));
+  assert.ok(css.includes(".home-fea-form-grid"));
+});
