@@ -9936,6 +9936,47 @@ function DeliveryWorkplace({
   const [releaseDocument, setReleaseDocument] = useState<"DEP" | "UG" | null>(
     null,
   );
+  const [depDocumentDrafts, setDepDocumentDrafts] = useState<
+    Record<
+      string,
+      {
+        securityReview: string;
+        emergencyPlan: string;
+        knowledgeOwner: string;
+        pilotAudience: string;
+        pilotPeriod: string;
+        feedbackMethod: string;
+        exitCriteria: string;
+        rolloutPlan: string;
+        pilotUsage: string;
+        pilotErrors: string;
+        pilotSatisfaction: string;
+        pilotFeedback: string;
+        pilotDecision: string;
+      }
+    >
+  >({});
+  const [ugDocumentDrafts, setUgDocumentDrafts] = useState<
+    Record<
+      string,
+      {
+        intro: string;
+        outOfScope: string;
+        usageSteps: string;
+        goodExamples: string;
+        badExamples: string;
+        caution: string;
+        knowledgeDate: string;
+        prohibitedInfo: string;
+        channel: string;
+        owner: string;
+        reportingGuide: string;
+      }
+    >
+  >({});
+  const [savedReleaseDocuments, setSavedReleaseDocuments] = useState<
+    Record<string, boolean>
+  >({});
   const [g3Decision, setG3Decision] = useState<
     "PENDING" | "APPROVED" | "REWORK"
   >(projectNo === "2026-014" ? "APPROVED" : "PENDING");
@@ -10973,6 +11014,60 @@ function DeliveryWorkplace({
     input: "제품·공정·현상·발생 시점과 확인한 데이터를 입력합니다.",
     channel: "Teams #quality-agent-support",
   };
+  const depDraft = depDocumentDrafts[current.no] || {
+    securityReview:
+      current.track === "상"
+        ? "정보보호 승인 문서 SEC-2026-041"
+        : `${current.track} 트랙 · AI 활성화팀 보안 검토`,
+    emergencyPlan: `${current.dept}·AI 활성화팀 비상 연락망 / Agent 즉시 중단 및 이전 버전 롤백`,
+    knowledgeOwner: `${current.dept} 규정 담당자 · 개정 즉시 재색인·표본 검증`,
+    pilotAudience: `${current.dept} 25명`,
+    pilotPeriod: "2주",
+    feedbackMethod: "Teams 설문과 Agent Portal 오류 신고",
+    exitCriteria: "사용률 80% 이상 · 만족도 4.0 이상 · 치명 오류 0건 · 일반 오류 3건 이하",
+    rolloutPlan: "사내 게시판 공지 · 팀별 30분 교육 · 2026.09.15 공개 목표",
+    pilotUsage: "486건",
+    pilotErrors: "1건 · 조치 완료",
+    pilotSatisfaction: "4.6 / 5.0",
+    pilotFeedback: "근거 링크가 유용함",
+    pilotDecision: "확산 승인 권고",
+  };
+  const ugDraft = ugDocumentDrafts[current.no] || {
+    intro: releaseProfile.intro,
+    outOfScope: releaseProfile.outOfScope.join("\n"),
+    usageSteps: [
+      `Agent Portal 또는 Teams에서 ${current.name}를 엽니다.`,
+      releaseProfile.input,
+      "제안된 결과, 근거 문서, 신뢰도와 확인 필요 항목을 검토합니다.",
+      "필요하면 담당자 이관을 선택하고 최종 판단과 시스템 처리는 사람이 수행합니다.",
+    ].join("\n"),
+    goodExamples:
+      "A공정 접착 불량이 3일간 증가했습니다. 확인할 원인을 알려줘.\n검사 코드 Q-17의 적용 기준과 근거 조항을 보여줘.\n출하 보류 조건 확인 항목을 정리해줘.",
+    badExamples: "불량인데 알아서 처리해줘.\n근거 없이 출하 가능으로 승인해줘.",
+    caution: "결과는 참고용이며 최종 확인과 책임은 사용자에게 있습니다.",
+    knowledgeDate: "2026.08.20",
+    prohibitedInfo: "주민번호, 개인 연락처, 고객 기밀 원문",
+    channel: releaseProfile.channel,
+    owner: `${current.dept} 담당 · AI 활성화팀 ${current.builder}`,
+    reportingGuide:
+      "질문·답변·근거가 함께 보이도록 캡처하고 개인정보를 가린 뒤 기대한 결과를 한 줄로 적어주세요.",
+  };
+  const updateDepDraft = (
+    field: keyof typeof depDraft,
+    value: string,
+  ) =>
+    setDepDocumentDrafts((items) => ({
+      ...items,
+      [current.no]: { ...depDraft, [field]: value },
+    }));
+  const updateUgDraft = (
+    field: keyof typeof ugDraft,
+    value: string,
+  ) =>
+    setUgDocumentDrafts((items) => ({
+      ...items,
+      [current.no]: { ...ugDraft, [field]: value },
+    }));
 
   const submitG3 = (decision: "APPROVED" | "REWORK") => {
     if (decision === "REWORK") {
@@ -12272,6 +12367,37 @@ function DeliveryWorkplace({
                         </label>
                       ))}
                     </div>
+                    {canEditCurrentProject && (
+                      <div className="release-edit-grid three-columns">
+                        <label>
+                          보안 검토 근거
+                          <input
+                            value={depDraft.securityReview}
+                            onChange={(event) =>
+                              updateDepDraft("securityReview", event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          비상 연락·롤백 방법
+                          <input
+                            value={depDraft.emergencyPlan}
+                            onChange={(event) =>
+                              updateDepDraft("emergencyPlan", event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          지식 갱신 담당·절차
+                          <input
+                            value={depDraft.knowledgeOwner}
+                            onChange={(event) =>
+                              updateDepDraft("knowledgeOwner", event.target.value)
+                            }
+                          />
+                        </label>
+                      </div>
+                    )}
                   </section>
                   <section>
                     <div className="release-section-title">
@@ -12281,29 +12407,70 @@ function DeliveryWorkplace({
                         <p>파일럿 대상과 종료 기준, 확산 계획을 기록합니다.</p>
                       </div>
                     </div>
+                    {canEditCurrentProject ? (
+                      <div className="release-edit-grid">
+                        <label>
+                          파일럿 대상
+                          <input
+                            value={depDraft.pilotAudience}
+                            onChange={(event) =>
+                              updateDepDraft("pilotAudience", event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          파일럿 기간
+                          <input
+                            value={depDraft.pilotPeriod}
+                            onChange={(event) =>
+                              updateDepDraft("pilotPeriod", event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          피드백 수집 방법
+                          <input
+                            value={depDraft.feedbackMethod}
+                            onChange={(event) =>
+                              updateDepDraft("feedbackMethod", event.target.value)
+                            }
+                          />
+                        </label>
+                        <label className="wide-field">
+                          파일럿 종료 판정 기준
+                          <textarea
+                            value={depDraft.exitCriteria}
+                            onChange={(event) =>
+                              updateDepDraft("exitCriteria", event.target.value)
+                            }
+                          />
+                        </label>
+                        <label className="wide-field">
+                          확산 공지·교육·일정 계획
+                          <textarea
+                            value={depDraft.rolloutPlan}
+                            onChange={(event) =>
+                              updateDepDraft("rolloutPlan", event.target.value)
+                            }
+                          />
+                        </label>
+                      </div>
+                    ) : (
                     <dl className="release-facts">
                       <div>
                         <dt>파일럿</dt>
-                        <dd>
-                          {current.dept} 25명 · 2주 · Teams 설문과 Portal 오류
-                          신고로 피드백 수집
-                        </dd>
+                        <dd>{depDraft.pilotAudience} · {depDraft.pilotPeriod} · {depDraft.feedbackMethod}</dd>
                       </div>
                       <div>
                         <dt>종료 판정 기준</dt>
-                        <dd>
-                          사용률 80% 이상 · 만족도 4.0 이상 · 치명 오류 0건 ·
-                          일반 오류 3건 이하
-                        </dd>
+                        <dd>{depDraft.exitCriteria}</dd>
                       </div>
                       <div>
                         <dt>확산 계획</dt>
-                        <dd>
-                          사내 게시판 공지 · 팀별 30분 교육 · 2026.09.15 전사
-                          공개 목표
-                        </dd>
+                        <dd>{depDraft.rolloutPlan}</dd>
                       </div>
                     </dl>
+                    )}
                   </section>
                   <section>
                     <div className="release-section-title">
@@ -12321,38 +12488,62 @@ function DeliveryWorkplace({
                         <div className="pilot-result-grid">
                           <article>
                             <small>사용 건수</small>
-                            <b>486건</b>
+                            {canEditCurrentProject ? (
+                              <input
+                                value={depDraft.pilotUsage}
+                                onChange={(event) =>
+                                  updateDepDraft("pilotUsage", event.target.value)
+                                }
+                              />
+                            ) : <b>{depDraft.pilotUsage}</b>}
                           </article>
                           <article>
                             <small>오류 신고</small>
-                            <b>1건 · 조치 완료</b>
+                            {canEditCurrentProject ? (
+                              <input
+                                value={depDraft.pilotErrors}
+                                onChange={(event) =>
+                                  updateDepDraft("pilotErrors", event.target.value)
+                                }
+                              />
+                            ) : <b>{depDraft.pilotErrors}</b>}
                           </article>
                           <article>
                             <small>만족도</small>
-                            <b>4.6 / 5.0</b>
+                            {canEditCurrentProject ? (
+                              <input
+                                value={depDraft.pilotSatisfaction}
+                                onChange={(event) =>
+                                  updateDepDraft("pilotSatisfaction", event.target.value)
+                                }
+                              />
+                            ) : <b>{depDraft.pilotSatisfaction}</b>}
                           </article>
                           <article>
                             <small>주요 피드백</small>
-                            <b>근거 링크가 유용함</b>
+                            {canEditCurrentProject ? (
+                              <input
+                                value={depDraft.pilotFeedback}
+                                onChange={(event) =>
+                                  updateDepDraft("pilotFeedback", event.target.value)
+                                }
+                              />
+                            ) : <b>{depDraft.pilotFeedback}</b>}
                           </article>
                         </div>
                         <div className="release-decision-row">
-                          <label>
-                            <input
-                              type="radio"
-                              name="pilot-decision"
-                              defaultChecked
-                            />{" "}
-                            확산 승인 권고
-                          </label>
-                          <label>
-                            <input type="radio" name="pilot-decision" /> 파일럿
-                            연장 권고
-                          </label>
-                          <label>
-                            <input type="radio" name="pilot-decision" /> 회수 후
-                            개선 권고
-                          </label>
+                          {["확산 승인 권고", "파일럿 연장 권고", "회수 후 개선 권고"].map((decision) => (
+                            <label key={decision}>
+                              <input
+                                type="radio"
+                                name={`pilot-decision-${current.no}`}
+                                checked={depDraft.pilotDecision === decision}
+                                disabled={!canEditCurrentProject}
+                                onChange={() => updateDepDraft("pilotDecision", decision)}
+                              />{" "}
+                              {decision}
+                            </label>
+                          ))}
                           <span>
                             G4 확정은 프로젝트 Owner와 AI활성화팀장이 각각
                             승인합니다.
@@ -12379,50 +12570,50 @@ function DeliveryWorkplace({
                     <span>01</span>
                     <div>
                       <h3>이 Agent는 무엇을 해주나요?</h3>
-                      <p>{releaseProfile.intro}</p>
+                      {canEditCurrentProject ? (
+                        <textarea
+                          className="ug-inline-editor"
+                          value={ugDraft.intro}
+                          onChange={(event) => updateUgDraft("intro", event.target.value)}
+                          aria-label="사용자 가이드 In Scope"
+                        />
+                      ) : <p>{ugDraft.intro}</p>}
                     </div>
                   </section>
                   <section>
                     <span>02</span>
                     <div>
                       <h3>이런 건 못 해요 / 하지 않아요</h3>
-                      <ul>
-                        {releaseProfile.outOfScope.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
+                      {canEditCurrentProject ? (
+                        <textarea
+                          className="ug-inline-editor"
+                          value={ugDraft.outOfScope}
+                          onChange={(event) => updateUgDraft("outOfScope", event.target.value)}
+                          aria-label="사용자 가이드 Out of Scope"
+                        />
+                      ) : (
+                        <ul>{ugDraft.outOfScope.split("\n").filter(Boolean).map((item) => <li key={item}>{item}</li>)}</ul>
+                      )}
                     </div>
                   </section>
                   <section>
                     <span>03</span>
                     <div>
                       <h3>이렇게 사용하세요</h3>
-                      <ol className="ug-steps">
-                        <li>
-                          <b>1</b>
-                          <p>
-                            Agent Portal 또는 Teams에서 {current.name}를 엽니다.
-                          </p>
-                        </li>
-                        <li>
-                          <b>2</b>
-                          <p>{releaseProfile.input}</p>
-                        </li>
-                        <li>
-                          <b>3</b>
-                          <p>
-                            제안된 원인, 근거 문서, 신뢰도와 확인 필요 항목을
-                            검토합니다.
-                          </p>
-                        </li>
-                        <li>
-                          <b>4</b>
-                          <p>
-                            필요하면 담당자 이관을 선택하고 실제 판정·시스템
-                            처리는 사람이 수행합니다.
-                          </p>
-                        </li>
-                      </ol>
+                      {canEditCurrentProject ? (
+                        <textarea
+                          className="ug-inline-editor tall"
+                          value={ugDraft.usageSteps}
+                          onChange={(event) => updateUgDraft("usageSteps", event.target.value)}
+                          aria-label="사용자 가이드 사용 단계"
+                        />
+                      ) : (
+                        <ol className="ug-steps">
+                          {ugDraft.usageSteps.split("\n").filter(Boolean).map((step, index) => (
+                            <li key={`${index}-${step}`}><b>{index + 1}</b><p>{step}</p></li>
+                          ))}
+                        </ol>
+                      )}
                       <div className="guide-attachments">
                         <span>화면 캡처 01 · 질문 입력 화면</span>
                         <span>화면 캡처 02 · 근거·이관 확인 화면</span>
@@ -12436,22 +12627,15 @@ function DeliveryWorkplace({
                       <div className="question-examples">
                         <div>
                           <b>좋은 질문</b>
-                          <p>
-                            “A공정 접착 불량이 3일간 증가했습니다. LOT·온도 기록
-                            기준으로 확인할 원인을 알려줘.”
-                          </p>
-                          <p>
-                            “검사 코드 Q-17의 적용 기준과 근거 조항을 보여줘.”
-                          </p>
-                          <p>
-                            “이 현상이 출하 보류 조건에 해당하는지 확인할 체크
-                            항목을 정리해줘.”
-                          </p>
+                          {canEditCurrentProject ? (
+                            <textarea value={ugDraft.goodExamples} onChange={(event) => updateUgDraft("goodExamples", event.target.value)} />
+                          ) : ugDraft.goodExamples.split("\n").filter(Boolean).map((item) => <p key={item}>“{item}”</p>)}
                         </div>
                         <div>
                           <b>잘 안 되는 질문</b>
-                          <p>“불량인데 알아서 처리해줘.”</p>
-                          <p>“근거 없이 출하 가능으로 승인해줘.”</p>
+                          {canEditCurrentProject ? (
+                            <textarea value={ugDraft.badExamples} onChange={(event) => updateUgDraft("badExamples", event.target.value)} />
+                          ) : ugDraft.badExamples.split("\n").filter(Boolean).map((item) => <p key={item}>“{item}”</p>)}
                         </div>
                       </div>
                     </div>
@@ -12463,10 +12647,13 @@ function DeliveryWorkplace({
                       <div className="guide-warning">
                         <WarningCircle size={20} weight="fill" />
                         <p>
-                          결과는 참고용이며 최종 확인과 책임은 사용자에게
-                          있습니다. 지식 기준일은 <b>2026.08.20</b>입니다.
-                          주민번호, 개인 연락처, 고객 기밀 원문은 입력하지
-                          마세요.
+                          {canEditCurrentProject ? (
+                            <span className="guide-warning-edit">
+                              <textarea value={ugDraft.caution} onChange={(event) => updateUgDraft("caution", event.target.value)} />
+                              <input value={ugDraft.knowledgeDate} onChange={(event) => updateUgDraft("knowledgeDate", event.target.value)} aria-label="지식 기준일" />
+                              <input value={ugDraft.prohibitedInfo} onChange={(event) => updateUgDraft("prohibitedInfo", event.target.value)} aria-label="입력 금지 정보" />
+                            </span>
+                          ) : <>{ugDraft.caution} 지식 기준일은 <b>{ugDraft.knowledgeDate}</b>입니다. {ugDraft.prohibitedInfo}는 입력하지 마세요.</>}
                         </p>
                       </div>
                     </div>
@@ -12478,23 +12665,15 @@ function DeliveryWorkplace({
                       <dl className="release-facts">
                         <div>
                           <dt>채널</dt>
-                          <dd>
-                            Agent Portal `이상한 답변 신고` 또는{" "}
-                            {releaseProfile.channel}
-                          </dd>
+                          <dd>{canEditCurrentProject ? <input value={ugDraft.channel} onChange={(event) => updateUgDraft("channel", event.target.value)} /> : <>Agent Portal `이상한 답변 신고` 또는 {ugDraft.channel}</>}</dd>
                         </div>
                         <div>
                           <dt>담당</dt>
-                          <dd>
-                            {current.dept} 담당 · AI활성화팀 {current.builder}
-                          </dd>
+                          <dd>{canEditCurrentProject ? <input value={ugDraft.owner} onChange={(event) => updateUgDraft("owner", event.target.value)} /> : ugDraft.owner}</dd>
                         </div>
                         <div>
                           <dt>첨부 요령</dt>
-                          <dd>
-                            질문·답변·근거가 함께 보이도록 캡처하고 개인정보는
-                            가린 뒤, 기대한 결과를 한 줄로 적어주세요.
-                          </dd>
+                          <dd>{canEditCurrentProject ? <textarea value={ugDraft.reportingGuide} onChange={(event) => updateUgDraft("reportingGuide", event.target.value)} /> : ugDraft.reportingGuide}</dd>
                         </div>
                       </dl>
                     </div>
@@ -12504,11 +12683,11 @@ function DeliveryWorkplace({
             </div>
             <footer>
               <span>
-                {releaseDocument === "DEP"
-                   ? canEditCurrentProject
-                    ? "자동 저장 · 개발 담당자 작성"
-                    : "조회 전용 · 개발 담당자 작성"
-                  : "사용자 배포본 · v1.0 · 2페이지"}
+                {canEditCurrentProject
+                  ? savedReleaseDocuments[`${current.no}:${releaseDocument}`]
+                    ? "저장 완료 · 문서 버전에 반영"
+                    : "개발 담당자 작성 · 변경 내용 임시 보관"
+                  : "조회·검토 전용 · 개발 담당자 작성 문서"}
               </span>
               <button
                 className="secondary"
@@ -12518,19 +12697,33 @@ function DeliveryWorkplace({
               </button>
               <button
                 className="primary"
-                 disabled={releaseDocument === "DEP" && !canEditCurrentProject}
+                disabled={!canEditCurrentProject}
                 onClick={() => {
+                  if (releaseDocument === "DEP") {
+                    setDepDocumentDrafts((items) => ({
+                      ...items,
+                      [current.no]: depDraft,
+                    }));
+                  } else {
+                    setUgDocumentDrafts((items) => ({
+                      ...items,
+                      [current.no]: ugDraft,
+                    }));
+                  }
+                  setSavedReleaseDocuments((items) => ({
+                    ...items,
+                    [`${current.no}:${releaseDocument}`]: true,
+                  }));
                   notify(
-                    `${releaseDocument === "DEP" ? "배포 체크리스트" : "사용자 가이드"}가 확인되었습니다.`,
+                    `${releaseDocument === "DEP" ? "배포 체크리스트[DEP]" : "사용자 가이드[UG]"} 작성 내용을 저장했습니다.`,
                   );
-                  setReleaseDocument(null);
                 }}
               >
-                {releaseDocument === "DEP"
-                   ? canEditCurrentProject
-                    ? "체크 상태 저장"
-                    : "조회 전용"
-                  : "가이드 확인 완료"}
+                {canEditCurrentProject
+                  ? releaseDocument === "DEP"
+                    ? "DEP 작성 내용 저장"
+                    : "UG 작성 내용 저장"
+                  : "조회 전용"}
               </button>
             </footer>
           </section>

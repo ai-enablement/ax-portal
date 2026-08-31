@@ -140,6 +140,19 @@ test("requires the team leader to assign an independent G3 reviewer", () => {
   assert.ok(css.includes(".g3-reviewer-assignment"));
 });
 
+test("lets the project developer author DEP and all six UG sections", () => {
+  assert.ok(page.includes("depDocumentDrafts"));
+  assert.ok(page.includes("ugDocumentDrafts"));
+  assert.ok(page.includes("DEP 작성 내용 저장"));
+  assert.ok(page.includes("UG 작성 내용 저장"));
+  assert.ok(page.includes("사용자 가이드 In Scope"));
+  assert.ok(page.includes("사용자 가이드 Out of Scope"));
+  assert.ok(page.includes("사용자 가이드 사용 단계"));
+  assert.ok(page.includes("feedbackMethod"));
+  assert.ok(page.includes("pilotDecision"));
+  assert.ok(page.includes("disabled={!canEditCurrentProject}"));
+});
+
 test("preserves the full-width readable visual baseline", () => {
   for (const selector of [
     ".team-workspace-page",
