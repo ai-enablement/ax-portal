@@ -13679,6 +13679,109 @@ body {
   font-size: 10px !important;
 }
 
+/* G2 rejection -> ARD rework */
+.ard-rework-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 14px 18px 0;
+  padding: 14px 16px;
+  border: 1px solid #efc2c7;
+  border-radius: 10px;
+  background: #fff7f8;
+}
+.ard-rework-banner h4 {
+  margin: 8px 0 4px;
+  color: #7f2630;
+  font-size: 12px;
+}
+.ard-rework-banner p {
+  margin: 0;
+  color: #764a50;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.ard-rework-targets {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+.ard-rework-targets button {
+  border: 1px solid #e3aab1;
+  border-radius: 7px;
+  background: #fff;
+  padding: 8px 10px;
+  color: #8a303b;
+  font-size: 9px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.ard-rework-targets button:hover {
+  border-color: #cf6f7b;
+  background: #fff1f3;
+}
+.selectable-document .ard-standard-body > section.ard-rework-section:not([hidden]) {
+  box-shadow: inset 3px 0 #d64b58;
+  background: #fffafb;
+}
+.ard-rework-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #efcbd0;
+  border-radius: 8px;
+  background: #fff;
+}
+.ard-rework-editor.scope-editor {
+  grid-template-columns: 1fr 1fr;
+}
+.ard-rework-editor.metrics-editor {
+  grid-template-columns: 1.4fr 0.8fr 0.8fr;
+}
+.ard-rework-editor label {
+  display: grid;
+  gap: 6px;
+  color: #394a60;
+  font-size: 10px;
+  font-weight: 800;
+}
+.ard-rework-editor textarea,
+.ard-rework-editor input {
+  width: 100%;
+  border: 1px solid #cfd8e5;
+  border-radius: 7px;
+  background: #fff;
+  padding: 9px 10px;
+  color: #263548;
+  font: inherit;
+}
+.ard-rework-editor textarea {
+  min-height: 100px;
+  resize: vertical;
+  line-height: 1.55;
+}
+.ard-rework-editor :is(textarea, input):focus {
+  border-color: #3979e5;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(57, 121, 229, 0.12);
+}
+.g2-rework-round {
+  border-color: #b8dfcf !important;
+  background: #f3fbf7 !important;
+  color: #21664c !important;
+}
+@media (max-width: 900px) {
+  .ard-rework-banner {
+    flex-direction: column;
+  }
+  .ard-rework-editor.scope-editor,
+  .ard-rework-editor.metrics-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
 .role-viewer-delivery .gate-actions,
 .role-viewer-delivery .g4-actions {
   display: none !important;

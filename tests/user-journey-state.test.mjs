@@ -43,6 +43,13 @@ test("closes rejected G2 rounds and uses the correct three signers", () => {
   assert.ok(page.includes("이 승인 라운드는 보완 요청으로 종료되었습니다"));
   assert.ok(page.includes("요구자·개발 담당자·AI활성화팀장"));
   assert.ok(page.includes("보완 중인 ARD 보기"));
+  assert.ok(page.includes("ARD 보완하기"));
+  assert.ok(page.includes("보완 완료 · G2 재상신"));
+  assert.ok(page.includes("g2ReworkProjects"));
+  assert.ok(page.includes("G2 재검토 진행 중"));
+  assert.ok(page.includes("ARD v0.9가 보완 완료되어 새 G2 승인 라운드가 열렸습니다"));
+  assert.ok(page.includes("activeSections"));
+  assert.ok(css.includes(".ard-rework-banner"));
 });
 
 test("locks pilot, G4, OPS and CHG behind prior approvals", () => {

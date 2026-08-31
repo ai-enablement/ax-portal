@@ -4396,16 +4396,39 @@ const ardProjectProfiles = {
 function RequirementDefinitionResult({
   projectNo,
   state,
+  reworkMode = false,
+  reworkReason,
+  onReworkSubmit,
 }: {
   projectNo: string;
   state: string;
+  reworkMode?: boolean;
+  reworkReason?: string;
+  onReworkSubmit?: () => void;
 }) {
   const profile =
     ardProjectProfiles[projectNo as keyof typeof ardProjectProfiles] ||
     ardProjectProfiles["2026-031"];
-  const [completed, setCompleted] = useState(state === "완료");
-  const [activeSection, setActiveSection] = useState<number | null>(0);
+  const [completed, setCompleted] = useState(state === "완료" && !reworkMode);
+  const [activeSections, setActiveSections] = useState<number[]>(
+    reworkMode ? [2, 6] : [0],
+  );
   const [input, setInput] = useState("");
+  const [inScopeDraft, setInScopeDraft] = useState(
+    "승인된 출장 규정 검색 및 적용 기준 안내\n국가·직급·출장 유형별 근거 조항 제시\n예외 문의의 규정 담당자 이관",
+  );
+  const [outScopeDraft, setOutScopeDraft] = useState(
+    "출장비 확정 및 결재 실행\n예외 규정의 임의 승인\n근거 없는 한도·비용 산출",
+  );
+  const [labelOwner, setLabelOwner] = useState("경영지원팀 규정 담당자");
+  const [accuracyTarget, setAccuracyTarget] = useState("90");
+  const [evidenceTarget, setEvidenceTarget] = useState("100");
+  const reworkReady =
+    inScopeDraft.trim().length > 0 &&
+    outScopeDraft.trim().length > 0 &&
+    labelOwner.trim().length > 0 &&
+    accuracyTarget.trim().length > 0 &&
+    evidenceTarget.trim().length > 0;
   const sectionItems = [
     ["개요", "에이전트 정의·목적·이해관계자"],
     ["As-Is 프로세스", "현행 흐름·고통 지점·Baseline"],
@@ -4512,14 +4535,16 @@ function RequirementDefinitionResult({
                 type="button"
                 key={title}
                 style={{ order: index * 2 + 1 }}
-                className={activeSection === index ? "active" : ""}
+                className={activeSections.includes(index) ? "active" : ""}
                 onClick={() =>
-                  setActiveSection((current) =>
-                    current === index ? null : index,
+                  setActiveSections((current) =>
+                    current.includes(index)
+                      ? current.filter((item) => item !== index)
+                      : [...current, index],
                   )
                 }
-                aria-expanded={activeSection === index}
-                aria-current={activeSection === index ? "true" : undefined}
+                aria-expanded={activeSections.includes(index)}
+                aria-current={activeSections.includes(index) ? "true" : undefined}
               >
                 <span
                   className={`section-check ${done ? "complete" : "pending"}`}
@@ -4537,8 +4562,28 @@ function RequirementDefinitionResult({
             );
           })}
         </nav>
+        {reworkMode && (
+          <section className="ard-rework-banner" aria-label="G2 반려 보완 안내">
+            <div>
+              <Pill tone="red">G2 반려 · 보완 필요</Pill>
+              <h4>반려 사유를 반영해 ARD를 수정한 뒤 다시 상신하세요.</h4>
+              <p>
+                {reworkReason ||
+                  "Out of Scope와 평가셋 정답 라벨 책임자를 명확히 한 뒤 다시 검토해야 합니다."}
+              </p>
+            </div>
+            <div className="ard-rework-targets">
+              <button type="button" onClick={() => setActiveSections([2, 6])}>
+                03 To-Be · In/Out Scope
+              </button>
+              <button type="button" onClick={() => setActiveSections([2, 6])}>
+                07 성공·평가 기준
+              </button>
+            </div>
+          </section>
+        )}
         <div className="ard-standard-body">
-          <section style={{ order: 2 }} hidden={activeSection !== 0}>
+          <section style={{ order: 2 }} hidden={!activeSections.includes(0)}>
             <div className="ard-section-head">
               <span>01</span>
               <div>
@@ -4566,7 +4611,7 @@ function RequirementDefinitionResult({
             </dl>
           </section>
 
-          <section style={{ order: 4 }} hidden={activeSection !== 1}>
+          <section style={{ order: 4 }} hidden={!activeSections.includes(1)}>
             <div className="ard-section-head">
               <span>02</span>
               <div>
@@ -4599,7 +4644,11 @@ function RequirementDefinitionResult({
             </div>
           </section>
 
-          <section style={{ order: 6 }} hidden={activeSection !== 2}>
+          <section
+            style={{ order: 6 }}
+            hidden={!activeSections.includes(2)}
+            className={reworkMode ? "ard-rework-section" : ""}
+          >
             <div className="ard-section-head">
               <span>03</span>
               <div>
@@ -4637,10 +4686,30 @@ function RequirementDefinitionResult({
                   </ol>
                 </div>
               </div>
+              {reworkMode && (
+                <div className="ard-rework-editor scope-editor">
+                  <label>
+                    In Scope 보완
+                    <textarea
+                      value={inScopeDraft}
+                      onChange={(event) => setInScopeDraft(event.target.value)}
+                      aria-label="In Scope 보완"
+                    />
+                  </label>
+                  <label>
+                    Out of Scope 보완
+                    <textarea
+                      value={outScopeDraft}
+                      onChange={(event) => setOutScopeDraft(event.target.value)}
+                      aria-label="Out of Scope 보완"
+                    />
+                  </label>
+                </div>
+              )}
             </div>
           </section>
 
-          <section style={{ order: 8 }} hidden={activeSection !== 3}>
+          <section style={{ order: 8 }} hidden={!activeSections.includes(3)}>
             <div className="ard-section-head">
               <span>04</span>
               <div>
@@ -4686,7 +4755,7 @@ function RequirementDefinitionResult({
             </dl>
           </section>
 
-          <section style={{ order: 10 }} hidden={activeSection !== 4}>
+          <section style={{ order: 10 }} hidden={!activeSections.includes(4)}>
             <div className="ard-section-head">
               <span>05</span>
               <div>
@@ -4749,7 +4818,7 @@ function RequirementDefinitionResult({
             </div>
           </section>
 
-          <section style={{ order: 12 }} hidden={activeSection !== 5}>
+          <section style={{ order: 12 }} hidden={!activeSections.includes(5)}>
             <div className="ard-section-head">
               <span>06</span>
               <div>
@@ -4776,7 +4845,11 @@ function RequirementDefinitionResult({
             </dl>
           </section>
 
-          <section style={{ order: 14 }} hidden={activeSection !== 6}>
+          <section
+            style={{ order: 14 }}
+            hidden={!activeSections.includes(6)}
+            className={reworkMode ? "ard-rework-section" : ""}
+          >
             <div className="ard-section-head">
               <span>07</span>
               <div>
@@ -4826,9 +4899,43 @@ function RequirementDefinitionResult({
                 게이트에서 기록합니다.
               </span>
             </div>
+            {reworkMode && (
+              <div className="ard-rework-editor metrics-editor">
+                <label>
+                  정답 라벨 책임자
+                  <input
+                    value={labelOwner}
+                    onChange={(event) => setLabelOwner(event.target.value)}
+                    aria-label="정답 라벨 책임자"
+                  />
+                </label>
+                <label>
+                  정확도 목표(%)
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={accuracyTarget}
+                    onChange={(event) => setAccuracyTarget(event.target.value)}
+                    aria-label="정확도 목표"
+                  />
+                </label>
+                <label>
+                  근거 제시율 목표(%)
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={evidenceTarget}
+                    onChange={(event) => setEvidenceTarget(event.target.value)}
+                    aria-label="근거 제시율 목표"
+                  />
+                </label>
+              </div>
+            )}
           </section>
 
-          <section style={{ order: 16 }} hidden={activeSection !== 7}>
+          <section style={{ order: 16 }} hidden={!activeSections.includes(7)}>
             <div className="ard-section-head">
               <span>08</span>
               <div>
@@ -4876,7 +4983,7 @@ function RequirementDefinitionResult({
             </div>
           </section>
 
-          <section style={{ order: 18 }} hidden={activeSection !== 8}>
+          <section style={{ order: 18 }} hidden={!activeSections.includes(8)}>
             <div className="ard-section-head">
               <span>09</span>
               <div>
@@ -4903,7 +5010,7 @@ function RequirementDefinitionResult({
             </dl>
           </section>
 
-          <section style={{ order: 20 }} hidden={activeSection !== 9}>
+          <section style={{ order: 20 }} hidden={!activeSections.includes(9)}>
             <div className="ard-section-head">
               <span>10</span>
               <div>
@@ -4920,8 +5027,15 @@ function RequirementDefinitionResult({
         </div>
         {!completed && (
           <footer>
-            <button onClick={() => setCompleted(true)}>
-              작성 완료 및 G2 승인 요청 <ArrowRight size={14} weight="bold" />
+            <button
+              disabled={reworkMode && !reworkReady}
+              onClick={() => {
+                setCompleted(true);
+                if (reworkMode) onReworkSubmit?.();
+              }}
+            >
+              {reworkMode ? "보완 완료 · G2 재상신" : "작성 완료 및 G2 승인 요청"}{" "}
+              <ArrowRight size={14} weight="bold" />
             </button>
           </footer>
         )}
@@ -5142,7 +5256,9 @@ function GateApprovalResult({
   role,
   notify,
   onG1Resolved,
+  onStartArdRework,
   initialG1Resolution,
+  g2ReworkSubmitted = false,
   basisReady = true,
   homeEmbedded = false,
 }: {
@@ -5155,16 +5271,19 @@ function GateApprovalResult({
     assignee: string,
     reason: string,
   ) => void;
+  onStartArdRework?: () => void;
   initialG1Resolution?: {
     decision: "GO" | "CONDITIONAL" | "DROP";
     assignee: string;
     reason: string;
   } | null;
+  g2ReworkSubmitted?: boolean;
   basisReady?: boolean;
   homeEmbedded?: boolean;
 }) {
   const isG1 = gate === "G1";
   const isRejectedCase = projectNo === "2026-028" && gate === "G2";
+  const isReworkRound = isRejectedCase && g2ReworkSubmitted;
   const isLeader = role === "AI활성화팀 최병두 팀장";
   const isMember = role.includes("AI활성화팀") && role.includes("담당자");
   const isRequester = role === "일반 User";
@@ -5230,7 +5349,50 @@ function GateApprovalResult({
           date: g1Decision === "PENDING" ? "G1에서 지정" : "G1 승인 시 배정",
         },
       ]
-    : isRejectedCase && myG2Vote === "PENDING"
+    : isReworkRound
+      ? [
+          {
+            role: "요구자",
+            name: "김현우",
+            status: isRequester
+              ? myG2Vote === "REWORK"
+                ? "반려"
+                : myG2Vote === "APPROVED"
+                  ? "승인"
+                  : "대기"
+              : "대기",
+            date: isRequester ? "내 재검토" : "재상신 후 재검토",
+            reason:
+              myG2Vote === "REWORK" && isRequester ? g2Reason : undefined,
+          },
+          {
+            role: "개발 담당자",
+            name: "허정환",
+            status: isMember
+              ? myG2Vote === "REWORK"
+                ? "반려"
+                : myG2Vote === "APPROVED"
+                  ? "승인"
+                  : "대기"
+              : "대기",
+            date: isMember ? "내 재검토" : "재상신 후 재검토",
+            reason: myG2Vote === "REWORK" && isMember ? g2Reason : undefined,
+          },
+          {
+            role: "AI 활성화팀장",
+            name: "최병두",
+            status: isLeader
+              ? myG2Vote === "REWORK"
+                ? "반려"
+                : myG2Vote === "APPROVED"
+                  ? "승인"
+                  : "대기"
+              : "대기",
+            date: isLeader ? "내 재검토" : "재상신 후 재검토",
+            reason: myG2Vote === "REWORK" && isLeader ? g2Reason : undefined,
+          },
+        ]
+      : isRejectedCase && myG2Vote === "PENDING"
       ? [
           {
             role: "요구자",
@@ -5361,7 +5523,9 @@ function GateApprovalResult({
                     : gatePending
                       ? isG1
                         ? "팀장 판정 대기"
-                        : "승인 진행 중"
+                        : isReworkRound
+                          ? "G2 재검토 진행 중"
+                          : "승인 진행 중"
                       : homeEmbedded && isG1
                         ? "팀장 승인 완료"
                         : "게이트 통과"}
@@ -5378,6 +5542,8 @@ function GateApprovalResult({
                     ? "보완 요청 반영 중 · v0.8"
                     : !basisReady
                       ? "작성 중 · v0.8"
+                      : isReworkRound
+                        ? "보완 완료 · v0.9 · 재상신"
                       : "작성 완료 · v1.0"}
                 </span>
               </div>
@@ -5728,6 +5894,18 @@ function GateApprovalResult({
             </p>
           </section>
         )}
+        {!isG1 && isReworkRound && !g2Complete && (
+          <section className="gate-role-readonly g2-rework-round">
+            <CheckCircle size={18} weight="fill" />
+            <p>
+              <b>ARD v0.9가 보완 완료되어 새 G2 승인 라운드가 열렸습니다.</b>
+              <span>
+                이전 반려 기록은 이력에 보존됩니다. 요구자·개발 담당자·AI
+                활성화팀장이 보완본을 각각 다시 검토해야 합니다.
+              </span>
+            </p>
+          </section>
+        )}
         <footer>
           <div>
             <small>처리 경로</small>
@@ -5748,9 +5926,22 @@ function GateApprovalResult({
             )}
             <button
               type="button"
-              onClick={() => setDetailMode(rejected ? "ard" : "evidence")}
+              className={
+                rejected && (isMember || isRequester) ? "primary" : undefined
+              }
+              onClick={() => {
+                if (rejected && (isMember || isRequester) && onStartArdRework) {
+                  onStartArdRework();
+                  return;
+                }
+                setDetailMode(rejected ? "ard" : "evidence");
+              }}
             >
-              {rejected ? "보완 중인 ARD 보기" : "승인 근거 보기"}
+              {rejected
+                ? isMember || isRequester
+                  ? "ARD 보완하기"
+                  : "보완 중인 ARD 보기"
+                : "승인 근거 보기"}
               <ArrowRight size={13} weight="bold" />
             </button>
           </div>
@@ -6730,6 +6921,9 @@ function UserDashboard({
       }
     >
   >({});
+  const [g2ReworkProjects, setG2ReworkProjects] = useState<
+    Record<string, "editing" | "resubmitted">
+  >({});
   const [pilotReleaseDocument, setPilotReleaseDocument] = useState<
     "DEP" | "UG" | null
   >(null);
@@ -6770,11 +6964,14 @@ function UserDashboard({
       : "Go";
   const intakeComplete =
     current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted);
-  const effectiveJourneyStep = feaCompletedProjects.includes(current.no)
-    ? Math.max(2, current.journeyStep)
-    : current.no === "2026-031" && draftCompleted
-      ? 1
-      : current.journeyStep;
+  const effectiveJourneyStep =
+    g2ReworkProjects[current.no] === "resubmitted"
+      ? Math.max(4, current.journeyStep)
+      : feaCompletedProjects.includes(current.no)
+        ? Math.max(2, current.journeyStep)
+        : current.no === "2026-031" && draftCompleted
+          ? 1
+          : current.journeyStep;
   const selectedOutput = lifecycleOutputs[selectedJourney];
   const selectedOutputState =
     selectedJourney < effectiveJourneyStep
@@ -6921,7 +7118,13 @@ function UserDashboard({
                   <div>
                     <p>
                       <small>{project.no}</small>
-                      <Pill tone={project.tone}>{project.status}</Pill>
+                      <Pill tone={project.tone}>
+                        {g2ReworkProjects[project.no] === "editing"
+                          ? "ARD 보완 중"
+                          : g2ReworkProjects[project.no] === "resubmitted"
+                            ? "G2 재승인 대기"
+                            : project.status}
+                      </Pill>
                       <Pill
                         tone={
                           getProjectRelationships(role, project.no).includes(
@@ -6954,9 +7157,13 @@ function UserDashboard({
           <header>
             <div>
               <Pill tone={current.tone}>
-                {intakeComplete
-                  ? current.status.replace("내 작성 필요", "작성 완료")
-                  : "작성 중"}
+                {g2ReworkProjects[current.no] === "editing"
+                  ? "ARD 보완 중"
+                  : g2ReworkProjects[current.no] === "resubmitted"
+                    ? "G2 재승인 대기"
+                    : intakeComplete
+                      ? current.status.replace("내 작성 필요", "작성 완료")
+                      : "작성 중"}
               </Pill>
               <small>{current.no}</small>
               <h2>{current.name}</h2>
@@ -6985,7 +7192,10 @@ function UserDashboard({
                   : index === effectiveJourneyStep
                     ? "current"
                     : "upcoming";
-              const rejectedGate = current.no === "2026-028" && index === 4;
+              const rejectedGate =
+                current.no === "2026-028" &&
+                index === 4 &&
+                g2ReworkProjects[current.no] !== "resubmitted";
               return (
                 <button
                   type="button"
@@ -7288,11 +7498,40 @@ function UserDashboard({
                   [current.no]: { decision, assignee, reason },
                 }))
               }
+              g2ReworkSubmitted={
+                g2ReworkProjects[current.no] === "resubmitted"
+              }
+              onStartArdRework={() => {
+                setG2ReworkProjects((items) => ({
+                  ...items,
+                  [current.no]: "editing",
+                }));
+                setSelectedJourney(3);
+                notify(
+                  "G2 반려 사유와 보완 대상 ARD 항목을 불러왔습니다.",
+                );
+              }}
             />
           ) : selectedJourney === 3 ? (
             <RequirementDefinitionResult
               projectNo={current.no}
               state={selectedOutputState}
+              reworkMode={g2ReworkProjects[current.no] === "editing"}
+              reworkReason={
+                current.no === "2026-028"
+                  ? "Out of Scope와 평가셋 정답 라벨 책임자를 명확히 한 뒤 다시 검토해야 합니다."
+                  : undefined
+              }
+              onReworkSubmit={() => {
+                setG2ReworkProjects((items) => ({
+                  ...items,
+                  [current.no]: "resubmitted",
+                }));
+                setSelectedJourney(4);
+                notify(
+                  "ARD v0.9 보완본이 G2에 재상신되었습니다. 새 3자 승인 라운드가 시작됩니다.",
+                );
+              }}
             />
           ) : selectedJourney === 9 ? (
             <UserOperationsResult project={current} />
