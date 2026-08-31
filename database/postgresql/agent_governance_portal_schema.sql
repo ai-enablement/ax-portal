@@ -709,6 +709,68 @@ create table if not exists change_records (
   unique (project_id, change_number)
 );
 
+-- Agent Gallery submissions can originate from a governed lifecycle project
+-- or from an independently built Agent/App/Flow.
+create table if not exists gallery_submissions (
+  id bigint generated always as identity primary key,
+  submission_number text not null unique,
+  source_kind text not null
+    check (source_kind in ('lifecycle_project', 'personal_build')),
+  project_id bigint references projects(id) on delete set null,
+  submitted_by bigint not null references users(id) on delete restrict,
+  agent_name text not null,
+  summary text not null,
+  platform text not null
+    check (platform in ('vibe_coding', 'copilot_studio', 'power_automate', 'power_apps', 'other')),
+  artifact_kind text not null
+    check (artifact_kind in ('agent', 'app', 'flow', 'automation', 'other')),
+  category text not null,
+  access_url text not null,
+  target_users text not null,
+  data_classification text not null
+    check (data_classification in ('public', 'internal', 'confidential', 'personal_data')),
+  support_owner text not null,
+  evidence jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(evidence) = 'array'),
+  submission_status text not null default 'submitted'
+    check (submission_status in ('submitted', 'in_review', 'changes_requested', 'recommended', 'published', 'rejected')),
+  reviewer_note text,
+  submitted_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (
+    (source_kind = 'lifecycle_project' and project_id is not null)
+    or (source_kind = 'personal_build')
+  )
+);
+
+create table if not exists gallery_reviews (
+  id bigint generated always as identity primary key,
+  gallery_submission_id bigint not null references gallery_submissions(id) on delete cascade,
+  reviewer_id bigint not null references users(id) on delete restrict,
+  review_role text not null check (review_role in ('team_member', 'team_leader')),
+  decision text not null
+    check (decision in ('changes_requested', 'recommended', 'published', 'rejected')),
+  access_verified boolean not null default false,
+  data_policy_verified boolean not null default false,
+  safety_notice_verified boolean not null default false,
+  operation_owner_verified boolean not null default false,
+  review_note text,
+  reviewed_at timestamptz not null default now()
+);
+
+create table if not exists gallery_entries (
+  id bigint generated always as identity primary key,
+  gallery_submission_id bigint not null unique references gallery_submissions(id) on delete restrict,
+  slug text not null unique,
+  published_by bigint not null references users(id) on delete restrict,
+  visibility text not null default 'company'
+    check (visibility in ('company', 'restricted')),
+  published_at timestamptz not null default now(),
+  retired_at timestamptz,
+  updated_at timestamptz not null default now(),
+  check (retired_at is null or retired_at >= published_at)
+);
+
 -- ---------------------------------------------------------------------------
 -- 11. Notifications and immutable audit trail
 -- ---------------------------------------------------------------------------
@@ -764,7 +826,8 @@ begin
     'project_tasks', 'intake_requests', 'intake_conversations', 'documents',
     'document_sections', 'feasibility_assessments', 'knowledge_sources',
     'evaluation_cases', 'failure_scenarios', 'gates', 'gate_approvals',
-    'deployment_checklists', 'pilot_runs', 'operations_registry', 'change_records'
+    'deployment_checklists', 'pilot_runs', 'operations_registry', 'change_records',
+    'gallery_submissions', 'gallery_entries'
   ] loop
     execute format('drop trigger if exists %I_set_updated_at on agent_portal.%I', target_table, target_table);
     execute format(
@@ -886,6 +949,16 @@ create index if not exists operations_monthly_checks_checked_by_idx on operation
 create index if not exists change_records_project_date_idx on change_records (project_id, change_date desc);
 create index if not exists change_records_approved_by_idx on change_records (approved_by);
 create index if not exists change_records_created_by_idx on change_records (created_by);
+create index if not exists gallery_submissions_status_submitted_idx
+  on gallery_submissions (submission_status, submitted_at desc);
+create index if not exists gallery_submissions_project_id_idx on gallery_submissions (project_id);
+create index if not exists gallery_submissions_submitted_by_idx on gallery_submissions (submitted_by, submitted_at desc);
+create index if not exists gallery_reviews_submission_reviewed_idx
+  on gallery_reviews (gallery_submission_id, reviewed_at desc);
+create index if not exists gallery_reviews_reviewer_id_idx on gallery_reviews (reviewer_id, reviewed_at desc);
+create index if not exists gallery_entries_published_idx
+  on gallery_entries (published_at desc) where retired_at is null;
+create index if not exists gallery_entries_published_by_idx on gallery_entries (published_by);
 create index if not exists notifications_user_unread_idx
   on notifications (user_id, created_at desc) where read_at is null;
 create index if not exists notifications_project_id_idx on notifications (project_id);
@@ -945,6 +1018,7 @@ insert into role_action_permissions (app_role, action_code, action_name) values
   ('general_user', 'ARD_COLLABORATE',         '요구사항 정의 공동 작성'),
   ('general_user', 'G2_APPROVE_REQUESTER',    '요구자 G2 승인'),
   ('general_user', 'G4_APPROVE_OWNER',        'Project Owner G4 승인'),
+  ('general_user', 'GALLERY_SUBMIT',          'Agent Gallery 등록 신청'),
   ('team_member',  'PROJECT_READ_ASSIGNED',   '담당·리뷰 과제 전체 이력 조회'),
   ('team_member',  'PROJECT_READ_NEW_INTAKE', '신규 접수 과제 모니터링'),
   ('team_member',  'FEA_EDIT',                '타당성 평가서 작성'),
@@ -958,6 +1032,8 @@ insert into role_action_permissions (app_role, action_code, action_name) values
   ('team_member',  'UG_EDIT',                 '사용자 가이드 작성'),
   ('team_member',  'OPS_EDIT',                '운영 대장 작성'),
   ('team_member',  'CHG_EDIT',                '개선 이력서 작성'),
+  ('team_member',  'GALLERY_REVIEW',          'Gallery 신청 검토·보완 요청'),
+  ('team_member',  'GALLERY_RECOMMEND',       'Gallery 등록 권고'),
   ('team_leader',  'PROJECT_READ_ALL',        '팀 전체 과제 조회'),
   ('team_leader',  'FEA_EDIT',                '타당성 평가서 작성·보완'),
   ('team_leader',  'G1_DECIDE',               'G1 Go/Conditional Go/Drop 판정'),
@@ -967,6 +1043,8 @@ insert into role_action_permissions (app_role, action_code, action_name) values
   ('team_leader',  'G3_DECIDE',               'G3 배포 승인'),
   ('team_leader',  'G4_APPROVE_LEADER',       'G4 확산 승인'),
   ('team_leader',  'DEADLINE_CHANGE_DECIDE',  '프로젝트 마감일 변경 승인'),
+  ('team_leader',  'GALLERY_REVIEW',          'Gallery 신청 검토·보완 요청'),
+  ('team_leader',  'GALLERY_PUBLISH',         'Gallery 최종 등록 승인'),
   ('admin',        'PROJECT_READ_ALL',        '모든 과제 조회'),
   ('admin',        'PROJECT_CREATE',          '과제 생성'),
   ('admin',        'PROJECT_UPDATE_ANY',      '모든 과제 수정'),

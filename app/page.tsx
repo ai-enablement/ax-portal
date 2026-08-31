@@ -75,6 +75,7 @@ const projectAssignments: Record<
     [ACCOUNT_ROLES.user]: ["REQUESTER", "OWNER"],
   },
   "2026-011": { [ACCOUNT_ROLES.member]: ["OPERATOR"] },
+  "2026-006": { [ACCOUNT_ROLES.user]: ["OWNER"] },
 };
 
 function getProjectRelationships(role: string, projectNo?: string) {
@@ -448,6 +449,29 @@ const memberAdditionalProjects: UserProject[] = [
 
 const generalUserOwnerProjects: UserProject[] = [
   {
+    no: "2026-006",
+    name: "구매요청 자동화 Flow",
+    stage: 6,
+    status: "운영 중",
+    tone: "green",
+    progress: 100,
+    owner: "김현우",
+    handler: "AI활성화팀 이재승 운영 담당",
+    updated: "8.29 14:20",
+    nextAction: "운영 성과를 확인하고 Agent Gallery 등록을 신청하세요",
+    description:
+      "G4 확산 승인과 운영 인수인계가 완료되어 Gallery 등록 심사를 신청할 수 있습니다.",
+    journeyStep: 9,
+    nextGate: "정기 재평가",
+    teamOwner: "AI활성화팀 이재승 운영 담당",
+    dueDate: "2026.08.28",
+    requestedDate: "2026.08.31",
+    committedDate: "2026.08.28",
+    scheduleState: "운영 정상",
+    checkpoints: "16/16",
+    route: "operations" as View,
+  },
+  {
     no: "2026-024",
     name: "구매계약 검토 Agent",
     stage: 2,
@@ -655,6 +679,87 @@ const agents = [
     rating: "4.5",
     tag: "지정 사용자",
     tone: "green",
+  },
+];
+
+type GallerySource = "OPERATIONS" | "PERSONAL";
+type GalleryReviewStatus =
+  | "SUBMITTED"
+  | "IN_REVIEW"
+  | "CHANGES_REQUESTED"
+  | "RECOMMENDED"
+  | "PUBLISHED"
+  | "REJECTED";
+
+type GalleryDraft = {
+  source: GallerySource;
+  projectNo?: string;
+  name?: string;
+  description?: string;
+  platform?: string;
+  artifactType?: string;
+  category?: string;
+  targetUsers?: string;
+  supportOwner?: string;
+  evidence?: string[];
+};
+
+type GalleryApplication = {
+  id: string;
+  source: GallerySource;
+  projectNo?: string;
+  name: string;
+  description: string;
+  platform: string;
+  artifactType: string;
+  category: string;
+  accessUrl: string;
+  targetUsers: string;
+  dataClass: string;
+  supportOwner: string;
+  applicant: string;
+  submittedAt: string;
+  status: GalleryReviewStatus;
+  evidence: string[];
+  reviewerNote?: string;
+};
+
+const initialGalleryApplications: GalleryApplication[] = [
+  {
+    id: "GAL-2026-014",
+    source: "OPERATIONS",
+    projectNo: "2026-014",
+    name: "샘플 발송 현황 알림 Agent",
+    description: "샘플 발송 상태를 모니터링하고 담당자에게 지연 위험을 알립니다.",
+    platform: "Power Automate",
+    artifactType: "자동화 Flow",
+    category: "생산성",
+    accessUrl: "https://make.powerautomate.com/",
+    targetUsers: "샘플 운영 담당자",
+    dataClass: "사내",
+    supportOwner: "샘플운영팀 이민지",
+    applicant: "김현우 · Project Owner",
+    submittedAt: "2026.08.29 10:15",
+    status: "IN_REVIEW",
+    evidence: ["G4 확산 승인 완료", "DEP 9/9 충족", "UG 작성 완료", "OPS 운영 담당 지정"],
+  },
+  {
+    id: "GAL-2026-015",
+    source: "PERSONAL",
+    name: "회의 준비 Copilot",
+    description: "회의 안건과 참석자 정보를 바탕으로 사전 브리핑 초안을 만듭니다.",
+    platform: "Copilot Studio",
+    artifactType: "Agent",
+    category: "생산성",
+    accessUrl: "https://copilotstudio.microsoft.com/",
+    targetUsers: "기획팀",
+    dataClass: "사내",
+    supportOwner: "기획팀 박서연",
+    applicant: "김현우 · 일반 User",
+    submittedAt: "2026.08.28 16:40",
+    status: "CHANGES_REQUESTED",
+    evidence: ["사용 화면 링크", "사용자 가이드 초안", "데이터 처리 확인서"],
+    reviewerNote: "Out of Scope와 오류 신고 채널을 사용자 가이드에 보완해 주세요.",
   },
 ];
 
@@ -1045,6 +1150,10 @@ export default function Home() {
     undefined,
   );
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [galleryDraft, setGalleryDraft] = useState<GalleryDraft | null>(null);
+  const [galleryApplications, setGalleryApplications] = useState<
+    GalleryApplication[]
+  >(initialGalleryApplications);
 
   useEffect(() => {
     try {
@@ -1062,6 +1171,10 @@ export default function Home() {
         "agent-portal-project-overrides",
       );
       if (overrides) setProjectOverrides(JSON.parse(overrides));
+      const galleryItems = window.localStorage.getItem(
+        "agent-portal-gallery-applications",
+      );
+      if (galleryItems) setGalleryApplications(JSON.parse(galleryItems));
     } catch {
       window.localStorage.removeItem("agent-portal-submitted-projects");
     }
@@ -1177,6 +1290,35 @@ export default function Home() {
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2400);
+  };
+
+  const saveGalleryApplications = (items: GalleryApplication[]) => {
+    setGalleryApplications(items);
+    window.localStorage.setItem(
+      "agent-portal-gallery-applications",
+      JSON.stringify(items),
+    );
+  };
+
+  const openGallerySubmission = (draft: GalleryDraft) => {
+    setGalleryDraft(draft);
+    go("gallery");
+  };
+
+  const submitGalleryApplication = (application: GalleryApplication) => {
+    saveGalleryApplications([application, ...galleryApplications]);
+    setGalleryDraft(null);
+    notify("Agent Gallery 등록 신청이 접수되었습니다. AI 활성화팀 검토 후 결과를 알려드립니다.");
+  };
+
+  const updateGalleryApplication = (
+    id: string,
+    changes: Partial<GalleryApplication>,
+  ) => {
+    const next = galleryApplications.map((application) =>
+      application.id === id ? { ...application, ...changes } : application,
+    );
+    saveGalleryApplications(next);
   };
 
   const go = (next: View) => {
@@ -1497,6 +1639,7 @@ export default function Home() {
             setRequestOpen={setRequestOpen}
             setDetail={setDetail}
             userProjectItems={userProjectItems}
+            openGallerySubmission={openGallerySubmission}
             openGovernance={(gate) => {
               if (gate === "G1") return go("intake");
               if (gate === "G2") return go("definition");
@@ -1536,7 +1679,11 @@ export default function Home() {
           />
         )}
         {view === "operations" && (
-          <OperationsImprovement role={role} notify={notify} />
+          <OperationsImprovement
+            role={role}
+            notify={notify}
+            openGallerySubmission={openGallerySubmission}
+          />
         )}
         {view === "hub" && (
           <ProjectsHub
@@ -1556,6 +1703,12 @@ export default function Home() {
             setQuery={setQuery}
             agents={filteredAgents}
             notify={notify}
+            role={role}
+            applications={galleryApplications}
+            initialDraft={galleryDraft}
+            onDraftHandled={() => setGalleryDraft(null)}
+            onSubmitApplication={submitGalleryApplication}
+            onUpdateApplication={updateGalleryApplication}
           />
         )}
         {view === "governance" && role === ACCOUNT_ROLES.admin && (
@@ -1731,6 +1884,7 @@ function Dashboard({
   setRequestOpen,
   setDetail,
   userProjectItems,
+  openGallerySubmission,
   openGovernance,
   notify,
 }: {
@@ -1741,6 +1895,7 @@ function Dashboard({
   setRequestOpen: (v: boolean) => void;
   setDetail: (p: (typeof projects)[0]) => void;
   userProjectItems: UserProject[];
+  openGallerySubmission: (draft: GalleryDraft) => void;
   openGovernance: (gate: string) => void;
   notify: (message: string) => void;
 }) {
@@ -1778,6 +1933,7 @@ function Dashboard({
         openNewRequest={() => setRequestOpen(true)}
         projectItems={homeProjectItems}
         notify={notify}
+        openGallerySubmission={openGallerySubmission}
       />
     );
   return (
@@ -5796,7 +5952,13 @@ function ChangeDetailModal({
   );
 }
 
-function UserOperationsResult({ project }: { project: UserProject }) {
+function UserOperationsResult({
+  project,
+  openGallerySubmission,
+}: {
+  project: UserProject;
+  openGallerySubmission: (draft: GalleryDraft) => void;
+}) {
   const [document, setDocument] = useState<"OPS" | "CHG">("OPS");
   const [selectedChange, setSelectedChange] = useState<ChangeRow | null>(null);
   const isOperating = project.journeyStep >= 9;
@@ -5929,6 +6091,40 @@ function UserOperationsResult({ project }: { project: UserProject }) {
             {operational.status}
           </Pill>
         </header>
+        <div className="user-ops-gallery-action">
+          <div>
+            <CheckCircle size={18} weight="fill" />
+            <p>
+              <b>G4 최종 승인과 운영 인수인계가 완료되었습니다.</b>
+              <span>승인 문서가 자동 연결된 상태로 Gallery 등록을 신청할 수 있습니다.</span>
+            </p>
+          </div>
+          <button
+            className="primary"
+            onClick={() =>
+              openGallerySubmission({
+                source: "OPERATIONS",
+                projectNo: project.no,
+                name: project.name,
+                description:
+                  "구매요청 입력부터 승인선 확인과 담당자 알림까지 자동화합니다.",
+                platform: "Power Automate",
+                artifactType: "자동화 Flow",
+                category: "생산성",
+                targetUsers: "구매 요청자와 승인 담당자",
+                supportOwner: project.owner,
+                evidence: [
+                  "G4 확산 승인 완료",
+                  "DEP 배포 체크리스트 완료",
+                  "UG 사용자 가이드 작성 완료",
+                  "OPS 운영 담당 지정",
+                ],
+              })
+            }
+          >
+            Agent Gallery 등록 신청
+          </button>
+        </div>
         <nav aria-label="과제별 운영 문서 선택">
           <button
             className={document === "OPS" ? "active" : ""}
@@ -6148,6 +6344,7 @@ function UserDashboard({
   openNewRequest,
   projectItems,
   notify,
+  openGallerySubmission,
 }: {
   role: string;
   projectNo?: string;
@@ -6156,6 +6353,7 @@ function UserDashboard({
   openNewRequest: () => void;
   projectItems: UserProject[];
   notify: (message: string) => void;
+  openGallerySubmission: (draft: GalleryDraft) => void;
 }) {
   const isLeader = role === ACCOUNT_ROLES.leader;
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
@@ -6823,7 +7021,10 @@ function UserDashboard({
               }}
             />
           ) : selectedJourney === 9 ? (
-            <UserOperationsResult project={current} />
+            <UserOperationsResult
+              project={current}
+              openGallerySubmission={openGallerySubmission}
+            />
           ) : selectedJourney >= 5 && selectedJourney <= 8 ? (
             <DeliveryWorkplace
               role={role}
@@ -12175,15 +12376,40 @@ function DeliveryWorkplace({
 function OperationsImprovement({
   role,
   notify,
+  openGallerySubmission,
 }: {
   role: string;
   notify: (s: string) => void;
+  openGallerySubmission: (draft: GalleryDraft) => void;
 }) {
   const isLeader = role === ACCOUNT_ROLES.leader;
   const [activeDocument, setActiveDocument] = useState<"OPS" | "CHG">("OPS");
   const [selectedAgent, setSelectedAgent] = useState(0);
   const [selectedChange, setSelectedChange] = useState<ChangeRow | null>(null);
   const agents = [
+    {
+      id: "AGT-2026-006",
+      name: "구매요청 자동화 Flow",
+      type: "규칙형",
+      track: "하",
+      autonomy: "L2",
+      owner: "구매기획팀 김현우",
+      operator: "이재승 / 김현우",
+      knowledge: "구매기획팀 김현우",
+      deployed: "2026.08.28",
+      status: "운영",
+      checked: "2026.08.29",
+      reevaluate: "2026.11.28",
+      tone: "green",
+      usage: "실행 128건 · 사용자 18명",
+      trend: "파일럿 대비 +22.0%",
+      quality: "오류 신고 0건",
+      qualityNote: "G4 확산 승인 후 정상 운영",
+      freshness: "구매 규정 최신성 확인 완료",
+      freshnessDate: "확인일 2026.08.29",
+      evaluation: "평가셋 v1.0 · 98.1%",
+      failure: "승인선 미설정 입력을 차단한 정상 사례를 회귀 평가셋에 유지합니다.",
+    },
     {
       id: "AGT-2026-011",
       name: "QMS 품질 가이드",
@@ -12279,11 +12505,6 @@ function OperationsImprovement({
         "범위 밖 일정 생성 요청을 거절한 정상 사례를 회귀 평가셋에 유지합니다.",
     },
   ];
-  const current = agents[selectedAgent];
-  const currentProjectNo = current.id.replace("AGT-", "");
-  const canEditOperations = hasProjectRelationship(role, currentProjectNo, [
-    "OPERATOR",
-  ]);
   const visibleOperationAgents = agents
     .map((agent, index) => ({ agent, index }))
     .filter(({ agent }) =>
@@ -12291,6 +12512,20 @@ function OperationsImprovement({
         ? true
         : hasProjectRelationship(role, agent.id.replace("AGT-", "")),
     );
+  const effectiveSelectedAgent = visibleOperationAgents.some(
+    ({ index }) => index === selectedAgent,
+  )
+    ? selectedAgent
+    : (visibleOperationAgents[0]?.index ?? 0);
+  const current = agents[effectiveSelectedAgent];
+  const currentProjectNo = current.id.replace("AGT-", "");
+  const canEditOperations = hasProjectRelationship(role, currentProjectNo, [
+    "OPERATOR",
+  ]);
+  const canSubmitToGallery =
+    role === ACCOUNT_ROLES.user &&
+    hasProjectRelationship(role, currentProjectNo, ["OWNER"]) &&
+    current.status === "운영";
   const changesByAgent: Record<string, ChangeRow[]> = {
     "AGT-2026-011": [
       [
@@ -12310,6 +12545,17 @@ function OperationsImprovement({
         "오류 신고",
         "95.6% · Pass",
         "AI활성화팀장",
+      ],
+    ],
+    "AGT-2026-006": [
+      [
+        "CHG-006-001",
+        "2026.08.29",
+        "도구",
+        "운영 전환 후 승인선 연결 상태 확인",
+        "운영 점검",
+        "98.1% · Pass",
+        "구매기획팀장",
       ],
     ],
     "AGT-2026-008": [
@@ -12403,6 +12649,46 @@ function OperationsImprovement({
           </div>
           <Pill tone="green">2026.08 점검 중</Pill>
         </div>
+        {canSubmitToGallery && (
+          <section className="operations-gallery-callout">
+            <div className="operations-gallery-callout-icon">
+              <CheckCircle size={22} weight="fill" />
+            </div>
+            <div>
+              <small>G4 최종 승인 · 운영 인수인계 완료</small>
+              <strong>{current.name}을 Agent Gallery에 공유할 수 있습니다.</strong>
+              <p>
+                운영 승인 근거와 사용자 가이드는 자동 첨부되며, AI 활성화팀이
+                공개 범위와 안전성을 검토한 뒤 등록합니다.
+              </p>
+            </div>
+            <button
+              className="primary"
+              onClick={() =>
+                openGallerySubmission({
+                  source: "OPERATIONS",
+                  projectNo: currentProjectNo,
+                  name: current.name,
+                  description:
+                    "구매요청 입력부터 승인선 확인과 담당자 알림까지 자동화합니다.",
+                  platform: "Power Automate",
+                  artifactType: "자동화 Flow",
+                  category: "생산성",
+                  targetUsers: "구매 요청자와 승인 담당자",
+                  supportOwner: current.owner,
+                  evidence: [
+                    "G4 확산 승인 완료",
+                    "DEP 배포 체크리스트 완료",
+                    "UG 사용자 가이드 작성 완료",
+                    "OPS 운영 담당 지정",
+                  ],
+                })
+              }
+            >
+              Agent Gallery 등록 신청
+            </button>
+          </section>
+        )}
         <section className="operations-metrics">
           <article>
             <small>운영 대장 등록 Agent</small>
@@ -12504,7 +12790,7 @@ function OperationsImprovement({
                           role="button"
                           tabIndex={0}
                           aria-label={`${agent.name} 운영 점검 보기`}
-                          className={selectedAgent === index ? "selected" : ""}
+                          className={effectiveSelectedAgent === index ? "selected" : ""}
                           onClick={() => setSelectedAgent(index)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -12855,22 +13141,214 @@ function Gallery({
   setQuery,
   agents: list,
   notify,
+  role,
+  applications,
+  initialDraft,
+  onDraftHandled,
+  onSubmitApplication,
+  onUpdateApplication,
 }: {
   query: string;
   setQuery: (v: string) => void;
   agents: typeof agents;
   notify: (s: string) => void;
+  role: AccountRole;
+  applications: GalleryApplication[];
+  initialDraft: GalleryDraft | null;
+  onDraftHandled: () => void;
+  onSubmitApplication: (application: GalleryApplication) => void;
+  onUpdateApplication: (
+    id: string,
+    changes: Partial<GalleryApplication>,
+  ) => void;
 }) {
+  const isTeam =
+    role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member;
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  const [tab, setTab] = useState<"catalog" | "applications" | "review">(
+    initialDraft ? "applications" : isTeam ? "review" : "catalog",
+  );
+  const [submissionOpen, setSubmissionOpen] = useState(Boolean(initialDraft));
+  const [editingApplicationId, setEditingApplicationId] = useState<string | null>(null);
+  const [selectedApplicationId, setSelectedApplicationId] = useState(
+    applications.find((application) => application.status !== "PUBLISHED")?.id ||
+      applications[0]?.id ||
+      "",
+  );
+  const emptyDraft: GalleryDraft = { source: "PERSONAL" };
+  const sourceDraft = initialDraft || emptyDraft;
+  const [form, setForm] = useState({
+    source: sourceDraft.source,
+    projectNo: sourceDraft.projectNo || "",
+    name: sourceDraft.name || "",
+    description: sourceDraft.description || "",
+    platform: sourceDraft.platform || "Copilot Studio",
+    artifactType: sourceDraft.artifactType || "Agent",
+    category: sourceDraft.category || "생산성",
+    accessUrl: "",
+    targetUsers: sourceDraft.targetUsers || "",
+    dataClass: "사내",
+    supportOwner: sourceDraft.supportOwner || "",
+    evidence: sourceDraft.evidence || [],
+  });
+
+  const statusLabel: Record<GalleryReviewStatus, string> = {
+    SUBMITTED: "검토 대기",
+    IN_REVIEW: "검토 중",
+    CHANGES_REQUESTED: "보완 요청",
+    RECOMMENDED: "등록 권고",
+    PUBLISHED: "등록 완료",
+    REJECTED: "등록 반려",
+  };
+  const statusTone: Record<GalleryReviewStatus, string> = {
+    SUBMITTED: "blue",
+    IN_REVIEW: "orange",
+    CHANGES_REQUESTED: "red",
+    RECOMMENDED: "violet",
+    PUBLISHED: "green",
+    REJECTED: "gray",
+  };
+  const publishedAgents = applications
+    .filter((application) => application.status === "PUBLISHED")
+    .map((application) => ({
+      icon: application.artifactType === "자동화 Flow" ? "↻" : "✦",
+      name: application.name,
+      desc: application.description,
+      category: application.category,
+      users: "신규",
+      rating: "-",
+      tag: application.platform,
+      tone: application.platform === "Power Apps" ? "green" : "blue",
+    }));
+  const catalog = [...publishedAgents, ...list].filter((agent) =>
+    `${agent.name} ${agent.desc} ${agent.category}`
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  const selectedApplication =
+    applications.find((application) => application.id === selectedApplicationId) ||
+    applications[0];
+
+  const startPersonalSubmission = () => {
+    setEditingApplicationId(null);
+    setForm({
+      source: "PERSONAL",
+      projectNo: "",
+      name: "",
+      description: "",
+      platform: "Copilot Studio",
+      artifactType: "Agent",
+      category: "생산성",
+      accessUrl: "",
+      targetUsers: "",
+      dataClass: "사내",
+      supportOwner: "",
+      evidence: [],
+    });
+    setSubmissionOpen(true);
+    setTab("applications");
+  };
+  const startResubmission = (application: GalleryApplication) => {
+    setEditingApplicationId(application.id);
+    setForm({
+      source: application.source,
+      projectNo: application.projectNo || "",
+      name: application.name,
+      description: application.description,
+      platform: application.platform,
+      artifactType: application.artifactType,
+      category: application.category,
+      accessUrl: application.accessUrl,
+      targetUsers: application.targetUsers,
+      dataClass: application.dataClass,
+      supportOwner: application.supportOwner,
+      evidence: application.evidence,
+    });
+    setSubmissionOpen(true);
+  };
+  const closeSubmission = () => {
+    setSubmissionOpen(false);
+    onDraftHandled();
+  };
+  const submit = () => {
+    if (
+      !form.name.trim() ||
+      !form.description.trim() ||
+      !form.accessUrl.trim() ||
+      !form.targetUsers.trim() ||
+      !form.supportOwner.trim()
+    ) {
+      notify("필수 항목을 모두 입력해 주세요.");
+      return;
+    }
+    const submittedApplication: GalleryApplication = {
+      id: `GAL-${new Date().getFullYear()}-${String(applications.length + 16).padStart(3, "0")}`,
+      source: form.source,
+      projectNo: form.projectNo || undefined,
+      name: form.name.trim(),
+      description: form.description.trim(),
+      platform: form.platform,
+      artifactType: form.artifactType,
+      category: form.category,
+      accessUrl: form.accessUrl.trim(),
+      targetUsers: form.targetUsers.trim(),
+      dataClass: form.dataClass,
+      supportOwner: form.supportOwner.trim(),
+      applicant: "김현우 · 일반 User",
+      submittedAt: "방금",
+      status: "SUBMITTED",
+      evidence:
+        form.source === "OPERATIONS"
+          ? form.evidence
+          : ["사용 화면 링크", "공개 범위·운영 책임 입력", "AI 활성화팀 안전성 검토 예정"],
+    };
+    if (editingApplicationId) {
+      onUpdateApplication(editingApplicationId, {
+        ...submittedApplication,
+        id: editingApplicationId,
+        status: "SUBMITTED",
+        reviewerNote: undefined,
+        submittedAt: "방금 · 보완 재상신",
+      });
+      notify("보완 내용이 반영되어 AI 활성화팀에 재상신되었습니다.");
+    } else {
+      onSubmitApplication(submittedApplication);
+    }
+    setEditingApplicationId(null);
+    closeSubmission();
+  };
+  const review = (
+    status: GalleryReviewStatus,
+    message: string,
+    reviewerNote?: string,
+  ) => {
+    if (!selectedApplication) return;
+    onUpdateApplication(selectedApplication.id, { status, reviewerNote });
+    notify(message);
+  };
+
   return (
     <div className="page gallery-page">
       <section className="gallery-hero">
-        <p className="eyebrow">AGENT GALLERY</p>
-        <h1>
-          일하는 방식을 바꾸는
-          <br />
-          <span>검증된 Agent</span>를 만나보세요.
-        </h1>
-        <p>정식 평가와 승인을 통과한 사내 Agent만 공개됩니다.</p>
+        <div className="gallery-hero-heading">
+          <div>
+            <p className="eyebrow">AGENT GALLERY</p>
+            <h1>
+              일하는 방식을 바꾸는 <span>검증된 Agent</span>
+            </h1>
+            <p>AI 활성화팀의 검토와 등록 승인을 통과한 사내 Agent만 공개됩니다.</p>
+          </div>
+          {!isTeam && role !== ACCOUNT_ROLES.admin && (
+            <button className="gallery-submit-button" onClick={startPersonalSubmission}>
+              <Plus size={18} weight="bold" /> 내 Agent 올리기
+            </button>
+          )}
+          {isTeam && (
+            <button className="gallery-review-button" onClick={() => setTab("review")}>
+              <ClipboardText size={18} weight="bold" /> 등록 검토 {applications.filter((item) => item.status !== "PUBLISHED").length}건
+            </button>
+          )}
+        </div>
         <label className="search">
           <span>⌕</span>
           <input
@@ -12889,42 +13367,133 @@ function Gallery({
           <button>IT</button>
         </div>
       </section>
-      <div className="gallery-title">
-        <div>
-          <h2>추천 Agent</h2>
-          <p>현재 {list.length}개의 Agent를 사용할 수 있습니다.</p>
-        </div>
-        <select>
-          <option>추천순</option>
-          <option>사용자순</option>
-          <option>평점순</option>
-        </select>
-      </div>
-      <section className="agent-grid">
-        {list.map((a) => (
-          <article className="agent-card" key={a.name}>
-            <div className={`agent-art ${a.tone}`}>
-              <span>{a.icon}</span>
-              <Pill tone="white">{a.tag}</Pill>
-            </div>
-            <div className="agent-body">
-              <Pill>{a.category}</Pill>
-              <h3>{a.name}</h3>
-              <p>{a.desc}</p>
-              <div className="agent-stats">
-                <span>★ {a.rating}</span>
-                <span>사용자 {a.users}</span>
-                <span>지식 기준 8.01</span>
-              </div>
-              <button
-                onClick={() => notify(`${a.name} 사용 화면을 열었습니다.`)}
-              >
-                Agent 보기 <span>→</span>
-              </button>
-            </div>
-          </article>
-        ))}
+      <section className="gallery-publish-flow" aria-label="Agent Gallery 등록 경로">
+        <article>
+          <span className="flow-number">1A</span>
+          <div><b>운영 승인 Agent</b><small>G4 승인 · DEP · UG · OPS 근거 자동 연결</small></div>
+        </article>
+        <article>
+          <span className="flow-number">1B</span>
+          <div><b>개인 제작 Agent</b><small>Vibe Coding · Copilot Studio · Power Platform</small></div>
+        </article>
+        <ArrowRight className="gallery-flow-arrow" size={19} weight="bold" />
+        <article className="review-step">
+          <span className="flow-number">2</span>
+          <div><b>AI 활성화팀 검토</b><small>접근권한 · 데이터 · 안전성 · 운영 책임</small></div>
+        </article>
+        <ArrowRight className="gallery-flow-arrow" size={19} weight="bold" />
+        <article className="publish-step">
+          <span className="flow-number">3</span>
+          <div><b>Gallery 등록</b><small>최종 승인 후 전사 카탈로그 공개</small></div>
+        </article>
       </section>
+
+      <nav className="gallery-tabs" aria-label="Gallery 화면 선택">
+        <button className={tab === "catalog" ? "active" : ""} onClick={() => setTab("catalog")}>Agent 둘러보기</button>
+        {!isTeam && role !== ACCOUNT_ROLES.admin && (
+          <button className={tab === "applications" ? "active" : ""} onClick={() => setTab("applications")}>내 신청 현황</button>
+        )}
+        {isTeam && (
+          <button className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}>등록 검토</button>
+        )}
+      </nav>
+
+      {tab === "catalog" && (
+        <>
+          <div className="gallery-title">
+            <div><h2>등록 Agent</h2><p>현재 {catalog.length}개의 검증된 Agent를 사용할 수 있습니다.</p></div>
+            <select><option>추천순</option><option>사용자순</option><option>평점순</option></select>
+          </div>
+          <section className="agent-grid">
+            {catalog.map((a) => (
+              <article className="agent-card" key={a.name}>
+                <div className={`agent-art ${a.tone}`}><span>{a.icon}</span><Pill tone="white">{a.tag}</Pill></div>
+                <div className="agent-body">
+                  <Pill>{a.category}</Pill><h3>{a.name}</h3><p>{a.desc}</p>
+                  <div className="agent-stats"><span>★ {a.rating}</span><span>사용자 {a.users}</span><span>검토 완료</span></div>
+                  <button onClick={() => notify(`${a.name} 사용 화면을 열었습니다.`)}>Agent 보기 <span>→</span></button>
+                </div>
+              </article>
+            ))}
+          </section>
+        </>
+      )}
+
+      {tab === "applications" && !isTeam && (
+        <section className="gallery-applications-panel">
+          <header><div><h2>내 Agent 등록 신청</h2><p>접수부터 보완, 등록 완료까지 진행 상태를 확인합니다.</p></div><button className="primary" onClick={startPersonalSubmission}>＋ 내 Agent 올리기</button></header>
+          <div className="gallery-application-list">
+            {applications.map((application) => (
+              <article key={application.id}>
+                <div className="application-source"><Pill tone={application.source === "OPERATIONS" ? "green" : "blue"}>{application.source === "OPERATIONS" ? "운영 승인 경로" : "개인 제작 경로"}</Pill><small>{application.id}</small></div>
+                <div><b>{application.name}</b><p>{application.platform} · {application.artifactType} · {application.targetUsers}</p></div>
+                <div><Pill tone={statusTone[application.status]}>{statusLabel[application.status]}</Pill><small>{application.submittedAt}</small></div>
+                {application.reviewerNote && <p className="application-review-note"><WarningCircle size={14} weight="fill" /> {application.reviewerNote}</p>}
+                {application.status === "CHANGES_REQUESTED" && <button className="application-resubmit" onClick={() => startResubmission(application)}>보완 후 재상신</button>}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tab === "review" && isTeam && (
+        <section className="gallery-review-workspace">
+          <aside className="gallery-review-queue">
+            <header><h2>등록 검토 큐</h2><Pill tone="orange">{applications.filter((item) => item.status !== "PUBLISHED").length}건</Pill></header>
+            {applications.map((application) => (
+              <button key={application.id} className={selectedApplication?.id === application.id ? "active" : ""} onClick={() => setSelectedApplicationId(application.id)}>
+                <span><Pill tone={application.source === "OPERATIONS" ? "green" : "blue"}>{application.source === "OPERATIONS" ? "운영" : "개인"}</Pill><small>{application.id}</small></span>
+                <b>{application.name}</b><em>{application.platform} · {statusLabel[application.status]}</em>
+              </button>
+            ))}
+          </aside>
+          {selectedApplication && (
+            <article className="gallery-review-detail">
+              <header>
+                <div><small>{selectedApplication.id} · {selectedApplication.submittedAt}</small><h2>{selectedApplication.name}</h2><p>{selectedApplication.description}</p></div>
+                <Pill tone={statusTone[selectedApplication.status]}>{statusLabel[selectedApplication.status]}</Pill>
+              </header>
+              <div className="gallery-review-summary">
+                <div><small>등록 경로</small><b>{selectedApplication.source === "OPERATIONS" ? `운영 승인 과제 · ${selectedApplication.projectNo}` : "개인 제작 Agent"}</b></div>
+                <div><small>제작 방식</small><b>{selectedApplication.platform} · {selectedApplication.artifactType}</b></div>
+                <div><small>대상 / 데이터</small><b>{selectedApplication.targetUsers} · {selectedApplication.dataClass}</b></div>
+                <div><small>운영 책임</small><b>{selectedApplication.supportOwner}</b></div>
+              </div>
+              <div className="gallery-review-access"><span><b>사용/실행 링크</b><small>{selectedApplication.accessUrl}</small></span><button onClick={() => window.open(selectedApplication.accessUrl, "_blank", "noopener,noreferrer")}>사용 화면 열기 <ArrowRight size={13} weight="bold" /></button></div>
+              <section className="gallery-evidence"><h3>제출 근거</h3>{selectedApplication.evidence.map((item) => <span key={item}><CheckCircle size={15} weight="fill" /> {item}</span>)}</section>
+              <section className="gallery-review-checklist"><h3>AI 활성화팀 검토</h3><label><input type="checkbox" defaultChecked /> 접근 링크와 사용자 권한 확인</label><label><input type="checkbox" defaultChecked={selectedApplication.source === "OPERATIONS"} /> 데이터 분류와 입력 금지 정보 확인</label><label><input type="checkbox" /> 한계 고지·오류 신고·운영 담당 확인</label></section>
+              {selectedApplication.reviewerNote && <div className="gallery-review-note"><b>검토 의견</b><p>{selectedApplication.reviewerNote}</p></div>}
+              <footer>
+                <button onClick={() => review("CHANGES_REQUESTED", "신청자에게 보완 요청을 전송했습니다.", "한계 고지와 오류 신고 경로를 보완한 뒤 재상신해 주세요.")}>보완 요청</button>
+                {!isLeader && <button className="secondary" onClick={() => review("RECOMMENDED", "팀장에게 등록 권고를 전달했습니다.", "동료 검토 완료 · 최종 등록 권고")}>검토 완료 · 등록 권고</button>}
+                {isLeader && <button className="primary" onClick={() => review("PUBLISHED", "최종 승인되어 Agent Gallery에 등록되었습니다.", "AI 활성화팀장 최종 등록 승인")}>최종 승인 · Gallery 등록</button>}
+              </footer>
+            </article>
+          )}
+        </section>
+      )}
+
+      {submissionOpen && (
+        <div className="gallery-modal-backdrop" onMouseDown={closeSubmission}>
+          <section className="gallery-submission-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <header><div><small>{form.source === "OPERATIONS" ? "운영 승인 Agent" : "개인 제작 Agent"}</small><h2>Agent Gallery 등록 신청</h2><p>AI 활성화팀이 접근권한·데이터·안전성과 운영 책임을 검토합니다.</p></div><button aria-label="닫기" onClick={closeSubmission}><X size={18} /></button></header>
+            <div className="gallery-form-grid">
+              <label className="wide"><span>등록 경로</span><div className="gallery-source-readonly"><b>{form.source === "OPERATIONS" ? "운영 단계 최종 승인 후 등록" : "내가 직접 만든 Agent 등록"}</b><small>{form.source === "OPERATIONS" ? `${form.projectNo} · G4 승인 근거 자동 연결` : "일반 User 신청 · AI 활성화팀 검토 후 등록"}</small></div></label>
+              <label><span>Agent 이름 *</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="업무를 알 수 있는 이름" /></label>
+              <label><span>제작 플랫폼 *</span><select value={form.platform} onChange={(event) => setForm({ ...form, platform: event.target.value })}><option>Vibe Coding</option><option>Copilot Studio</option><option>Power Automate</option><option>Power Apps</option><option>기타</option></select></label>
+              <label><span>산출물 유형 *</span><select value={form.artifactType} onChange={(event) => setForm({ ...form, artifactType: event.target.value })}><option>Agent</option><option>업무 App</option><option>자동화 Flow</option><option>기타</option></select></label>
+              <label><span>업무 카테고리</span><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option>생산성</option><option>품질</option><option>경영지원</option><option>개발</option><option>IT</option></select></label>
+              <label className="wide"><span>무엇을 해주는 도구인가요? *</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="사용자와 해결하는 업무, 결과의 범위를 적어 주세요." /></label>
+              <label><span>사용 대상 *</span><input value={form.targetUsers} onChange={(event) => setForm({ ...form, targetUsers: event.target.value })} placeholder="예: 구매팀 전원" /></label>
+              <label><span>데이터 분류</span><select value={form.dataClass} onChange={(event) => setForm({ ...form, dataClass: event.target.value })}><option>공개</option><option>사내</option><option>기밀</option><option>개인정보 포함</option></select></label>
+              <label><span>운영·문의 담당 *</span><input value={form.supportOwner} onChange={(event) => setForm({ ...form, supportOwner: event.target.value })} placeholder="부서와 담당자" /></label>
+              <label><span>사용/실행 링크 *</span><input value={form.accessUrl} onChange={(event) => setForm({ ...form, accessUrl: event.target.value })} placeholder="https://" /></label>
+              {form.source === "OPERATIONS" && <div className="gallery-linked-evidence wide"><b>자동 연결된 승인 근거</b>{form.evidence.map((item) => <span key={item}><Check size={14} weight="bold" /> {item}</span>)}</div>}
+            </div>
+            <footer><button onClick={closeSubmission}>취소</button><button className="primary" onClick={submit}>AI 활성화팀 검토 요청</button></footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
