@@ -104,6 +104,7 @@ function projectRelationshipLabel(role: string, projectNo: string) {
     SECURITY_REVIEWER: "정보보호 검토",
   };
   const assigned = getProjectRelationships(role, projectNo);
+  if (role === ACCOUNT_ROLES.leader) return "팀장 감독·승인";
   if (assigned.length === 0 && role === ACCOUNT_ROLES.user) return "요청자";
   return assigned
     .map((relationship) => labels[relationship])
@@ -1047,8 +1048,33 @@ export default function Home() {
     go(next);
   };
 
-  const notifications = role === ACCOUNT_ROLES.member
-    ? [
+  const notifications =
+    role === ACCOUNT_ROLES.leader
+      ? [
+          {
+            projectNo: "2026-033",
+            title: "FEA 작성·G1 판정 준비",
+            body: "타당성 근거를 확인하고 완료 후 추진 여부와 개발 담당자를 확정하세요.",
+            view: "intake" as View,
+            tone: "danger",
+          },
+          {
+            projectNo: "2026-028",
+            title: "G2 보완 현황 확인",
+            body: "ARD 보완 내용과 3자 재승인 준비 상태를 확인하세요.",
+            view: "definition" as View,
+            tone: "warning",
+          },
+          {
+            projectNo: "2026-018",
+            title: "G3 최종 승인 대기",
+            body: "동료 리뷰와 정보보호 확인을 검토한 뒤 배포 여부를 결정하세요.",
+            view: "delivery" as View,
+            tone: "warning",
+          },
+        ]
+      : role === ACCOUNT_ROLES.member
+        ? [
         {
           projectNo: "2026-033",
           title: "FEA 보완 · 13일 지연",
@@ -1084,16 +1110,16 @@ export default function Home() {
           view: "operations" as View,
           tone: "neutral",
         },
-      ]
-    : [
-        {
-          projectNo: "2026-028",
-          title: "G2 보완 상태가 업데이트되었습니다",
-          body: "ARD 보완 내용과 승인 현황을 확인하세요.",
-          view: "definition" as View,
-          tone: "warning",
-        },
-      ];
+          ]
+        : [
+            {
+              projectNo: "2026-028",
+              title: "G2 보완 상태가 업데이트되었습니다",
+              body: "ARD 보완 내용과 승인 현황을 확인하세요.",
+              view: "definition" as View,
+              tone: "warning",
+            },
+          ];
 
   const openHub = (project?: (typeof projects)[0]) => {
     setHubProject(project || null);
@@ -1326,6 +1352,7 @@ export default function Home() {
               go("delivery");
             }}
             openWorkflow={openWorkflow}
+            notify={notify}
           />
         )}
         {view === "teamboard" && role.includes("AI활성화팀") && (
@@ -1553,6 +1580,7 @@ function Dashboard({
   userProjectItems,
   openGovernance,
   openWorkflow,
+  notify,
 }: {
   role: string;
   setView: (v: View) => void;
@@ -1561,8 +1589,13 @@ function Dashboard({
   userProjectItems: UserProject[];
   openGovernance: (gate: string) => void;
   openWorkflow: (view: View, projectNo: string) => void;
+  notify: (message: string) => void;
 }) {
-  if (role !== ACCOUNT_ROLES.leader)
+  if (
+    role === ACCOUNT_ROLES.leader ||
+    role === ACCOUNT_ROLES.member ||
+    role === ACCOUNT_ROLES.user
+  )
     return (
       <UserDashboard
         role={role}
@@ -1570,7 +1603,7 @@ function Dashboard({
         openWorkflow={openWorkflow}
         openNewRequest={() => setRequestOpen(true)}
         projectItems={
-          role === ACCOUNT_ROLES.member
+          role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.leader
             ? [
                 memberAdditionalProjects[0],
                 ...userProjectItems.filter((project) =>
@@ -1581,6 +1614,7 @@ function Dashboard({
               ]
             : userProjectItems
         }
+        notify={notify}
       />
     );
   return (
@@ -3534,9 +3568,11 @@ const travelFeasibility = {
 function HomeFeasibilityEditor({
   project,
   role,
+  onComplete,
 }: {
   project: UserProject;
   role: string;
+  onComplete?: () => void;
 }) {
   const isLeader = role === ACCOUNT_ROLES.leader;
   const author = isLeader ? "최병두 팀장" : "허정환 담당자";
@@ -3602,6 +3638,7 @@ function HomeFeasibilityEditor({
     }
     setSaveState("작성 완료");
     setCompletionMessage("FEA가 작성 완료되어 G1 착수 승인 대기로 이동했습니다.");
+    onComplete?.();
   };
   const alternativeLabels = [
     "프로세스·규정 개선",
@@ -3750,12 +3787,14 @@ function FeasibilityResult({
   editable = false,
   role = ACCOUNT_ROLES.user,
   projectItem,
+  onComplete,
 }: {
   projectNo: string;
   state: string;
   editable?: boolean;
   role?: string;
   projectItem?: UserProject;
+  onComplete?: () => void;
 }) {
   const [activeSection, setActiveSection] = useState(0);
   const project =
@@ -3851,7 +3890,13 @@ function FeasibilityResult({
   const waitingForFea = state === "진행 중";
   const ready = state === "완료";
   if (editable && !ready)
-    return <HomeFeasibilityEditor project={project} role={role} />;
+    return (
+      <HomeFeasibilityEditor
+        project={project}
+        role={role}
+        onComplete={onComplete}
+      />
+    );
   if (!ready)
     return (
       <section className="fea-result upcoming" aria-label="타당성 평가서">
@@ -6614,19 +6659,26 @@ function UserDashboard({
   openWorkflow,
   openNewRequest,
   projectItems,
+  notify,
 }: {
   role: string;
   setView: (v: View) => void;
   openWorkflow: (view: View, projectNo: string) => void;
   openNewRequest: () => void;
   projectItems: UserProject[];
+  notify: (message: string) => void;
 }) {
+  const isLeader = role === ACCOUNT_ROLES.leader;
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
+  const isAiTeam = isLeader || isAiTeamMember;
   const [selected, setSelected] = useState(0);
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [draftCompleted, setDraftCompleted] = useState(false);
+  const [feaCompletedProjects, setFeaCompletedProjects] = useState<string[]>(
+    [],
+  );
   const [pilotReleaseDocument, setPilotReleaseDocument] = useState<
     "DEP" | "UG" | null
   >(null);
@@ -6645,7 +6697,7 @@ function UserDashboard({
     },
   ]);
   useEffect(() => {
-    const nextIndex = isAiTeamMember
+    const nextIndex = isAiTeam
       ? Math.max(
           0,
           projectItems.findIndex((project) => project.no === "2026-033"),
@@ -6653,13 +6705,16 @@ function UserDashboard({
       : 0;
     setSelected(nextIndex);
     setSelectedJourney(projectItems[nextIndex].journeyStep);
-  }, [isAiTeamMember, projectItems, role]);
+  }, [isAiTeam, projectItems, role]);
   const current = projectItems[selected] || projectItems[0];
   const g1Status = current.journeyStep <= 1 ? "판정 대기" : "Go";
   const intakeComplete =
     current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted);
-  const effectiveJourneyStep =
-    current.no === "2026-031" && draftCompleted ? 1 : current.journeyStep;
+  const effectiveJourneyStep = feaCompletedProjects.includes(current.no)
+    ? Math.max(2, current.journeyStep)
+    : current.no === "2026-031" && draftCompleted
+      ? 1
+      : current.journeyStep;
   const selectedOutput = lifecycleOutputs[selectedJourney];
   const selectedOutputState =
     selectedJourney < effectiveJourneyStep
@@ -6669,9 +6724,11 @@ function UserDashboard({
           ? "승인 대기"
           : "진행 중"
         : "생성 전";
-  const assignedProjects = isAiTeamMember
-    ? projectItems.filter((project) => hasProjectRelationship(role, project.no))
-    : projectItems;
+  const assignedProjects = isLeader
+    ? projectItems
+    : isAiTeamMember
+      ? projectItems.filter((project) => hasProjectRelationship(role, project.no))
+      : projectItems;
   const visible = assignedProjects.filter(
     (project) =>
       filter === "전체" ||
@@ -6682,7 +6739,7 @@ function UserDashboard({
   const applyFilter = (next: string) => {
     setFilter(next);
     if (next === "내 할 일") {
-      const project = isAiTeamMember
+      const project = isAiTeam
         ? projectItems.find((item) => item.no === "2026-033") || projectItems[0]
         : projectItems.find((item) => item.status === "내 작성 필요") ||
           projectItems[0];
@@ -6721,22 +6778,28 @@ function UserDashboard({
       <section className="user-home-hero">
         <div>
           <p className="eyebrow">
-            {isAiTeamMember
-              ? "MY ASSIGNED AGENT PROJECTS"
+            {isAiTeam
+              ? isLeader
+                ? "AI ACTIVATION TEAM PROJECTS"
+                : "MY ASSIGNED AGENT PROJECTS"
               : "MY AGENT REQUESTS"}
           </p>
           <h1>
-            {isAiTeamMember
-              ? "내가 담당한 Agent 과제를 한 화면에서 관리합니다."
+            {isAiTeam
+              ? isLeader
+                ? "팀이 관리하는 Agent 과제를 한 화면에서 감독합니다."
+                : "내가 담당한 Agent 과제를 한 화면에서 관리합니다."
               : "내가 요청한 과제는 지금 어디까지 왔을까요?"}
           </h1>
           <p>
-            {isAiTeamMember
-              ? "개발·리뷰·운영 역할로 배정된 과제를 함께 표시하며, 배정 시점부터 프로젝트 전체 이력을 확인할 수 있습니다."
+            {isAiTeam
+              ? isLeader
+                ? "팀 전체 진행 이력과 지연 상태를 확인하고, 현재 단계에서 필요한 게이트 승인과 담당자 지정을 처리합니다."
+                : "개발·리뷰·운영 역할로 배정된 과제를 함께 표시하며, 배정 시점부터 프로젝트 전체 이력을 확인할 수 있습니다."
               : "요청자 또는 프로젝트 Owner로 연결된 과제를 한 화면에서 확인할 수 있습니다."}
           </p>
         </div>
-        {!isAiTeamMember && (
+        {!isAiTeam && (
           <button className="new-request-cta" onClick={openNewRequest}>
             <span>
               <Plus size={19} weight="bold" />
@@ -6754,10 +6817,18 @@ function UserDashboard({
         <article className="panel my-project-list">
           <header>
             <div>
-              <h2>{isAiTeamMember ? "내 담당 Agent 과제" : "내 Agent 과제"}</h2>
+              <h2>
+                {isLeader
+                  ? "팀 전체 Agent 과제"
+                  : isAiTeamMember
+                    ? "내 담당 Agent 과제"
+                    : "내 Agent 과제"}
+              </h2>
               <p>
-                {isAiTeamMember
-                  ? "개발 담당·리뷰어·운영 담당으로 배정된 과제입니다."
+                {isAiTeam
+                  ? isLeader
+                    ? "신규 접수부터 운영까지 팀이 관리하는 과제입니다."
+                    : "개발 담당·리뷰어·운영 담당으로 배정된 과제입니다."
                   : "요청자·Owner 관계로 연결된 과제입니다."}
               </p>
             </div>
@@ -6835,7 +6906,7 @@ function UserDashboard({
                   : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다."}
               </p>
             </div>
-            {isAiTeamMember ? (
+            {isAiTeam ? (
               <button onClick={() => openWorkflow(current.route, current.no)}>
                 업무 화면 열기 <ArrowRight size={13} weight="bold" />
               </button>
@@ -7130,9 +7201,14 @@ function UserDashboard({
             <FeasibilityResult
               projectNo={current.no}
               state={selectedOutputState}
-              editable={isAiTeamMember}
+              editable={isAiTeam}
               role={role}
               projectItem={current}
+              onComplete={() =>
+                setFeaCompletedProjects((items) =>
+                  items.includes(current.no) ? items : [...items, current.no],
+                )
+              }
             />
           ) : (selectedJourney === 2 || selectedJourney === 4) &&
             (selectedOutputState !== "생성 전" ||
@@ -7141,7 +7217,7 @@ function UserDashboard({
               gate={selectedJourney === 2 ? "G1" : "G2"}
               projectNo={current.no}
               role={role}
-              notify={() => undefined}
+              notify={notify}
             />
           ) : selectedJourney === 3 ? (
             <RequirementDefinitionResult
@@ -7154,9 +7230,9 @@ function UserDashboard({
             <DeliveryWorkplace
               role={role}
               openHub={() => setView("hub")}
-              notify={() => undefined}
+              notify={notify}
               embedded
-              viewerMode
+              viewerMode={!isAiTeam}
               lifecycleState={selectedOutputState}
               embeddedSection={
                 selectedJourney === 5

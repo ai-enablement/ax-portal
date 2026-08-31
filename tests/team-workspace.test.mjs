@@ -20,6 +20,19 @@ test("keeps role navigation and home actions separated", () => {
   assert.ok(page.includes("AI 활성화팀 대시보드"));
 });
 
+test("uses the same one-page home for leader and member with leader actions", () => {
+  assert.match(
+    page,
+    /role === ACCOUNT_ROLES\.leader \|\|\s*role === ACCOUNT_ROLES\.member \|\|\s*role === ACCOUNT_ROLES\.user/,
+  );
+  assert.ok(page.includes("팀 전체 Agent 과제"));
+  assert.ok(page.includes("팀장 감독·승인"));
+  assert.ok(page.includes("viewerMode={!isAiTeam}"));
+  assert.ok(page.includes("G1 판정 확정 · FEA 업데이트"));
+  assert.ok(page.includes("G3 최종 승인"));
+  assert.ok(page.includes("G4 최종 승인"));
+});
+
 test("keeps gate approvals with the leader and system administration separate", () => {
   assert.ok(page.includes("const approvalQueue"));
   assert.ok(page.includes('gate: "G3"'));

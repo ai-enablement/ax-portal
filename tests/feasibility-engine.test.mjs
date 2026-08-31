@@ -29,9 +29,16 @@ test("shows inherited guardrail and verification readiness", () => {
 
 test("embeds a writable FEA workspace in AI team home screens", () => {
   assert.ok(page.includes("function HomeFeasibilityEditor"));
-  assert.ok(page.includes('editable={isAiTeamMember}'));
+  assert.ok(page.includes('editable={isAiTeam}'));
+  assert.ok(page.includes("isLeader || isAiTeamMember"));
   assert.ok(page.includes("팀장 타당성 평가 작성"));
   assert.ok(page.includes("FEA 작성 완료 · G1 요청"));
   assert.ok(page.includes("접수서와 인터뷰 결과를 읽으면서"));
   assert.ok(css.includes(".home-fea-form-grid"));
+});
+
+test("advances an embedded FEA to the leader G1 action", () => {
+  assert.ok(page.includes("onComplete?.()"));
+  assert.ok(page.includes("feaCompletedProjects.includes(current.no)"));
+  assert.ok(page.includes("G1 판정 확정 · FEA 업데이트"));
 });
