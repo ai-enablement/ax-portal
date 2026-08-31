@@ -172,4 +172,6 @@ test("preserves the full-width readable visual baseline", () => {
       "Agent Life Cycle workspaces use the same enlarged fixed-label typography",
     ),
   );
+  assert.ok(css.includes("Global legibility scale"));
+  assert.ok(css.includes("font-size: 35px !important"));
 });

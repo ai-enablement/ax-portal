@@ -16124,3 +16124,193 @@ fieldset.fea-grid {
     overflow-y: auto;
   }
 }
+
+/* Global legibility scale — keep the existing cards, colors and information hierarchy. */
+body {
+  font-size: 15px;
+}
+
+.sidebar .brand strong {
+  font-size: 17px;
+}
+.sidebar .brand small,
+.sidebar .policy-card :is(strong, small) {
+  font-size: 12px;
+}
+.sidebar .nav-label {
+  font-size: 12px;
+}
+.sidebar nav button {
+  min-height: 52px;
+  font-size: 15px;
+}
+.sidebar nav em,
+.sidebar .team-nav-count {
+  font-size: 11px;
+}
+
+.main .page :where(h1) {
+  font-size: 35px !important;
+}
+.main .page :where(h2) {
+  font-size: 23px !important;
+}
+.main .page :where(h3) {
+  font-size: 19px !important;
+}
+.main .page :where(h4) {
+  font-size: 16px !important;
+}
+.main .page :where(p) {
+  font-size: 15px !important;
+  line-height: 1.6;
+}
+.main .page :where(small) {
+  font-size: 13px !important;
+  line-height: 1.5;
+}
+.main .page :where(label, dt, dd, li, th, td) {
+  font-size: 14px !important;
+  line-height: 1.55;
+}
+.main .page :where(button, input, select, textarea) {
+  font-size: 14px !important;
+  line-height: 1.5;
+}
+.main .page :where(strong, b) {
+  font-size: 15px !important;
+  line-height: 1.4;
+}
+.main .page :where(.eyebrow, .crumb) {
+  font-size: 13px !important;
+}
+.main .page .pill {
+  font-size: 12px !important;
+  line-height: 1.4;
+}
+.main .page :where(.table-head, .approval-head, .portfolio-head) {
+  font-size: 13px !important;
+}
+
+.project-stack > button {
+  min-height: 108px;
+}
+.main .oneview-grid .project-stack strong {
+  font-size: 16px !important;
+}
+.main .oneview-grid .project-stack small,
+.project-stage-label small {
+  font-size: 13px !important;
+}
+.project-stage-label b {
+  font-size: 17px !important;
+}
+.selected-project-status header p,
+.home-fea-editor-head p {
+  font-size: 14px !important;
+}
+.user-lifecycle-track.journey-v2.oneview-journey > button b {
+  font-size: 12px !important;
+}
+.user-lifecycle-track.journey-v2.oneview-journey > button small {
+  font-size: 10px !important;
+}
+.oneview-status .journey-legend,
+.oneview-status .journey-legend span {
+  font-size: 12px !important;
+}
+.project-schedule-strip :where(small, b) {
+  font-size: 13px !important;
+}
+
+.home-fea-editor-head > div:first-child small,
+.home-fea-editor-head > div:last-child > span,
+.home-fea-engine > header small,
+.home-fea-engine-grid small,
+.home-fea-engine-grid p,
+.home-fea-engine-grid span,
+.home-fea-engine > footer > span,
+.home-fea-form-grid > section > header small,
+.ard-section-detail small,
+.notification-panel small,
+.notification-panel em {
+  font-size: 12px !important;
+}
+.home-fea-engine > header b,
+.home-fea-form-grid > section > header b,
+.home-fea-alternatives b,
+.home-fea-fit span,
+.ard-section-detail p,
+.notification-panel b {
+  font-size: 14px !important;
+}
+.home-fea-form-grid :where(textarea, input, select),
+.home-fea-conclusion textarea,
+.delivery-document-editor :where(textarea, input),
+.delivery-document-reviewer textarea {
+  font-size: 14px !important;
+}
+
+.wizard :where(p, small, button, input, textarea, select, label),
+.drawer :where(p, small, button, input, textarea, select, label),
+.team-project-modal :where(p, small, button, input, textarea, select, label),
+.release-document-sheet :where(p, small, button, input, textarea, select, label, td, th) {
+  font-size: 14px !important;
+  line-height: 1.55;
+}
+.wizard :where(h2),
+.drawer :where(h2),
+.team-project-modal :where(h2),
+.release-document-sheet :where(h2) {
+  font-size: 25px !important;
+}
+.wizard :where(h3),
+.drawer :where(h3),
+.team-project-modal :where(h3),
+.release-document-sheet :where(h3) {
+  font-size: 19px !important;
+}
+
+@media (max-width: 980px) {
+  .main .page :where(h1) {
+    font-size: 31px !important;
+  }
+  .main .page :where(h2) {
+    font-size: 22px !important;
+  }
+  .main .page :where(h3) {
+    font-size: 18px !important;
+  }
+  .main .page :where(p) {
+    font-size: 14px !important;
+  }
+  .main .page :where(small) {
+    font-size: 12px !important;
+  }
+  .main .page :where(label, dt, dd, li, th, td),
+  .main .page :where(button, input, select, textarea) {
+    font-size: 13px !important;
+  }
+  .main .page :where(strong, b) {
+    font-size: 14px !important;
+  }
+  .main .page .pill {
+    font-size: 11px !important;
+  }
+  .project-stack > button {
+    min-height: 102px;
+  }
+  .main .oneview-grid .project-stack strong {
+    font-size: 15px !important;
+  }
+  .main .oneview-grid .project-stack small,
+  .project-stage-label small {
+    font-size: 12px !important;
+  }
+  .user-lifecycle-track.journey-v2.oneview-journey > button b {
+    font-size: 11px !important;
+  }
+  .user-lifecycle-track.journey-v2.oneview-journey > button small {
+    font-size: 9px !important;
+  }
+}
