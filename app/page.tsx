@@ -5142,7 +5142,9 @@ function GateApprovalResult({
   role,
   notify,
   onG1Resolved,
+  initialG1Resolution,
   basisReady = true,
+  homeEmbedded = false,
 }: {
   gate: "G1" | "G2";
   projectNo: string;
@@ -5153,7 +5155,13 @@ function GateApprovalResult({
     assignee: string,
     reason: string,
   ) => void;
+  initialG1Resolution?: {
+    decision: "GO" | "CONDITIONAL" | "DROP";
+    assignee: string;
+    reason: string;
+  } | null;
   basisReady?: boolean;
+  homeEmbedded?: boolean;
 }) {
   const isG1 = gate === "G1";
   const isRejectedCase = projectNo === "2026-028" && gate === "G2";
@@ -5169,16 +5177,20 @@ function GateApprovalResult({
     ) || userProjects[0];
   const [g1Decision, setG1Decision] = useState<
     "PENDING" | "GO" | "CONDITIONAL" | "DROP"
-  >(["2026-031", "2026-033"].includes(projectNo) ? "PENDING" : "GO");
+  >(
+    initialG1Resolution?.decision ||
+      (["2026-031", "2026-033"].includes(projectNo) ? "PENDING" : "GO"),
+  );
   const [g1DraftDecision, setG1DraftDecision] = useState<
     "PENDING" | "GO" | "CONDITIONAL" | "DROP"
   >("PENDING");
   const [g1Assignee, setG1Assignee] = useState(
-    ["2026-031", "2026-033"].includes(projectNo)
-      ? "미배정"
-      : project.teamOwner.replace("AI활성화팀 ", "").replace(" 담당자", ""),
+    initialG1Resolution?.assignee ||
+      (["2026-031", "2026-033"].includes(projectNo)
+        ? "미배정"
+        : project.teamOwner.replace("AI활성화팀 ", "").replace(" 담당자", "")),
   );
-  const [g1Reason, setG1Reason] = useState("");
+  const [g1Reason, setG1Reason] = useState(initialG1Resolution?.reason || "");
   const [myG2Vote, setMyG2Vote] = useState<"PENDING" | "APPROVED" | "REWORK">(
     "PENDING",
   );
@@ -5315,133 +5327,145 @@ function GateApprovalResult({
   const gatePending = isG1
     ? g1Decision === "PENDING" || !basisReady
     : !rejected && !g2Complete;
+  const showLeaderDecisionOnly =
+    homeEmbedded &&
+    isG1 &&
+    isLeader &&
+    basisReady &&
+    g1Decision === "PENDING";
   return (
     <>
       <section
-        className={`gate-approval-result ${rejected ? "rejected" : gatePending ? "pending" : "approved"}`}
+        className={`gate-approval-result ${homeEmbedded ? "home-gate-result" : ""} ${showLeaderDecisionOnly ? "decision-only" : ""} ${rejected ? "rejected" : gatePending ? "pending" : "approved"}`}
         aria-label={`${gate} 승인 기록`}
       >
-        <header>
-          <div>
-            <small>
-              {projectNo} · {gate} GATE
-            </small>
-            <h3>{isG1 ? "착수 승인" : "개발 착수 승인"}</h3>
-            <p>
-              {isG1
-                ? "완성된 타당성 평가서[FEA]를 근거로 팀장이 추진 여부와 개발 담당자를 결정합니다."
-                : "요구자·개발 담당자·AI활성화팀장이 완성된 ARD를 각각 검토하고 승인합니다."}
-            </p>
-          </div>
-          <Pill tone={rejected ? "red" : gatePending ? "orange" : "green"}>
-            {rejected
-              ? "보완 · 수정 요청"
-              : !basisReady
-                ? "FEA 작성 완료 대기"
-                : gatePending
-                  ? isG1
-                    ? "팀장 판정 대기"
-                    : "승인 진행 중"
-                  : "게이트 통과"}
-          </Pill>
-        </header>
-        <div className="gate-basis">
-          <div>
-            <small>승인 기준 문서</small>
-            <b>
-              {projectNo}-{isG1 ? "FEA" : "ARD"}
-            </b>
-            <span>
-              {rejected
-                ? "보완 요청 반영 중 · v0.8"
-                : !basisReady
-                  ? "작성 중 · v0.8"
-                  : "작성 완료 · v1.0"}
-            </span>
-          </div>
-          <ArrowRight size={18} weight="bold" />
-          <div>
-            <small>게이트 결과</small>
-            <b>
-              {rejected
-                ? "통과 불가"
-                : !basisReady
-                  ? "선행 단계 필요"
-                  : gatePending
-                    ? isG1
-                      ? "판정 전"
-                      : `${approvers.filter((item) => item.status === "승인").length}/3 승인`
-                    : isG1
-                      ? g1StatusLabel
-                      : "3자 승인 완료"}
-            </b>
-            <span>
-              {rejected
-                ? "세 명 모두 승인해야 진행할 수 있습니다"
-                : !basisReady
-                  ? "FEA 작성 완료 후 팀장 판정이 열립니다"
-                  : gatePending
-                    ? isG1
-                      ? "팀장 결정과 담당자 지정 필요"
-                      : "세 명의 개별 검토가 모두 필요"
-                    : "다음 단계 이동 가능"}
-            </span>
-          </div>
-        </div>
-        <div className="gate-approvers">
-          {approvers.map((item) => {
-            const positive = ["승인", "작성 완료", "배정"].includes(
-              item.status,
-            );
-            return (
-              <article
-                key={item.role}
-                className={
-                  item.status === "반려"
-                    ? "rejected"
-                    : positive
-                      ? "approved"
-                      : "waiting"
-                }
-              >
-                <div>
-                  <span>
-                    {positive ? (
-                      <Check size={13} weight="bold" />
-                    ) : item.status === "반려" ? (
-                      <X size={13} weight="bold" />
-                    ) : (
-                      "…"
-                    )}
-                  </span>
-                  <div>
-                    <small>{item.role}</small>
-                    <b>{item.name}</b>
-                    <em>{item.date}</em>
-                  </div>
-                  <Pill
-                    tone={
-                      positive
-                        ? "green"
-                        : item.status === "반려"
-                          ? "red"
-                          : "gray"
+        {!showLeaderDecisionOnly && (
+          <>
+            <header>
+              <div>
+                <small>
+                  {projectNo} · {gate} GATE
+                </small>
+                <h3>{isG1 ? "착수 승인" : "개발 착수 승인"}</h3>
+                <p>
+                  {isG1
+                    ? "완성된 타당성 평가서[FEA]를 근거로 팀장이 추진 여부와 개발 담당자를 결정합니다."
+                    : "요구자·개발 담당자·AI활성화팀장이 완성된 ARD를 각각 검토하고 승인합니다."}
+                </p>
+              </div>
+              <Pill tone={rejected ? "red" : gatePending ? "orange" : "green"}>
+                {rejected
+                  ? "보완 · 수정 요청"
+                  : !basisReady
+                    ? "FEA 작성 완료 대기"
+                    : gatePending
+                      ? isG1
+                        ? "팀장 판정 대기"
+                        : "승인 진행 중"
+                      : homeEmbedded && isG1
+                        ? "팀장 승인 완료"
+                        : "게이트 통과"}
+              </Pill>
+            </header>
+            <div className="gate-basis">
+              <div>
+                <small>승인 기준 문서</small>
+                <b>
+                  {projectNo}-{isG1 ? "FEA" : "ARD"}
+                </b>
+                <span>
+                  {rejected
+                    ? "보완 요청 반영 중 · v0.8"
+                    : !basisReady
+                      ? "작성 중 · v0.8"
+                      : "작성 완료 · v1.0"}
+                </span>
+              </div>
+              <ArrowRight size={18} weight="bold" />
+              <div>
+                <small>게이트 결과</small>
+                <b>
+                  {rejected
+                    ? "통과 불가"
+                    : !basisReady
+                      ? "선행 단계 필요"
+                      : gatePending
+                        ? isG1
+                          ? "판정 전"
+                          : `${approvers.filter((item) => item.status === "승인").length}/3 승인`
+                        : isG1
+                          ? g1StatusLabel
+                          : "3자 승인 완료"}
+                </b>
+                <span>
+                  {rejected
+                    ? "세 명 모두 승인해야 진행할 수 있습니다"
+                    : !basisReady
+                      ? "FEA 작성 완료 후 팀장 판정이 열립니다"
+                      : gatePending
+                        ? isG1
+                          ? "팀장 결정과 담당자 지정 필요"
+                          : "세 명의 개별 검토가 모두 필요"
+                        : "다음 단계 이동 가능"}
+                </span>
+              </div>
+            </div>
+            <div className="gate-approvers">
+              {approvers.map((item) => {
+                const positive = ["승인", "작성 완료", "배정"].includes(
+                  item.status,
+                );
+                return (
+                  <article
+                    key={item.role}
+                    className={
+                      item.status === "반려"
+                        ? "rejected"
+                        : positive
+                          ? "approved"
+                          : "waiting"
                     }
                   >
-                    {item.status}
-                  </Pill>
-                </div>
-                {item.reason && (
-                  <p>
-                    <b>보완·수정 사유</b>
-                    {item.reason}
-                  </p>
-                )}
-              </article>
-            );
-          })}
-        </div>
-        <section className="gate-schedule-card">
+                    <div>
+                      <span>
+                        {positive ? (
+                          <Check size={13} weight="bold" />
+                        ) : item.status === "반려" ? (
+                          <X size={13} weight="bold" />
+                        ) : (
+                          "…"
+                        )}
+                      </span>
+                      <div>
+                        <small>{item.role}</small>
+                        <b>{item.name}</b>
+                        <em>{item.date}</em>
+                      </div>
+                      <Pill
+                        tone={
+                          positive
+                            ? "green"
+                            : item.status === "반려"
+                              ? "red"
+                              : "gray"
+                        }
+                      >
+                        {item.status}
+                      </Pill>
+                    </div>
+                    {item.reason && (
+                      <p>
+                        <b>보완·수정 사유</b>
+                        {item.reason}
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {!homeEmbedded && <section className="gate-schedule-card">
           <div>
             <span>
               <CalendarBlank size={17} weight="fill" />
@@ -5482,7 +5506,7 @@ function GateApprovalResult({
               {deadlineRequestSent ? "변경 승인 대기" : "마감 일정 변경 요청"}
             </button>
           )}
-        </section>
+        </section>}
         {deadlineChangeOpen && !isG1 && (
           <section className="deadline-change-form">
             <header>
@@ -5529,7 +5553,7 @@ function GateApprovalResult({
             </button>
           </section>
         )}
-        {isG1 && isLeader && basisReady && (
+        {isG1 && isLeader && basisReady && g1Decision === "PENDING" && (
           <section className="g1-leader-decision">
             <header>
               <div>
@@ -6696,6 +6720,16 @@ function UserDashboard({
   const [feaCompletedProjects, setFeaCompletedProjects] = useState<string[]>(
     [],
   );
+  const [homeG1Resolutions, setHomeG1Resolutions] = useState<
+    Record<
+      string,
+      {
+        decision: "GO" | "CONDITIONAL" | "DROP";
+        assignee: string;
+        reason: string;
+      }
+    >
+  >({});
   const [pilotReleaseDocument, setPilotReleaseDocument] = useState<
     "DEP" | "UG" | null
   >(null);
@@ -6722,9 +6756,18 @@ function UserDashboard({
       : 0;
     setSelected(nextIndex);
     setSelectedJourney(projectItems[nextIndex].journeyStep);
-  }, [isAiTeam, projectItems, role]);
+  }, [isAiTeam, role]);
   const current = projectItems[selected] || projectItems[0];
-  const g1Status = current.journeyStep <= 1 ? "판정 대기" : "Go";
+  const currentG1Resolution = homeG1Resolutions[current.no] || null;
+  const g1Status = currentG1Resolution
+    ? currentG1Resolution.decision === "CONDITIONAL"
+      ? "Conditional Go"
+      : currentG1Resolution.decision === "DROP"
+        ? "Drop"
+        : "Go"
+    : current.journeyStep <= 1
+      ? "판정 대기"
+      : "Go";
   const intakeComplete =
     current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted);
   const effectiveJourneyStep = feaCompletedProjects.includes(current.no)
@@ -7028,7 +7071,7 @@ function UserDashboard({
               </p>
             </div>
             <div
-              className={`schedule-g1-status ${g1Status === "Go" ? "go" : "pending"}`}
+              className={`schedule-g1-status ${g1Status === "Go" ? "go" : g1Status === "Drop" ? "drop" : g1Status === "Conditional Go" ? "conditional" : "pending"}`}
             >
               <CheckCircle
                 size={17}
@@ -7237,6 +7280,14 @@ function UserDashboard({
               role={role}
               notify={notify}
               basisReady={selectedJourney !== 2 || effectiveJourneyStep >= 2}
+              homeEmbedded
+              initialG1Resolution={currentG1Resolution}
+              onG1Resolved={(decision, assignee, reason) =>
+                setHomeG1Resolutions((items) => ({
+                  ...items,
+                  [current.no]: { decision, assignee, reason },
+                }))
+              }
             />
           ) : selectedJourney === 3 ? (
             <RequirementDefinitionResult

@@ -12335,6 +12335,18 @@ body {
     max-height: 340px;
     overflow: auto;
   }
+  .project-schedule-strip {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .project-schedule-strip > .pill {
+    margin-left: 0;
+  }
+  .project-schedule-strip > small {
+    width: 100%;
+    border-left: 0;
+    padding-left: 0;
+  }
 }
 @media (max-width: 900px) {
   .chat-wizard-grid {
@@ -14540,6 +14552,14 @@ body {
 .schedule-g1-status.pending b {
   color: #a16a16 !important;
 }
+.schedule-g1-status.conditional svg,
+.schedule-g1-status.conditional b {
+  color: #b76a16 !important;
+}
+.schedule-g1-status.drop svg,
+.schedule-g1-status.drop b {
+  color: #c74650 !important;
+}
 .fea-g1-placeholder {
   display: flex;
   align-items: flex-start;
@@ -14566,6 +14586,15 @@ body {
 }
 .gate-approval-result.pending > header {
   background: #fffaf0;
+}
+.gate-approval-result.home-gate-result.approved > header {
+  background: #fffaf0;
+}
+.gate-approval-result.home-gate-result.decision-only {
+  background: #fff;
+}
+.gate-approval-result.home-gate-result.decision-only .g1-leader-decision {
+  margin-top: 14px;
 }
 .gate-decision-chip {
   display: flex !important;

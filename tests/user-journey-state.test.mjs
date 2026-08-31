@@ -28,6 +28,14 @@ test("lets AI team roles write FEA and locks G1 until complete", () => {
   assert.ok(page.includes("effectiveJourneyStep >= 2"));
   assert.ok(page.includes("AI 활성화팀 담당자는 FEA 작성·보완을 담당합니다."));
   assert.ok(page.includes("G1 승인과 개발 담당자 지정 권한은 팀장에게 있습니다."));
+  assert.ok(page.includes("showLeaderDecisionOnly"));
+  assert.ok(page.includes('g1Decision === "PENDING"'));
+  assert.ok(page.includes("팀장 승인 완료"));
+  assert.ok(page.includes("homeEmbedded"));
+  assert.ok(page.includes("homeG1Resolutions"));
+  assert.ok(page.includes("initialG1Resolution={currentG1Resolution}"));
+  assert.ok(page.includes("[current.no]: { decision, assignee, reason }"));
+  assert.ok(css.includes(".schedule-g1-status.conditional"));
 });
 
 test("closes rejected G2 rounds and uses the correct three signers", () => {
