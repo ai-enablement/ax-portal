@@ -133,8 +133,8 @@ async function createGalleryApplication(body) {
   assertSubmission(body);
   return withTransaction(async (client) => {
     const actor = await findUser(client, body.actorEmail);
-    if (!actor || actor.app_role !== "general_user") {
-      return { status: 403, body: { error: "Only an active general User can submit." } };
+    if (!actor || !["general_user", "team_member", "team_leader"].includes(actor.app_role)) {
+      return { status: 403, body: { error: "An active portal User or AI Enablement Team member is required." } };
     }
     let projectId = null;
     if (body.source === "OPERATIONS") {
@@ -144,12 +144,12 @@ async function createGalleryApplication(body) {
           where p.project_code = $1
             and p.current_stage_code = 'OPS'
             and p.project_status = 'operating'
-            and (p.owner_id = $2 or p.requester_id = $2 or exists (
+            and ($3 = true or p.owner_id = $2 or p.requester_id = $2 or exists (
               select 1 from agent_portal.project_members pm
                where pm.project_id = p.id and pm.user_id = $2
                  and pm.relationship in ('owner', 'requester') and pm.ended_at is null
             ))`,
-        [body.projectNo, actor.id],
+        [body.projectNo, actor.id, ["team_member", "team_leader"].includes(actor.app_role)],
       );
       if (!project.rows[0]) {
         return { status: 409, body: { error: "The project is not eligible for Gallery submission." } };

@@ -45,7 +45,7 @@ test("gallery database API uses parameterized queries and enforces role boundari
   const databaseApi = await read("server/database-api.mjs");
 
   assert.match(databaseApi, /where lower\(email\) = lower\(\$1\)/);
-  assert.match(databaseApi, /Only an active general User can submit/);
+  assert.match(databaseApi, /active portal User or AI Enablement Team member/);
   assert.match(databaseApi, /Only the original applicant can resubmit/);
   assert.match(databaseApi, /AI Enablement Team review permission is required/);
   assert.match(databaseApi, /Only the AI Enablement Team leader can publish/);

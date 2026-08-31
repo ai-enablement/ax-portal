@@ -35,6 +35,17 @@ test("role actions separate user submission from AI enablement review", () => {
   assert.match(page, /보완 후 재상신/);
   assert.match(page, /사용 화면 열기/);
   assert.match(page, /role === ACCOUNT_ROLES\.leader \|\| role === ACCOUNT_ROLES\.member/);
+  assert.match(page, /다른 사람의 Agent 대리 등록/);
+  assert.match(page, /실제 제작자 MS 계정/);
+  assert.match(page, /submissionMode: "SELF"/);
+});
+
+test("AI enablement roles can open governance and submit Gallery applications", () => {
+  assert.match(page, /"gallery",\s+"governance"/);
+  assert.match(page, /role !== ACCOUNT_ROLES\.user/);
+  assert.match(page, /isTeam \? "Agent 올리기" : "내 Agent 올리기"/);
+  assert.match(page, /AI 활성화팀 조회/);
+  assert.match(page, /조회 전용/);
 });
 
 test("operations route exposes a gallery submission action after G4", () => {
@@ -62,5 +73,7 @@ test("PostgreSQL schema persists submissions, reviews, and published entries", (
   assert.match(schema, /create table if not exists gallery_entries/);
   assert.match(schema, /'general_user', 'GALLERY_SUBMIT'/);
   assert.match(schema, /'team_member',\s+'GALLERY_REVIEW'/);
+  assert.match(schema, /'team_member',\s+'GALLERY_PROXY_SUBMIT'/);
   assert.match(schema, /'team_leader',\s+'GALLERY_PUBLISH'/);
+  assert.match(schema, /'team_leader',\s+'GALLERY_PROXY_SUBMIT'/);
 });

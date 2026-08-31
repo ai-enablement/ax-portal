@@ -1321,9 +1321,10 @@ export default function Home() {
               "operations",
               "hub",
               "gallery",
+              "governance",
             ])
           : role === ACCOUNT_ROLES.leader
-            ? new Set<View>(nav.map((item) => item.id).filter((id) => id !== "governance"))
+            ? new Set<View>(nav.map((item) => item.id))
             : new Set<View>(["governance", "hub", "gallery"]);
 
     return navGroups
@@ -1813,8 +1814,9 @@ export default function Home() {
             onUpdateApplication={updateGalleryApplication}
           />
         )}
-        {view === "governance" && role === ACCOUNT_ROLES.admin && (
+        {view === "governance" && role !== ACCOUNT_ROLES.user && (
           <Governance
+            role={role}
             onDetail={setDetail}
             notify={notify}
             projects={adminProjectItems}
@@ -13269,6 +13271,12 @@ function Gallery({
   const isTeam =
     role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member;
   const isLeader = role === ACCOUNT_ROLES.leader;
+  const submitterProfile =
+    role === ACCOUNT_ROLES.leader
+      ? { name: "최병두", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀장" }
+      : role === ACCOUNT_ROLES.member
+        ? { name: "허정환", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀원" }
+        : { name: "김현우", department: "개발1팀", roleLabel: "일반 User" };
   const [tab, setTab] = useState<"catalog" | "applications" | "review">(
     initialDraft ? "applications" : isTeam ? "review" : "catalog",
   );
@@ -13294,6 +13302,10 @@ function Gallery({
     dataClass: "사내",
     supportOwner: sourceDraft.supportOwner || "",
     evidence: sourceDraft.evidence || [],
+    submissionMode: "SELF" as "SELF" | "PROXY",
+    creatorName: "",
+    creatorDepartment: "",
+    creatorEmail: "",
   });
 
   const statusLabel: Record<GalleryReviewStatus, string> = {
@@ -13348,11 +13360,24 @@ function Gallery({
       dataClass: "사내",
       supportOwner: "",
       evidence: [],
+      submissionMode: "SELF",
+      creatorName: "",
+      creatorDepartment: "",
+      creatorEmail: "",
     });
     setSubmissionOpen(true);
     setTab("applications");
   };
   const startResubmission = (application: GalleryApplication) => {
+    const proxyEvidence = application.evidence.find((item) =>
+      item.startsWith("대리 등록 · 실제 제작자 "),
+    );
+    const [creatorName = "", creatorDepartment = "", creatorEmail = ""] =
+      proxyEvidence
+        ? proxyEvidence
+            .replace("대리 등록 · 실제 제작자 ", "")
+            .split(" · ")
+        : [];
     setEditingApplicationId(application.id);
     setForm({
       source: application.source,
@@ -13367,6 +13392,10 @@ function Gallery({
       dataClass: application.dataClass,
       supportOwner: application.supportOwner,
       evidence: application.evidence,
+      submissionMode: proxyEvidence ? "PROXY" : "SELF",
+      creatorName,
+      creatorDepartment,
+      creatorEmail,
     });
     setSubmissionOpen(true);
   };
@@ -13380,7 +13409,11 @@ function Gallery({
       !form.description.trim() ||
       !form.accessUrl.trim() ||
       !form.targetUsers.trim() ||
-      !form.supportOwner.trim()
+      !form.supportOwner.trim() ||
+      (form.submissionMode === "PROXY" &&
+        (!form.creatorName.trim() ||
+          !form.creatorDepartment.trim() ||
+          !form.creatorEmail.trim()))
     ) {
       notify("필수 항목을 모두 입력해 주세요.");
       return;
@@ -13398,13 +13431,17 @@ function Gallery({
       targetUsers: form.targetUsers.trim(),
       dataClass: form.dataClass,
       supportOwner: form.supportOwner.trim(),
-      applicant: "김현우 · 일반 User",
+      applicant: `${submitterProfile.name} · ${submitterProfile.roleLabel}`,
       submittedAt: "방금",
       status: "SUBMITTED",
-      evidence:
-        form.source === "OPERATIONS"
+      evidence: [
+        ...(form.source === "OPERATIONS"
           ? form.evidence
-          : ["사용 화면 링크", "공개 범위·운영 책임 입력", "AI 활성화팀 안전성 검토 예정"],
+          : ["사용 화면 링크", "공개 범위·운영 책임 입력", "AI 활성화팀 안전성 검토 예정"]),
+        form.submissionMode === "PROXY"
+          ? `대리 등록 · 실제 제작자 ${form.creatorName.trim()} · ${form.creatorDepartment.trim()} · ${form.creatorEmail.trim()}`
+          : `본인 제작 · ${submitterProfile.name} · ${submitterProfile.department} · ${ACCOUNT_EMAILS[role]}`,
+      ],
     };
     if (editingApplicationId) {
       onUpdateApplication(editingApplicationId, {
@@ -13450,9 +13487,9 @@ function Gallery({
                   ? "DB 확인 중"
                   : "목업 데이터"}
             </span>
-            {!isTeam && role !== ACCOUNT_ROLES.admin && (
+            {role !== ACCOUNT_ROLES.admin && (
               <button className="gallery-submit-button" onClick={startPersonalSubmission}>
-                <Plus size={18} weight="bold" /> 내 Agent 올리기
+                <Plus size={18} weight="bold" /> {isTeam ? "Agent 올리기" : "내 Agent 올리기"}
               </button>
             )}
             {isTeam && (
@@ -13503,8 +13540,8 @@ function Gallery({
 
       <nav className="gallery-tabs" aria-label="Gallery 화면 선택">
         <button className={tab === "catalog" ? "active" : ""} onClick={() => setTab("catalog")}>Agent 둘러보기</button>
-        {!isTeam && role !== ACCOUNT_ROLES.admin && (
-          <button className={tab === "applications" ? "active" : ""} onClick={() => setTab("applications")}>내 신청 현황</button>
+        {role !== ACCOUNT_ROLES.admin && (
+          <button className={tab === "applications" ? "active" : ""} onClick={() => setTab("applications")}>{isTeam ? "등록 신청 현황" : "내 신청 현황"}</button>
         )}
         {isTeam && (
           <button className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}>등록 검토</button>
@@ -13532,9 +13569,9 @@ function Gallery({
         </>
       )}
 
-      {tab === "applications" && !isTeam && (
+      {tab === "applications" && role !== ACCOUNT_ROLES.admin && (
         <section className="gallery-applications-panel">
-          <header><div><h2>내 Agent 등록 신청</h2><p>접수부터 보완, 등록 완료까지 진행 상태를 확인합니다.</p></div><button className="primary" onClick={startPersonalSubmission}>＋ 내 Agent 올리기</button></header>
+          <header><div><h2>{isTeam ? "Agent 등록 신청" : "내 Agent 등록 신청"}</h2><p>{isTeam ? "본인 제작 또는 대리 등록 신청과 검토 상태를 함께 확인합니다." : "접수부터 보완, 등록 완료까지 진행 상태를 확인합니다."}</p></div><button className="primary" onClick={startPersonalSubmission}>＋ {isTeam ? "Agent 올리기" : "내 Agent 올리기"}</button></header>
           <div className="gallery-application-list">
             {applications.map((application) => (
               <article key={application.id}>
@@ -13591,7 +13628,27 @@ function Gallery({
           <section className="gallery-submission-modal" onMouseDown={(event) => event.stopPropagation()}>
             <header><div><small>{form.source === "OPERATIONS" ? "운영 승인 Agent" : "개인 제작 Agent"}</small><h2>Agent Gallery 등록 신청</h2><p>AI 활성화팀이 접근권한·데이터·안전성과 운영 책임을 검토합니다.</p></div><button aria-label="닫기" onClick={closeSubmission}><X size={18} /></button></header>
             <div className="gallery-form-grid">
-              <label className="wide"><span>등록 경로</span><div className="gallery-source-readonly"><b>{form.source === "OPERATIONS" ? "운영 단계 최종 승인 후 등록" : "내가 직접 만든 Agent 등록"}</b><small>{form.source === "OPERATIONS" ? `${form.projectNo} · G4 승인 근거 자동 연결` : "일반 User 신청 · AI 활성화팀 검토 후 등록"}</small></div></label>
+              <label className="wide"><span>등록 경로</span><div className="gallery-source-readonly"><b>{form.source === "OPERATIONS" ? "운영 단계 최종 승인 후 등록" : isTeam && form.submissionMode === "PROXY" ? "다른 사람의 Agent 대리 등록" : "내가 직접 만든 Agent 등록"}</b><small>{form.source === "OPERATIONS" ? `${form.projectNo} · G4 승인 근거 자동 연결` : isTeam ? "AI 활성화팀 신청 · 신청자와 실제 제작자를 구분해 기록" : "일반 User 신청 · AI 활성화팀 검토 후 등록"}</small></div></label>
+              {isTeam && form.source === "PERSONAL" && (
+                <fieldset className="gallery-submitter-mode wide">
+                  <legend>등록 대상 *</legend>
+                  <label>
+                    <input type="radio" name="gallery-submission-mode" checked={form.submissionMode === "SELF"} onChange={() => setForm({ ...form, submissionMode: "SELF" })} />
+                    <span><b>내가 만든 Agent</b><small>{submitterProfile.name} · {submitterProfile.department}</small></span>
+                  </label>
+                  <label>
+                    <input type="radio" name="gallery-submission-mode" checked={form.submissionMode === "PROXY"} onChange={() => setForm({ ...form, submissionMode: "PROXY" })} />
+                    <span><b>다른 사람의 Agent 대리 등록</b><small>실제 제작자와 신청자를 구분해 기록합니다.</small></span>
+                  </label>
+                </fieldset>
+              )}
+              {isTeam && form.submissionMode === "PROXY" && (
+                <>
+                  <label><span>실제 제작자 이름 *</span><input value={form.creatorName} onChange={(event) => setForm({ ...form, creatorName: event.target.value })} placeholder="예: 박서연" /></label>
+                  <label><span>실제 제작자 부서 *</span><input value={form.creatorDepartment} onChange={(event) => setForm({ ...form, creatorDepartment: event.target.value })} placeholder="예: 품질혁신팀" /></label>
+                  <label className="wide"><span>실제 제작자 MS 계정 *</span><input type="email" value={form.creatorEmail} onChange={(event) => setForm({ ...form, creatorEmail: event.target.value })} placeholder="name@changshininc.com" /></label>
+                </>
+              )}
               <label><span>Agent 이름 *</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="업무를 알 수 있는 이름" /></label>
               <label><span>제작 플랫폼 *</span><select value={form.platform} onChange={(event) => setForm({ ...form, platform: event.target.value })}><option>Vibe Coding</option><option>Copilot Studio</option><option>Power Automate</option><option>Power Apps</option><option>기타</option></select></label>
               <label><span>산출물 유형 *</span><select value={form.artifactType} onChange={(event) => setForm({ ...form, artifactType: event.target.value })}><option>Agent</option><option>업무 App</option><option>자동화 Flow</option><option>기타</option></select></label>
@@ -13612,6 +13669,7 @@ function Gallery({
 }
 
 function Governance({
+  role,
   onDetail,
   notify,
   projects: adminProjects,
@@ -13620,6 +13678,7 @@ function Governance({
   selectedGate,
   onGateChange,
 }: {
+  role: AccountRole;
   onDetail: (p: (typeof projects)[0]) => void;
   notify: (s: string) => void;
   projects: UserProject[];
@@ -13631,6 +13690,7 @@ function Governance({
   selectedGate: string;
   onGateChange: (gate: string) => void;
 }) {
+  const isAdmin = role === ACCOUNT_ROLES.admin;
   const [tab, setTab] = useState("계정·역할");
   const [editingProjectNo, setEditingProjectNo] = useState<string | null>(null);
   const [adminDraft, setAdminDraft] = useState({
@@ -13688,7 +13748,9 @@ function Governance({
           <p className="eyebrow">CONTROL & ASSURANCE</p>
           <h1>Admin & Governance</h1>
           <p>
-            MS 계정 역할, 프로젝트 권한 정책과 변경 감사 이력을 관리합니다.
+            {isAdmin
+              ? "MS 계정 역할, 프로젝트 권한 정책과 변경 감사 이력을 관리합니다."
+              : "MS 계정 역할, 프로젝트 배정과 Governance 현황을 조회합니다."}
           </p>
         </div>
         <button
@@ -13789,13 +13851,16 @@ function Governance({
           <div className="admin-content admin-project-manager">
             <header>
               <div>
-                <b>전체 Agent 과제 수정·삭제</b>
+                <b>{isAdmin ? "전체 Agent 과제 수정·삭제" : "전체 Agent 과제 현황"}</b>
                 <p>
-                  Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나
-                  삭제할 수 있습니다.
+                  {isAdmin
+                    ? "Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나 삭제할 수 있습니다."
+                    : "AI 활성화팀은 전체 과제의 단계·Owner·담당 현황을 조회합니다."}
                 </p>
               </div>
-              <Pill tone="violet">Admin 전용</Pill>
+              <Pill tone={isAdmin ? "violet" : "blue"}>
+                {isAdmin ? "Admin 전용" : "AI 활성화팀 조회"}
+              </Pill>
             </header>
             <div className="admin-project-table">
               <div className="admin-project-head">
@@ -13815,20 +13880,26 @@ function Governance({
                   <span>{project.owner}</span>
                   <span>{project.handler}</span>
                   <span className="admin-project-actions">
-                    <button onClick={() => editProject(project)}>
-                      <PencilSimple size={14} weight="bold" /> 수정
-                    </button>
-                    <button
-                      className="danger"
-                      onClick={() => deleteAnyProject(project)}
-                    >
-                      <Trash size={14} weight="bold" /> 삭제
-                    </button>
+                    {isAdmin ? (
+                      <>
+                        <button onClick={() => editProject(project)}>
+                          <PencilSimple size={14} weight="bold" /> 수정
+                        </button>
+                        <button
+                          className="danger"
+                          onClick={() => deleteAnyProject(project)}
+                        >
+                          <Trash size={14} weight="bold" /> 삭제
+                        </button>
+                      </>
+                    ) : (
+                      <Pill tone="gray">조회 전용</Pill>
+                    )}
                   </span>
                 </div>
               ))}
             </div>
-            {editingProjectNo && (
+            {isAdmin && editingProjectNo && (
               <section className="admin-project-editor" aria-label="Agent 과제 수정">
                 <header>
                   <div>
