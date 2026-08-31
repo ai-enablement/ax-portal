@@ -1023,11 +1023,7 @@ export default function Home() {
             : new Set<View>(["governance", "hub", "gallery"]);
 
     return navGroups
-      .filter((group) =>
-        role === ACCOUNT_ROLES.user || role === ACCOUNT_ROLES.admin
-          ? group.label !== "AGENT LIFECYCLE"
-          : true,
-      )
+      .filter((group) => group.label !== "AGENT LIFECYCLE")
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => allowed.has(item.id)),

@@ -20,6 +20,10 @@ test("keeps role navigation and home actions separated", () => {
   assert.ok(page.includes("AI 활성화팀 대시보드"));
 });
 
+test("hides lifecycle navigation from every account role", () => {
+  assert.ok(page.includes('.filter((group) => group.label !== "AGENT LIFECYCLE")'));
+});
+
 test("uses the same one-page home for leader and member with leader actions", () => {
   assert.match(
     page,
