@@ -14,7 +14,10 @@ const css = await readFile(
 test("persists submitted intake and advances to FEA waiting", () => {
   assert.ok(page.includes("agent-portal-submitted-projects"));
   assert.ok(page.includes('status: "타당성 평가 대기"'));
-  assert.ok(page.includes("onSubmit([...answers], requestTitle)"));
+  assert.ok(page.includes("onSubmit([...answers], requestTitle, resolvedProjectOwner)"));
+  assert.ok(page.includes('ownerMode === "SELF"'));
+  assert.ok(page.includes("요구자와 Owner는 같을 수도, 다를 수도 있습니다."));
+  assert.ok(page.includes("projectOwner,"));
 });
 
 test("lets AI team roles write FEA and locks G1 until complete", () => {
@@ -57,6 +60,11 @@ test("locks pilot, G4, OPS and CHG behind prior approvals", () => {
   assert.ok(page.includes("G4 확산 승인은 아직 열리지 않았습니다"));
   assert.match(page, /G3 배포 승인 전에는 파일럿 실적과 G4 권고를 작성할\s*수 없습니다/);
   assert.match(page, /G4 공동 승인 전에는 운영 대장과\s*개선 이력을 조회하거나\s*등록할 수 없습니다/);
+  assert.ok(page.includes("const pilotGateReady ="));
+  assert.ok(page.includes("pilotResultsSaved"));
+  assert.ok(page.includes("pilotCriticalErrors"));
+  assert.ok(page.includes("Owner 승인 → AI활성화팀장 최종 승인"));
+  assert.ok(page.includes("파일럿 연장·보완 사유가 기록되었습니다"));
 });
 
 test("shows only operational agents in OPS and keeps rows accessible", () => {

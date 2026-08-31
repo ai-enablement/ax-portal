@@ -369,7 +369,11 @@ const userJourney = [
   },
 ];
 
-type UserProject = (typeof userProjects)[number] & { intakeAnswers?: string[] };
+type UserProject = (typeof userProjects)[number] & {
+  intakeAnswers?: string[];
+  requester?: string;
+  projectOwner?: string;
+};
 
 const memberAdditionalProjects: UserProject[] = [
   {
@@ -1139,7 +1143,11 @@ export default function Home() {
     setLlmCostGuideOpen(true);
   };
 
-  const submitAgentRequest = (answers: string[], title: string) => {
+  const submitAgentRequest = (
+    answers: string[],
+    title: string,
+    projectOwner: string,
+  ) => {
     setSubmittedProjects((current) => {
       const sequence = String(32 + current.length).padStart(3, "0");
       const project: UserProject = {
@@ -1149,7 +1157,7 @@ export default function Home() {
         status: "타당성 평가 대기",
         tone: "blue",
         progress: 22,
-        owner: "김현우",
+        owner: projectOwner,
         handler: "AI활성화팀 배정 대기",
         updated: "방금",
         nextAction: "타당성 평가 결과를 기다리고 있습니다",
@@ -1165,6 +1173,8 @@ export default function Home() {
         checkpoints: "3/11",
         route: "intake" as View,
         intakeAnswers: answers,
+        requester: "김현우 · 개발1팀",
+        projectOwner,
       };
       const next = [project, ...current];
       window.localStorage.setItem(
@@ -7329,7 +7339,11 @@ function UserDashboard({
                     <dl>
                       <div>
                         <dt>요구자</dt>
-                        <dd>김현우 · 개발1팀</dd>
+                        <dd>{current.requester || `${current.owner} · 요청 부서`}</dd>
+                      </div>
+                      <div>
+                        <dt>Project Owner</dt>
+                        <dd>{current.projectOwner || current.owner}</dd>
                       </div>
                       <div>
                         <dt>접수일</dt>
@@ -9949,7 +9963,9 @@ function DeliveryWorkplace({
         exitCriteria: string;
         rolloutPlan: string;
         pilotUsage: string;
+        pilotUsageRate: string;
         pilotErrors: string;
+        pilotCriticalErrors: string;
         pilotSatisfaction: string;
         pilotFeedback: string;
         pilotDecision: string;
@@ -9999,6 +10015,12 @@ function DeliveryWorkplace({
     projectNo === "2026-018",
   );
   const [g4OwnerApproved, setG4OwnerApproved] = useState(false);
+  const [g4ReviewReasons, setG4ReviewReasons] = useState<Record<string, string>>(
+    {},
+  );
+  const [g4ReviewRounds, setG4ReviewRounds] = useState<Record<string, number>>(
+    {},
+  );
   const [depChecks, setDepChecks] = useState(() =>
     projectNo === "2026-014" || projectNo === "2026-018"
       ? Array(9).fill(true)
@@ -11027,7 +11049,9 @@ function DeliveryWorkplace({
     exitCriteria: "사용률 80% 이상 · 만족도 4.0 이상 · 치명 오류 0건 · 일반 오류 3건 이하",
     rolloutPlan: "사내 게시판 공지 · 팀별 30분 교육 · 2026.09.15 공개 목표",
     pilotUsage: "486건",
+    pilotUsageRate: "86",
     pilotErrors: "1건 · 조치 완료",
+    pilotCriticalErrors: "0",
     pilotSatisfaction: "4.6 / 5.0",
     pilotFeedback: "근거 링크가 유용함",
     pilotDecision: "확산 승인 권고",
@@ -11052,14 +11076,30 @@ function DeliveryWorkplace({
     reportingGuide:
       "질문·답변·근거가 함께 보이도록 캡처하고 개인정보를 가린 뒤 기대한 결과를 한 줄로 적어주세요.",
   };
-  const updateDepDraft = (
-    field: keyof typeof depDraft,
-    value: string,
-  ) =>
+  const updateDepDraft = (field: keyof typeof depDraft, value: string) => {
     setDepDocumentDrafts((items) => ({
       ...items,
       [current.no]: { ...depDraft, [field]: value },
     }));
+    if (
+      [
+        "pilotUsage",
+        "pilotUsageRate",
+        "pilotErrors",
+        "pilotCriticalErrors",
+        "pilotSatisfaction",
+        "pilotFeedback",
+        "pilotDecision",
+      ].includes(field)
+    ) {
+      setSavedReleaseDocuments((items) => ({
+        ...items,
+        [`${current.no}:DEP`]: false,
+      }));
+      setG4OwnerApproved(false);
+      setG4Decision("PENDING");
+    }
+  };
   const updateUgDraft = (
     field: keyof typeof ugDraft,
     value: string,
@@ -11114,15 +11154,64 @@ function DeliveryWorkplace({
         : "리뷰어·팀장 G3 배포 승인이 기록되었습니다.",
     );
   };
+  const pilotUsageRate = Number.parseFloat(depDraft.pilotUsageRate) || 0;
+  const pilotSatisfaction =
+    Number.parseFloat(depDraft.pilotSatisfaction.match(/[\d.]+/)?.[0] || "0") ||
+    0;
+  const pilotCriticalErrors =
+    Number.parseInt(depDraft.pilotCriticalErrors.replace(/\D/g, ""), 10) || 0;
+  const pilotResultsSaved =
+    Boolean(savedReleaseDocuments[`${current.no}:DEP`]) ||
+    current.no === "2026-014";
+  const pilotCriteria = [
+    {
+      label: "파일럿 사용률 80% 이상",
+      value: `${pilotUsageRate}%`,
+      passed: pilotUsageRate >= 80,
+    },
+    {
+      label: "만족도 4.0 이상",
+      value: `${pilotSatisfaction} / 5.0`,
+      passed: pilotSatisfaction >= 4,
+    },
+    {
+      label: "치명 오류 0건",
+      value: `${pilotCriticalErrors}건`,
+      passed: pilotCriticalErrors === 0,
+    },
+    {
+      label: "운영·지식 담당 인수 완료",
+      value: depReady ? "완료" : "미완료",
+      passed: depReady,
+    },
+  ];
+  const pilotGateReady =
+    g3Approved &&
+    pilotResultsSaved &&
+    pilotCriteria.every((criterion) => criterion.passed);
+  const g4ReviewReason = g4ReviewReasons[current.no] || "";
+  const g4ReviewRound = g4ReviewRounds[current.no] || 1;
+
   const submitG4 = (decision: "APPROVED" | "EXTEND") => {
     if (decision === "EXTEND") {
+      if (!g4ReviewReason.trim())
+        return notify("파일럿 연장 또는 보완 사유를 먼저 입력해 주세요.");
       setG4Decision("EXTEND");
-      notify("파일럿 연장과 보완 조건이 저장되었습니다.");
+      setG4OwnerApproved(false);
+      setG4ReviewRounds((items) => ({
+        ...items,
+        [current.no]: g4ReviewRound + 1,
+      }));
+      setSavedReleaseDocuments((items) => ({
+        ...items,
+        [`${current.no}:DEP`]: false,
+      }));
+      notify("파일럿 연장·보완 사유가 기록되었습니다. DEP 수정 후 재심사합니다.");
       return;
     }
-    if (!g3Approved || !depReady)
+    if (!pilotGateReady)
       return notify(
-        "G3 배포 승인과 파일럿 종료 기준·인수인계 완료 후 G4 승인을 진행할 수 있습니다.",
+        "저장된 파일럿 결과가 종료 기준을 모두 충족한 뒤 G4 승인을 진행할 수 있습니다.",
       );
     if (isOwner) {
       setG4OwnerApproved(true);
@@ -12109,7 +12198,7 @@ function DeliveryWorkplace({
           )}
           {(!embedded || embeddedSection === "g4") && (
             <article
-              className={`panel g4-card ${!g3Approved ? "locked-stage-card" : ""}`}
+              className={`panel g4-card ${!pilotGateReady ? "locked-stage-card" : ""}`}
             >
               <div className="gate-work-head">
                 <div>
@@ -12125,7 +12214,7 @@ function DeliveryWorkplace({
                 </div>
                 <Pill
                   tone={
-                    !g3Approved
+                    !g3Approved || !pilotGateReady
                       ? "gray"
                       : g4Decision === "APPROVED"
                         ? "green"
@@ -12135,7 +12224,11 @@ function DeliveryWorkplace({
                   }
                 >
                   {!g3Approved
-                    ? "선행 단계 필요"
+                    ? "G3 승인 필요"
+                    : !pilotResultsSaved
+                      ? "파일럿 결과 저장 필요"
+                      : !pilotGateReady
+                        ? "종료 기준 미달"
                     : g4Decision === "APPROVED"
                       ? "공동 승인 완료"
                       : g4OwnerApproved
@@ -12146,18 +12239,31 @@ function DeliveryWorkplace({
               {g3Approved ? (
                 <>
                   <div className="g4-criteria">
-                    <span>
-                      <b>✓</b> 파일럿 사용률 80% 이상
-                    </span>
-                    <span>
-                      <b>✓</b> 만족도 4.0 이상
-                    </span>
-                    <span>
-                      <b>✓</b> 치명 오류 0건
-                    </span>
-                    <span>
-                      <b>✓</b> 운영·지식 담당 인수 완료
-                    </span>
+                    {pilotCriteria.map((criterion) => (
+                      <span
+                        key={criterion.label}
+                        className={criterion.passed ? "passed" : "failed"}
+                      >
+                        <b>{criterion.passed ? "✓" : "!"}</b>
+                        {criterion.label}
+                        <small>{criterion.value}</small>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="g4-review-status">
+                    <p>
+                      <b>G4 심사 {g4ReviewRound}차</b>
+                      <span>
+                        {pilotResultsSaved
+                          ? pilotGateReady
+                            ? "파일럿 결과 저장 완료 · 승인 가능"
+                            : "파일럿 종료 기준 미달 · 보완 또는 연장 필요"
+                          : "DEP의 파일럿 결과를 저장해야 심사가 열립니다."}
+                      </span>
+                    </p>
+                    {g4Decision === "EXTEND" && (
+                      <Pill tone="orange">보완 후 재심사 대기</Pill>
+                    )}
                   </div>
                   <div className="g4-signers">
                     <div>
@@ -12190,17 +12296,47 @@ function DeliveryWorkplace({
                     </div>
                   </div>
                   {!viewerMode && (isOwner || isLeader) && (
-                    <div className="g4-actions">
-                      <button onClick={() => submitG4("EXTEND")}>
-                        파일럿 연장
-                      </button>
-                      <button
-                        className="primary"
-                        disabled={isLeader && !g4OwnerApproved}
-                        onClick={() => submitG4("APPROVED")}
-                      >
-                        {isOwner ? "Owner 확산 승인" : "G4 최종 승인"}
-                      </button>
+                    <div className="g4-decision-area">
+                      <label>
+                        <span>연장·보완 또는 재심사 사유</span>
+                        <textarea
+                          value={g4ReviewReason}
+                          onChange={(event) =>
+                            setG4ReviewReasons((items) => ({
+                              ...items,
+                              [current.no]: event.target.value,
+                            }))
+                          }
+                          placeholder="예: 사용률이 기준에 미달해 대상 부서를 확대하고 1주 연장합니다."
+                        />
+                      </label>
+                      <div className="g4-actions">
+                        <button onClick={() => submitG4("EXTEND")}>
+                          파일럿 연장·보완 요청
+                        </button>
+                        <button
+                          className="primary"
+                          disabled={
+                            !pilotGateReady ||
+                            (isLeader && !g4OwnerApproved)
+                          }
+                          onClick={() => submitG4("APPROVED")}
+                        >
+                          {isOwner ? "Owner 확산 승인" : "G4 최종 승인"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {!pilotGateReady && (
+                    <div className="locked-stage-notice">
+                      <Info size={18} weight="fill" />
+                      <p>
+                        <b>G4 승인 기능이 잠겨 있습니다.</b>
+                        <span>
+                          DEP에서 파일럿 결과를 저장하고 모든 종료 기준을 충족해야
+                          Owner 승인 → AI활성화팀장 최종 승인 순서로 진행됩니다.
+                        </span>
+                      </p>
                     </div>
                   )}
                 </>
@@ -12498,6 +12634,20 @@ function DeliveryWorkplace({
                             ) : <b>{depDraft.pilotUsage}</b>}
                           </article>
                           <article>
+                            <small>사용률 (%)</small>
+                            {canEditCurrentProject ? (
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={depDraft.pilotUsageRate}
+                                onChange={(event) =>
+                                  updateDepDraft("pilotUsageRate", event.target.value)
+                                }
+                              />
+                            ) : <b>{depDraft.pilotUsageRate}%</b>}
+                          </article>
+                          <article>
                             <small>오류 신고</small>
                             {canEditCurrentProject ? (
                               <input
@@ -12507,6 +12657,19 @@ function DeliveryWorkplace({
                                 }
                               />
                             ) : <b>{depDraft.pilotErrors}</b>}
+                          </article>
+                          <article>
+                            <small>치명 오류 (건)</small>
+                            {canEditCurrentProject ? (
+                              <input
+                                type="number"
+                                min="0"
+                                value={depDraft.pilotCriticalErrors}
+                                onChange={(event) =>
+                                  updateDepDraft("pilotCriticalErrors", event.target.value)
+                                }
+                              />
+                            ) : <b>{depDraft.pilotCriticalErrors}건</b>}
                           </article>
                           <article>
                             <small>만족도</small>
@@ -12704,6 +12867,10 @@ function DeliveryWorkplace({
                       ...items,
                       [current.no]: depDraft,
                     }));
+                    if (g4Decision === "EXTEND") {
+                      setG4Decision("PENDING");
+                      setG4OwnerApproved(false);
+                    }
                   } else {
                     setUgDocumentDrafts((items) => ({
                       ...items,
@@ -12715,7 +12882,9 @@ function DeliveryWorkplace({
                     [`${current.no}:${releaseDocument}`]: true,
                   }));
                   notify(
-                    `${releaseDocument === "DEP" ? "배포 체크리스트[DEP]" : "사용자 가이드[UG]"} 작성 내용을 저장했습니다.`,
+                    releaseDocument === "DEP" && g4Decision === "EXTEND"
+                      ? "배포 체크리스트[DEP] 보완 내용을 저장해 G4 재심사를 요청했습니다."
+                      : `${releaseDocument === "DEP" ? "배포 체크리스트[DEP]" : "사용자 가이드[UG]"} 작성 내용을 저장했습니다.`,
                   );
                 }}
               >
@@ -13764,7 +13933,7 @@ function RequestWizard({
   step: number;
   setStep: (n: number) => void;
   close: () => void;
-  onSubmit: (answers: string[], title: string) => void;
+  onSubmit: (answers: string[], title: string, projectOwner: string) => void;
 }) {
   const labels = [
     "업무 문제",
@@ -13789,6 +13958,10 @@ function RequestWizard({
   ];
   const [answers, setAnswers] = useState(["", "", "", "", ""]);
   const [submitted, setSubmitted] = useState(false);
+  const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
+  const [projectOwner, setProjectOwner] = useState("");
+  const resolvedProjectOwner =
+    ownerMode === "SELF" ? "김현우 · 개발1팀" : projectOwner.trim();
   const requestTitle = suggestRequestTitle(answers[0]);
   const updateAnswer = (value: string) =>
     setAnswers((items) =>
@@ -13799,7 +13972,8 @@ function RequestWizard({
     if (step < 5) setStep(step + 1);
     else {
       setSubmitted(true);
-      onSubmit([...answers], requestTitle);
+      if (!resolvedProjectOwner) return;
+      onSubmit([...answers], requestTitle, resolvedProjectOwner);
       close();
     }
   };
@@ -13845,6 +14019,13 @@ function RequestWizard({
             <div>
               <b>요청 제목</b>
               <p>{requestTitle}</p>
+            </div>
+            <div className="filled">
+              <b>요구자 / Project Owner</b>
+              <p>요구자 · 김현우 · 개발1팀</p>
+              <p>
+                Owner · {resolvedProjectOwner || "오른쪽에서 지정해 주세요."}
+              </p>
             </div>
             {labels.map((label, index) => (
               <div
@@ -13901,18 +14082,50 @@ function RequestWizard({
             </div>
             <div className="wizard-chat-input">
               {step === 5 ? (
-                <label className="wizard-date-input">
-                  <span>희망 완료일</span>
-                  <input
-                    type="date"
-                    min="2026-08-29"
-                    value={answers[step - 1]}
-                    onInput={(event) =>
-                      updateAnswer((event.target as HTMLInputElement).value)
-                    }
-                    onChange={(event) => updateAnswer(event.target.value)}
-                  />
-                </label>
+                <div className="wizard-final-fields">
+                  <label className="wizard-date-input">
+                    <span>희망 완료일</span>
+                    <input
+                      type="date"
+                      min="2026-08-29"
+                      value={answers[step - 1]}
+                      onInput={(event) =>
+                        updateAnswer((event.target as HTMLInputElement).value)
+                      }
+                      onChange={(event) => updateAnswer(event.target.value)}
+                    />
+                  </label>
+                  <fieldset className="wizard-owner-field">
+                    <legend>Project Owner 지정</legend>
+                    <p>요구자와 Owner는 같을 수도, 다를 수도 있습니다.</p>
+                    <label>
+                      <input
+                        type="radio"
+                        name="project-owner-mode"
+                        checked={ownerMode === "SELF"}
+                        onChange={() => setOwnerMode("SELF")}
+                      />
+                      요구자와 동일 · 김현우
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="project-owner-mode"
+                        checked={ownerMode === "OTHER"}
+                        onChange={() => setOwnerMode("OTHER")}
+                      />
+                      다른 Owner 지정
+                    </label>
+                    {ownerMode === "OTHER" && (
+                      <input
+                        value={projectOwner}
+                        onChange={(event) => setProjectOwner(event.target.value)}
+                        placeholder="예: 박서연 · 품질혁신팀장"
+                        aria-label="Project Owner 이름과 소속"
+                      />
+                    )}
+                  </fieldset>
+                </div>
               ) : (
                 <textarea
                   value={answers[step - 1]}
@@ -13921,7 +14134,11 @@ function RequestWizard({
                 />
               )}
               <button
-                disabled={!answers[step - 1].trim() || submitted}
+                disabled={
+                  !answers[step - 1].trim() ||
+                  !resolvedProjectOwner ||
+                  submitted
+                }
                 onClick={advance}
               >
                 {step === 5 ? "접수서 제출" : "답변 저장"}
