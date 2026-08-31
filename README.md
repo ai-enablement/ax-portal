@@ -12,12 +12,61 @@ AI 에이전트 과제의 요구 접수부터 타당성 평가, 승인, 설계·
 - 단계별 산출물 상세보기와 승인·반려 이력 시각화
 - 요구 접수 단계의 사용자 삭제 및 Admin 전체 관리 기능
 
-## 현재 데이터 방식
+## PostgreSQL 연결 구조
 
-현재 버전은 UI/UX 검증용 프로토타입이며 입력·변경 데이터는 브라우저의
-`localStorage`에 저장됩니다. 온프레미스 PostgreSQL용 초기 스키마는
-[`database/postgresql/agent_governance_portal_schema.sql`](database/postgresql/agent_governance_portal_schema.sql)에
-있으며, 서버 API와의 실제 연동은 별도 작업이 필요합니다.
+포털에는 온프레미스 PostgreSQL 연결 계층이 포함되어 있습니다.
+DB 비밀번호는 브라우저나 배포 번들에 넣지 않고, 사내 API 게이트웨이에서만
+사용합니다.
+
+```text
+사용자 브라우저
+  → 포털의 /api/database (비밀값 비노출)
+  → 사내 PostgreSQL 게이트웨이
+  → 온프레미스 PostgreSQL (SSL 미사용)
+```
+
+현재 Agent Gallery 신청·검토·등록 흐름이 이 API를 우선 사용합니다. 게이트웨이가
+아직 설정되지 않았거나 접속할 수 없으면 기존 목업 데이터와 브라우저 임시 저장소로
+자동 전환되어 UI 검토를 계속할 수 있습니다.
+
+## `.env` 설정
+
+저장소 루트에 [`.env.example`](.env.example)과 로컬 전용 `.env` 양식이 준비되어
+있습니다. `.env`의 `CHANGE_ME` 값과 PostgreSQL 주소를 실제 값으로 교체하세요.
+완성된 `.env`와 자동 생성되는 `.dev.vars`는 Git에 포함되지 않습니다.
+
+```dotenv
+PGHOST=사내_DB_주소
+PGPORT=5432
+PGDATABASE=agent_governance_portal
+PGUSER=agent_portal_app
+PGPASSWORD=실제_비밀번호
+PGSSLMODE=disable
+
+PORTAL_GATEWAY_TOKEN=충분히_긴_임의_문자열
+DATABASE_GATEWAY_URL=http://사내_게이트웨이_주소:8787
+DATABASE_GATEWAY_TOKEN=PORTAL_GATEWAY_TOKEN과_동일한_값
+```
+
+초기 스키마는
+[`database/postgresql/agent_governance_portal_schema.sql`](database/postgresql/agent_governance_portal_schema.sql)을
+온프레미스 DB에서 먼저 실행합니다. 그 후 아래 순서로 연결을 확인합니다.
+
+```bash
+npm run db:check
+npm run db:gateway
+```
+
+다른 터미널에서 포털을 실행합니다.
+
+```bash
+npm run dev:with-db
+```
+
+배포 사이트에서는 `.env` 파일을 업로드하지 않습니다. Sites 환경변수에는
+`DATABASE_GATEWAY_TOKEN`만 비밀값으로 등록하고, 사내 게이트웨이는 private HTTP
+tunnel 또는 사내에서 승인된 HTTPS 엔드포인트로 연결해야 합니다. PostgreSQL의
+`PGPASSWORD`는 계속 사내 게이트웨이에만 보관합니다.
 
 ## 실행 방법
 
@@ -25,7 +74,7 @@ AI 에이전트 과제의 요구 접수부터 타당성 평가, 승인, 설계·
 
 ```bash
 npm ci
-npm run dev
+npm run dev:with-db
 ```
 
 기본 개발 주소는 Vite가 출력하는 로컬 URL을 사용합니다.

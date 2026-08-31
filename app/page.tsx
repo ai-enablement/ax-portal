@@ -45,6 +45,13 @@ const ACCOUNT_ROLES = {
 } as const;
 
 type AccountRole = (typeof ACCOUNT_ROLES)[keyof typeof ACCOUNT_ROLES];
+const ACCOUNT_EMAILS: Record<AccountRole, string> = {
+  [ACCOUNT_ROLES.leader]: "choi.bd@changshininc.com",
+  [ACCOUNT_ROLES.member]: "heo.jh@changshininc.com",
+  [ACCOUNT_ROLES.user]: "kim.hw@changshininc.com",
+  [ACCOUNT_ROLES.admin]: "portal.admin@changshininc.com",
+};
+type DatabaseStatus = "checking" | "connected" | "fallback";
 type ProjectRelationship =
   | "REQUESTER"
   | "OWNER"
@@ -1154,6 +1161,7 @@ export default function Home() {
   const [galleryApplications, setGalleryApplications] = useState<
     GalleryApplication[]
   >(initialGalleryApplications);
+  const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>("checking");
 
   useEffect(() => {
     try {
@@ -1179,6 +1187,46 @@ export default function Home() {
       window.localStorage.removeItem("agent-portal-submitted-projects");
     }
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadDatabaseData() {
+      try {
+        const [healthResponse, galleryResponse] = await Promise.all([
+          fetch("/api/database/health", { signal: controller.signal }),
+          fetch(
+            `/api/database/gallery/applications?email=${encodeURIComponent(ACCOUNT_EMAILS[role])}`,
+            { signal: controller.signal },
+          ),
+        ]);
+        if (!healthResponse.ok || !galleryResponse.ok) {
+          throw new Error("Database gateway is unavailable.");
+        }
+        const galleryPayload = (await galleryResponse.json()) as {
+          applications?: GalleryApplication[];
+        };
+        if (!active) return;
+        const databaseApplications = galleryPayload.applications || [];
+        setGalleryApplications(databaseApplications);
+        window.localStorage.setItem(
+          "agent-portal-gallery-applications",
+          JSON.stringify(databaseApplications),
+        );
+        setDatabaseStatus("connected");
+      } catch (error) {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
+        setDatabaseStatus("fallback");
+      }
+    }
+
+    loadDatabaseData();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [role]);
 
   const userProjectItems = useMemo<UserProject[]>(
     () =>
@@ -1305,13 +1353,40 @@ export default function Home() {
     go("gallery");
   };
 
-  const submitGalleryApplication = (application: GalleryApplication) => {
-    saveGalleryApplications([application, ...galleryApplications]);
+  const submitGalleryApplication = async (application: GalleryApplication) => {
+    const optimistic = [application, ...galleryApplications];
+    saveGalleryApplications(optimistic);
     setGalleryDraft(null);
-    notify("Agent Gallery 등록 신청이 접수되었습니다. AI 활성화팀 검토 후 결과를 알려드립니다.");
+    if (databaseStatus === "connected") {
+      try {
+        const response = await fetch("/api/database/gallery/applications", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...application, actorEmail: ACCOUNT_EMAILS[role] }),
+        });
+        const payload = (await response.json()) as {
+          application?: GalleryApplication;
+          error?: string;
+        };
+        if (!response.ok || !payload.application) {
+          throw new Error(payload.error || "등록 신청 저장에 실패했습니다.");
+        }
+        saveGalleryApplications([
+          payload.application,
+          ...optimistic.filter((item) => item.id !== application.id),
+        ]);
+        notify("Agent Gallery 등록 신청이 PostgreSQL에 저장되었습니다.");
+        return;
+      } catch {
+        setDatabaseStatus("fallback");
+        notify("DB에 연결되지 않아 이 브라우저에 임시 저장했습니다.");
+        return;
+      }
+    }
+    notify("Agent Gallery 등록 신청이 이 브라우저에 임시 저장되었습니다.");
   };
 
-  const updateGalleryApplication = (
+  const updateGalleryApplication = async (
     id: string,
     changes: Partial<GalleryApplication>,
   ) => {
@@ -1319,6 +1394,32 @@ export default function Home() {
       application.id === id ? { ...application, ...changes } : application,
     );
     saveGalleryApplications(next);
+    if (databaseStatus !== "connected") return;
+    try {
+      const response = await fetch(
+        `/api/database/gallery/applications/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...changes, actorEmail: ACCOUNT_EMAILS[role] }),
+        },
+      );
+      const payload = (await response.json()) as {
+        application?: GalleryApplication;
+        error?: string;
+      };
+      if (!response.ok || !payload.application) {
+        throw new Error(payload.error || "변경 내용을 저장하지 못했습니다.");
+      }
+      saveGalleryApplications(
+        next.map((application) =>
+          application.id === id ? payload.application! : application,
+        ),
+      );
+    } catch {
+      setDatabaseStatus("fallback");
+      notify("DB에 연결되지 않아 변경 내용을 이 브라우저에 임시 저장했습니다.");
+    }
   };
 
   const go = (next: View) => {
@@ -1704,6 +1805,7 @@ export default function Home() {
             agents={filteredAgents}
             notify={notify}
             role={role}
+            databaseStatus={databaseStatus}
             applications={galleryApplications}
             initialDraft={galleryDraft}
             onDraftHandled={() => setGalleryDraft(null)}
@@ -13142,6 +13244,7 @@ function Gallery({
   agents: list,
   notify,
   role,
+  databaseStatus,
   applications,
   initialDraft,
   onDraftHandled,
@@ -13153,6 +13256,7 @@ function Gallery({
   agents: typeof agents;
   notify: (s: string) => void;
   role: AccountRole;
+  databaseStatus: DatabaseStatus;
   applications: GalleryApplication[];
   initialDraft: GalleryDraft | null;
   onDraftHandled: () => void;
@@ -13338,16 +13442,25 @@ function Gallery({
             </h1>
             <p>AI 활성화팀의 검토와 등록 승인을 통과한 사내 Agent만 공개됩니다.</p>
           </div>
-          {!isTeam && role !== ACCOUNT_ROLES.admin && (
-            <button className="gallery-submit-button" onClick={startPersonalSubmission}>
-              <Plus size={18} weight="bold" /> 내 Agent 올리기
-            </button>
-          )}
-          {isTeam && (
-            <button className="gallery-review-button" onClick={() => setTab("review")}>
-              <ClipboardText size={18} weight="bold" /> 등록 검토 {applications.filter((item) => item.status !== "PUBLISHED").length}건
-            </button>
-          )}
+          <div className="gallery-hero-actions">
+            <span className={`gallery-db-status ${databaseStatus}`}>
+              {databaseStatus === "connected"
+                ? "PostgreSQL 연결"
+                : databaseStatus === "checking"
+                  ? "DB 확인 중"
+                  : "목업 데이터"}
+            </span>
+            {!isTeam && role !== ACCOUNT_ROLES.admin && (
+              <button className="gallery-submit-button" onClick={startPersonalSubmission}>
+                <Plus size={18} weight="bold" /> 내 Agent 올리기
+              </button>
+            )}
+            {isTeam && (
+              <button className="gallery-review-button" onClick={() => setTab("review")}>
+                <ClipboardText size={18} weight="bold" /> 등록 검토 {applications.filter((item) => item.status !== "PUBLISHED").length}건
+              </button>
+            )}
+          </div>
         </div>
         <label className="search">
           <span>⌕</span>
