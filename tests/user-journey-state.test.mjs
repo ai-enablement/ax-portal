@@ -24,6 +24,10 @@ test("lets AI team roles write FEA and locks G1 until complete", () => {
   assert.ok(page.includes('["2026-031", "2026-033"]'));
   assert.ok(page.includes("FEA가 아직 작성 중입니다"));
   assert.ok(page.includes('g1DraftDecision === "PENDING"'));
+  assert.ok(page.includes("selectedJourney === 2 && isAiTeam"));
+  assert.ok(page.includes("effectiveJourneyStep >= 2"));
+  assert.ok(page.includes("AI 활성화팀 담당자는 FEA 작성·보완을 담당합니다."));
+  assert.ok(page.includes("G1 승인과 개발 담당자 지정 권한은 팀장에게 있습니다."));
 });
 
 test("closes rejected G2 rounds and uses the correct three signers", () => {

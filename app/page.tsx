@@ -5627,6 +5627,23 @@ function GateApprovalResult({
             </p>
           </section>
         )}
+        {isG1 && isMember && (
+          <section className="gate-role-readonly member-g1-role">
+            <Info size={17} weight="fill" />
+            <p>
+              <b>
+                {basisReady
+                  ? "FEA 상신이 완료되어 팀장 판정을 기다리고 있습니다."
+                  : "AI 활성화팀 담당자는 FEA 작성·보완을 담당합니다."}
+              </b>
+              <span>
+                {basisReady
+                  ? "팀원은 최종 FEA와 승인 진행 상태, 판정 후 개발 담당자 배정 결과를 조회합니다. Go / Conditional Go / Drop 결정과 개발 담당자 지정은 최병두 팀장만 수행합니다."
+                  : "요구자 인터뷰를 바탕으로 대안 검토·적합성·ROI·트랙 근거를 완성해 G1에 상신합니다. G1 승인과 개발 담당자 지정 권한은 팀장에게 있습니다."}
+              </span>
+            </p>
+          </section>
+        )}
         {!isG1 && canActOnG2 && !rejected && myApprovalPending && (
           <section className="g2-role-action">
             <header>
@@ -7210,14 +7227,16 @@ function UserDashboard({
                 )
               }
             />
-          ) : (selectedJourney === 2 || selectedJourney === 4) &&
-            (selectedOutputState !== "생성 전" ||
-              (current.no === "2026-028" && selectedJourney === 4)) ? (
+          ) : (selectedJourney === 2 && isAiTeam) ||
+            ((selectedJourney === 2 || selectedJourney === 4) &&
+              (selectedOutputState !== "생성 전" ||
+                (current.no === "2026-028" && selectedJourney === 4))) ? (
             <GateApprovalResult
               gate={selectedJourney === 2 ? "G1" : "G2"}
               projectNo={current.no}
               role={role}
               notify={notify}
+              basisReady={selectedJourney !== 2 || effectiveJourneyStep >= 2}
             />
           ) : selectedJourney === 3 ? (
             <RequirementDefinitionResult
