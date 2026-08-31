@@ -933,6 +933,78 @@ const aiTeamMembers = [
   "이재승",
 ];
 
+function teamRequirementAsHomeProject(item: TeamRequirement): UserProject {
+  const journeyStep = item.stage.includes("타당성")
+    ? 1
+    : item.stage.includes("요구 정의")
+      ? 3
+      : item.stage.includes("G2")
+        ? 4
+        : item.stage.includes("평가")
+          ? 5
+          : item.stage.includes("G3")
+            ? 6
+            : item.stage.includes("파일럿")
+              ? 7
+              : item.stage.includes("운영") || item.status === "완료"
+                ? 9
+                : 0;
+  const route: View =
+    journeyStep <= 2
+      ? "intake"
+      : journeyStep <= 4
+        ? "definition"
+        : journeyStep >= 9
+          ? "operations"
+          : "delivery";
+
+  return {
+    no: item.id,
+    name: item.title,
+    stage: Math.min(6, Math.max(1, journeyStep || 1)),
+    status:
+      item.risk === "지연 위험" ? "오늘 조치 필요" : item.status,
+    tone:
+      item.risk === "지연 위험"
+        ? "red"
+        : item.status === "완료"
+          ? "green"
+          : "blue",
+    progress: item.progress,
+    owner: item.requester,
+    handler:
+      item.assignee === "미배정"
+        ? "AI활성화팀 배정 대기"
+        : `AI활성화팀 ${item.assignee} 담당자`,
+    updated: item.received,
+    nextAction: item.nextAction,
+    description: `${item.requestTeam}에서 요청한 과제의 전체 이력과 현재 진행 상태입니다.`,
+    journeyStep,
+    nextGate:
+      journeyStep < 2
+        ? "G1 착수 승인"
+        : journeyStep < 4
+          ? "G2 개발 착수"
+          : journeyStep < 6
+            ? "G3 배포 승인"
+            : journeyStep < 8
+              ? "G4 확산 승인"
+              : "정기 재평가",
+    teamOwner:
+      item.assignee === "미배정"
+        ? "AI활성화팀 배정 대기"
+        : `AI활성화팀 ${item.assignee} 담당자`,
+    dueDate: `2026.08.${String(item.dueDay).padStart(2, "0")}`,
+    requestedDate: "요청서 확인 필요",
+    committedDate: "G2 승인 후 확정",
+    scheduleState: item.risk,
+    checkpoints: `${Math.max(1, Math.round(item.progress / 7))}/16`,
+    route,
+    requester: `${item.requester} · ${item.requestTeam}`,
+    projectOwner: item.requester,
+  };
+}
+
 function Pill({
   children,
   tone = "gray",
@@ -1348,6 +1420,7 @@ export default function Home() {
         {view === "home" && (
           <Dashboard
             role={role}
+            projectNo={workflowTarget}
             setView={go}
             setRequestOpen={setRequestOpen}
             setDetail={setDetail}
@@ -1550,7 +1623,6 @@ export default function Home() {
           project={detail}
           role={role}
           close={() => setDetail(null)}
-          openHub={openHub}
           openWorkflow={(next, projectNo) => {
             setWorkflowTarget(projectNo);
             setDetail(null);
@@ -1580,6 +1652,7 @@ export default function Home() {
 
 function Dashboard({
   role,
+  projectNo,
   setView,
   setRequestOpen,
   setDetail,
@@ -1589,6 +1662,7 @@ function Dashboard({
   notify,
 }: {
   role: string;
+  projectNo?: string;
   setView: (v: View) => void;
   setRequestOpen: (v: boolean) => void;
   setDetail: (p: (typeof projects)[0]) => void;
@@ -1597,6 +1671,26 @@ function Dashboard({
   openWorkflow: (view: View, projectNo: string) => void;
   notify: (message: string) => void;
 }) {
+  const baseProjectItems =
+    role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.leader
+      ? [
+          memberAdditionalProjects[0],
+          ...userProjectItems.filter((project) =>
+            ["2026-028", "2026-021", "2026-014"].includes(project.no),
+          ),
+          memberAdditionalProjects[2],
+          memberAdditionalProjects[1],
+        ]
+      : userProjectItems;
+  const targetRequirement = teamRequirements.find(
+    (project) => project.id === projectNo,
+  );
+  const homeProjectItems =
+    targetRequirement &&
+    !baseProjectItems.some((project) => project.no === targetRequirement.id)
+      ? [teamRequirementAsHomeProject(targetRequirement), ...baseProjectItems]
+      : baseProjectItems;
+
   if (
     role === ACCOUNT_ROLES.leader ||
     role === ACCOUNT_ROLES.member ||
@@ -1605,21 +1699,11 @@ function Dashboard({
     return (
       <UserDashboard
         role={role}
+        projectNo={projectNo}
         setView={setView}
         openWorkflow={openWorkflow}
         openNewRequest={() => setRequestOpen(true)}
-        projectItems={
-          role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.leader
-            ? [
-                memberAdditionalProjects[0],
-                ...userProjectItems.filter((project) =>
-                  ["2026-028", "2026-021", "2026-014"].includes(project.no),
-                ),
-                memberAdditionalProjects[2],
-                memberAdditionalProjects[1],
-              ]
-            : userProjectItems
-        }
+        projectItems={homeProjectItems}
         notify={notify}
       />
     );
@@ -2212,9 +2296,9 @@ function TeamWorkspaceDashboard({
             </div>
             <button
               className="primary"
-              onClick={() => setView(routeFor(selected))}
+              onClick={() => openWorkflow("home", selected.id)}
             >
-              업무 화면 열기 <ArrowRight size={14} />
+              홈에서 Agent 과제 보기 <ArrowRight size={14} />
             </button>
           </header>
           {selectedDelay > 0 && (
@@ -2857,9 +2941,7 @@ function LegacyTeamWorkspaceDashboard({
         <TeamProjectModal
           item={popupItem}
           close={() => setPopupItem(null)}
-          setView={setView}
           openWorkflow={openWorkflow}
-          route={routeFor(popupItem)}
         />
       )}
     </div>
@@ -3052,15 +3134,11 @@ function TeamPortfolioAnalytics({
 function TeamProjectModal({
   item,
   close,
-  setView,
   openWorkflow,
-  route,
 }: {
   item: TeamRequirement;
   close: () => void;
-  setView: (view: View) => void;
   openWorkflow: (view: View, projectNo: string) => void;
-  route: View;
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) =>
@@ -3069,14 +3147,9 @@ function TeamProjectModal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [close]);
 
-  const go = (view: View) => {
-    close();
-    setView(view);
-  };
-
   const goToWorkflow = () => {
     close();
-    openWorkflow(route, item.id);
+    openWorkflow("home", item.id);
   };
 
   return (
@@ -3150,11 +3223,8 @@ function TeamProjectModal({
           <strong>{item.nextAction}</strong>
         </aside>
         <footer>
-          <button className="secondary" onClick={() => go("hub")}>
-            일정·작업 보기
-          </button>
           <button className="primary" onClick={goToWorkflow}>
-            업무 화면 열기
+            홈에서 Agent 과제 보기
           </button>
         </footer>
       </section>
@@ -6893,6 +6963,7 @@ function UserOperationsResult({ project }: { project: UserProject }) {
 
 function UserDashboard({
   role,
+  projectNo,
   setView,
   openWorkflow,
   openNewRequest,
@@ -6900,6 +6971,7 @@ function UserDashboard({
   notify,
 }: {
   role: string;
+  projectNo?: string;
   setView: (v: View) => void;
   openWorkflow: (view: View, projectNo: string) => void;
   openNewRequest: () => void;
@@ -6948,15 +7020,21 @@ function UserDashboard({
     },
   ]);
   useEffect(() => {
-    const nextIndex = isAiTeam
-      ? Math.max(
-          0,
-          projectItems.findIndex((project) => project.no === "2026-033"),
-        )
-      : 0;
+    const targetIndex = projectNo
+      ? projectItems.findIndex((project) => project.no === projectNo)
+      : -1;
+    const nextIndex =
+      targetIndex >= 0
+        ? targetIndex
+        : isAiTeam
+          ? Math.max(
+              0,
+              projectItems.findIndex((project) => project.no === "2026-033"),
+            )
+          : 0;
     setSelected(nextIndex);
     setSelectedJourney(projectItems[nextIndex].journeyStep);
-  }, [isAiTeam, role]);
+  }, [isAiTeam, role, projectNo]);
   const current = projectItems[selected] || projectItems[0];
   const currentG1Resolution = homeG1Resolutions[current.no] || null;
   const g1Status = currentG1Resolution
@@ -7180,8 +7258,8 @@ function UserDashboard({
               </p>
             </div>
             {isAiTeam ? (
-              <button onClick={() => openWorkflow(current.route, current.no)}>
-                업무 화면 열기 <ArrowRight size={13} weight="bold" />
+              <button onClick={() => setSelectedJourney(effectiveJourneyStep)}>
+                현재 단계 보기 <ArrowRight size={13} weight="bold" />
               </button>
             ) : (
               <button onClick={() => setSelectedJourney(effectiveJourneyStep)}>
@@ -14167,14 +14245,12 @@ function ProjectDrawer({
   project: p,
   role,
   close,
-  openHub,
   openWorkflow,
   notify,
 }: {
   project: (typeof projects)[0];
   role: string;
   close: () => void;
-  openHub: (p: (typeof projects)[0]) => void;
   openWorkflow: (view: View, projectNo: string) => void;
   notify: (s: string) => void;
 }) {
@@ -14311,7 +14387,6 @@ function ProjectDrawer({
               실행 작업 {p.progress}% · 상태 {p.hub}
             </p>
           </div>
-          <button onClick={() => openHub(p)}>일정 · 작업 보기 →</button>
         </section>
         <footer>
           <button

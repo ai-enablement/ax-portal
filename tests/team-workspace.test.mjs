@@ -24,6 +24,16 @@ test("hides lifecycle navigation from every account role", () => {
   assert.ok(page.includes('.filter((group) => group.label !== "AGENT LIFECYCLE")'));
 });
 
+test("opens dashboard projects in the matching home Agent record", () => {
+  assert.ok(!page.includes("일정·작업 보기"));
+  assert.ok(!page.includes("일정 · 작업 보기"));
+  assert.ok(!page.includes("업무 화면 열기"));
+  assert.ok(page.includes('openWorkflow("home", item.id)'));
+  assert.ok(page.includes("홈에서 Agent 과제 보기"));
+  assert.ok(page.includes("teamRequirementAsHomeProject"));
+  assert.ok(page.includes("projectNo={workflowTarget}"));
+});
+
 test("uses the same one-page home for leader and member with leader actions", () => {
   assert.match(
     page,
