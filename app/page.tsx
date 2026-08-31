@@ -25,6 +25,8 @@ import {
   UserCircle,
   WarningCircle,
   X,
+  PencilSimple,
+  Trash,
 } from "@phosphor-icons/react";
 
 type View =
@@ -1037,6 +1039,10 @@ export default function Home() {
   );
   const [llmCostGuideOpen, setLlmCostGuideOpen] = useState(false);
   const [submittedProjects, setSubmittedProjects] = useState<UserProject[]>([]);
+  const [deletedProjectNos, setDeletedProjectNos] = useState<string[]>([]);
+  const [projectOverrides, setProjectOverrides] = useState<
+    Record<string, Partial<UserProject>>
+  >({});
   const [governanceGate, setGovernanceGate] = useState("전체");
   const [workflowTarget, setWorkflowTarget] = useState<string | undefined>(
     undefined,
@@ -1049,15 +1055,81 @@ export default function Home() {
         "agent-portal-submitted-projects",
       );
       if (saved) setSubmittedProjects(JSON.parse(saved));
+      const deleted = window.localStorage.getItem(
+        "agent-portal-deleted-projects",
+      );
+      if (deleted) setDeletedProjectNos(JSON.parse(deleted));
+      const overrides = window.localStorage.getItem(
+        "agent-portal-project-overrides",
+      );
+      if (overrides) setProjectOverrides(JSON.parse(overrides));
     } catch {
       window.localStorage.removeItem("agent-portal-submitted-projects");
     }
   }, []);
 
   const userProjectItems = useMemo<UserProject[]>(
-    () => [...submittedProjects, ...userProjects, ...generalUserOwnerProjects],
-    [submittedProjects],
+    () =>
+      [...submittedProjects, ...userProjects, ...generalUserOwnerProjects]
+        .filter((project) => !deletedProjectNos.includes(project.no))
+        .map((project) => ({
+          ...project,
+          ...(projectOverrides[project.no] || {}),
+        })),
+    [submittedProjects, deletedProjectNos, projectOverrides],
   );
+  const adminProjectItems = useMemo<UserProject[]>(() => {
+    const merged = [
+      ...userProjectItems,
+      ...teamRequirements.map(teamRequirementAsHomeProject),
+    ]
+      .filter((project) => !deletedProjectNos.includes(project.no))
+      .map((project) => ({
+        ...project,
+        ...(projectOverrides[project.no] || {}),
+      }));
+    return Array.from(
+      new Map(merged.map((project) => [project.no, project])).values(),
+    );
+  }, [userProjectItems, deletedProjectNos, projectOverrides]);
+
+  const deleteProject = (projectNo: string) => {
+    setDeletedProjectNos((current) => {
+      const next = current.includes(projectNo)
+        ? current
+        : [...current, projectNo];
+      window.localStorage.setItem(
+        "agent-portal-deleted-projects",
+        JSON.stringify(next),
+      );
+      return next;
+    });
+    setSubmittedProjects((current) => {
+      const next = current.filter((project) => project.no !== projectNo);
+      window.localStorage.setItem(
+        "agent-portal-submitted-projects",
+        JSON.stringify(next),
+      );
+      return next;
+    });
+  };
+
+  const updateProject = (
+    projectNo: string,
+    changes: Partial<UserProject>,
+  ) => {
+    setProjectOverrides((current) => {
+      const next = {
+        ...current,
+        [projectNo]: { ...(current[projectNo] || {}), ...changes },
+      };
+      window.localStorage.setItem(
+        "agent-portal-project-overrides",
+        JSON.stringify(next),
+      );
+      return next;
+    });
+  };
 
   const filteredAgents = useMemo(
     () =>
@@ -1421,6 +1493,7 @@ export default function Home() {
           <Dashboard
             role={role}
             projectNo={workflowTarget}
+            onDeleteProject={deleteProject}
             setView={go}
             setRequestOpen={setRequestOpen}
             setDetail={setDetail}
@@ -1492,6 +1565,9 @@ export default function Home() {
           <Governance
             onDetail={setDetail}
             notify={notify}
+            projects={adminProjectItems}
+            onDeleteProject={deleteProject}
+            onUpdateProject={updateProject}
             selectedGate={governanceGate}
             onGateChange={setGovernanceGate}
           />
@@ -1653,6 +1729,7 @@ export default function Home() {
 function Dashboard({
   role,
   projectNo,
+  onDeleteProject,
   setView,
   setRequestOpen,
   setDetail,
@@ -1663,6 +1740,7 @@ function Dashboard({
 }: {
   role: string;
   projectNo?: string;
+  onDeleteProject: (projectNo: string) => void;
   setView: (v: View) => void;
   setRequestOpen: (v: boolean) => void;
   setDetail: (p: (typeof projects)[0]) => void;
@@ -1700,6 +1778,7 @@ function Dashboard({
       <UserDashboard
         role={role}
         projectNo={projectNo}
+        onDeleteProject={onDeleteProject}
         setView={setView}
         openWorkflow={openWorkflow}
         openNewRequest={() => setRequestOpen(true)}
@@ -6964,6 +7043,7 @@ function UserOperationsResult({ project }: { project: UserProject }) {
 function UserDashboard({
   role,
   projectNo,
+  onDeleteProject,
   setView,
   openWorkflow,
   openNewRequest,
@@ -6972,6 +7052,7 @@ function UserDashboard({
 }: {
   role: string;
   projectNo?: string;
+  onDeleteProject: (projectNo: string) => void;
   setView: (v: View) => void;
   openWorkflow: (view: View, projectNo: string) => void;
   openNewRequest: () => void;
@@ -7034,8 +7115,21 @@ function UserDashboard({
           : 0;
     setSelected(nextIndex);
     setSelectedJourney(projectItems[nextIndex].journeyStep);
-  }, [isAiTeam, role, projectNo]);
+  }, [isAiTeam, role, projectNo, projectItems.length]);
   const current = projectItems[selected] || projectItems[0];
+  const canDeleteCurrent =
+    role === ACCOUNT_ROLES.user && current.journeyStep === 0;
+  const deleteCurrentProject = () => {
+    if (
+      !window.confirm(
+        `'${current.name}' 과제를 삭제하시겠습니까? 요구 접수 단계의 과제만 삭제할 수 있습니다.`,
+      )
+    )
+      return;
+    onDeleteProject(current.no);
+    setSelected(0);
+    notify(`${current.name} 과제가 삭제되었습니다.`);
+  };
   const currentG1Resolution = homeG1Resolutions[current.no] || null;
   const g1Status = currentG1Resolution
     ? currentG1Resolution.decision === "CONDITIONAL"
@@ -7257,15 +7351,19 @@ function UserDashboard({
                   : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다."}
               </p>
             </div>
-            {isAiTeam ? (
+            <div className="project-header-actions">
+              {canDeleteCurrent && (
+                <button
+                  className="danger-outline"
+                  onClick={deleteCurrentProject}
+                >
+                  <Trash size={15} weight="bold" /> 과제 삭제
+                </button>
+              )}
               <button onClick={() => setSelectedJourney(effectiveJourneyStep)}>
                 현재 단계 보기 <ArrowRight size={13} weight="bold" />
               </button>
-            ) : (
-              <button onClick={() => setSelectedJourney(effectiveJourneyStep)}>
-                현재 단계 보기 <ArrowRight size={13} weight="bold" />
-              </button>
-            )}
+            </div>
           </header>
 
           <div className="user-lifecycle-track journey-v2 oneview-journey">
@@ -13736,15 +13834,33 @@ function Gallery({
 function Governance({
   onDetail,
   notify,
+  projects: adminProjects,
+  onDeleteProject,
+  onUpdateProject,
   selectedGate,
   onGateChange,
 }: {
   onDetail: (p: (typeof projects)[0]) => void;
   notify: (s: string) => void;
+  projects: UserProject[];
+  onDeleteProject: (projectNo: string) => void;
+  onUpdateProject: (
+    projectNo: string,
+    changes: Partial<UserProject>,
+  ) => void;
   selectedGate: string;
   onGateChange: (gate: string) => void;
 }) {
   const [tab, setTab] = useState("계정·역할");
+  const [editingProjectNo, setEditingProjectNo] = useState<string | null>(null);
+  const [adminDraft, setAdminDraft] = useState({
+    name: "",
+    status: "",
+    owner: "",
+    handler: "",
+    dueDate: "",
+    nextAction: "",
+  });
   const accounts = [
     ["최병두", "choi.bd@changshininc.com", "AI 활성화팀 팀장", "전 과제 감독·게이트 승인", "Entra 그룹", "활성"],
     ["허정환", "heo.jh@changshininc.com", "AI 활성화팀 팀원", "개발 3 · 리뷰 2 · 운영 1", "Entra 그룹", "활성"],
@@ -13754,6 +13870,37 @@ function Governance({
   void onDetail;
   void selectedGate;
   void onGateChange;
+  const editProject = (project: UserProject) => {
+    setEditingProjectNo(project.no);
+    setAdminDraft({
+      name: project.name,
+      status: project.status,
+      owner: project.owner,
+      handler: project.handler,
+      dueDate: project.dueDate,
+      nextAction: project.nextAction,
+    });
+  };
+  const saveProject = () => {
+    if (!editingProjectNo || !adminDraft.name.trim()) return;
+    onUpdateProject(editingProjectNo, {
+      name: adminDraft.name.trim(),
+      status: adminDraft.status.trim(),
+      owner: adminDraft.owner.trim(),
+      handler: adminDraft.handler.trim(),
+      dueDate: adminDraft.dueDate.trim(),
+      nextAction: adminDraft.nextAction.trim(),
+    });
+    notify(`${editingProjectNo} 과제 정보가 수정되었습니다.`);
+    setEditingProjectNo(null);
+  };
+  const deleteAnyProject = (project: UserProject) => {
+    if (!window.confirm(`Admin 권한으로 '${project.name}' 과제를 삭제하시겠습니까?`))
+      return;
+    onDeleteProject(project.no);
+    if (editingProjectNo === project.no) setEditingProjectNo(null);
+    notify(`${project.no} 과제가 Admin 권한으로 삭제되었습니다.`);
+  };
   return (
     <div className="page">
       <section className="page-heading">
@@ -13795,7 +13942,7 @@ function Governance({
       </section>
       <section className="panel admin-panel">
         <div className="admin-tabs">
-          {["계정·역할", "권한 정책", "감사 로그"].map((t) => (
+          {["계정·역할", "Agent 과제 관리", "권한 정책", "감사 로그"].map((t) => (
             <button
               key={t}
               className={tab === t ? "active" : ""}
@@ -13856,6 +14003,134 @@ function Governance({
                 </button>
               ))}
             </div>
+          </div>
+        )}
+        {tab === "Agent 과제 관리" && (
+          <div className="admin-content admin-project-manager">
+            <header>
+              <div>
+                <b>전체 Agent 과제 수정·삭제</b>
+                <p>
+                  Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나
+                  삭제할 수 있습니다.
+                </p>
+              </div>
+              <Pill tone="violet">Admin 전용</Pill>
+            </header>
+            <div className="admin-project-table">
+              <div className="admin-project-head">
+                <span>Agent 과제</span>
+                <span>현재 단계</span>
+                <span>Owner</span>
+                <span>담당</span>
+                <span>관리</span>
+              </div>
+              {adminProjects.map((project) => (
+                <div className="admin-project-row" key={project.no}>
+                  <span>
+                    <b>{project.name}</b>
+                    <small>{project.no} · {project.status}</small>
+                  </span>
+                  <span>{userJourney[project.journeyStep]?.title || "운영·개선"}</span>
+                  <span>{project.owner}</span>
+                  <span>{project.handler}</span>
+                  <span className="admin-project-actions">
+                    <button onClick={() => editProject(project)}>
+                      <PencilSimple size={14} weight="bold" /> 수정
+                    </button>
+                    <button
+                      className="danger"
+                      onClick={() => deleteAnyProject(project)}
+                    >
+                      <Trash size={14} weight="bold" /> 삭제
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+            {editingProjectNo && (
+              <section className="admin-project-editor" aria-label="Agent 과제 수정">
+                <header>
+                  <div>
+                    <small>{editingProjectNo}</small>
+                    <h3>Agent 과제 정보 수정</h3>
+                  </div>
+                  <button
+                    aria-label="수정 닫기"
+                    onClick={() => setEditingProjectNo(null)}
+                  >
+                    <X size={18} />
+                  </button>
+                </header>
+                <div>
+                  <label>
+                    과제명
+                    <input
+                      value={adminDraft.name}
+                      onChange={(event) =>
+                        setAdminDraft({ ...adminDraft, name: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    상태
+                    <input
+                      value={adminDraft.status}
+                      onChange={(event) =>
+                        setAdminDraft({ ...adminDraft, status: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Project Owner
+                    <input
+                      value={adminDraft.owner}
+                      onChange={(event) =>
+                        setAdminDraft({ ...adminDraft, owner: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    담당자
+                    <input
+                      value={adminDraft.handler}
+                      onChange={(event) =>
+                        setAdminDraft({ ...adminDraft, handler: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    프로젝트 마감일
+                    <input
+                      value={adminDraft.dueDate}
+                      onChange={(event) =>
+                        setAdminDraft({ ...adminDraft, dueDate: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    다음 행동
+                    <textarea
+                      value={adminDraft.nextAction}
+                      onChange={(event) =>
+                        setAdminDraft({ ...adminDraft, nextAction: event.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+                <footer>
+                  <button
+                    className="secondary"
+                    onClick={() => setEditingProjectNo(null)}
+                  >
+                    취소
+                  </button>
+                  <button className="primary" onClick={saveProject}>
+                    변경사항 저장
+                  </button>
+                </footer>
+              </section>
+            )}
           </div>
         )}
         {tab === "권한 정책" && (

@@ -12469,6 +12469,189 @@ body {
   }
 }
 
+/* Project deletion and admin-wide project controls */
+.project-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.selected-project-status > header .project-header-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.selected-project-status > header .project-header-actions > .danger-outline {
+  border-color: #efb4b9;
+  background: #fff7f7;
+  color: #b4232d;
+}
+.selected-project-status > header .project-header-actions > .danger-outline:hover {
+  border-color: #dc737d;
+  background: #fff0f1;
+}
+
+.admin-project-manager > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e6e9ee;
+}
+.admin-project-manager > header b {
+  display: block;
+  font-size: 16px;
+}
+.admin-project-manager > header p {
+  margin: 5px 0 0;
+  color: #697789;
+}
+.admin-project-table {
+  overflow-x: auto;
+}
+.admin-project-head,
+.admin-project-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) minmax(120px, 0.8fr) minmax(100px, 0.7fr) minmax(170px, 1.1fr) minmax(150px, 0.8fr);
+  min-width: 860px;
+  align-items: center;
+}
+.admin-project-head {
+  min-height: 42px;
+  padding: 0 18px;
+  background: #f6f8fa;
+  color: #778497;
+  font-size: 12px;
+  font-weight: 800;
+}
+.admin-project-row {
+  min-height: 70px;
+  padding: 10px 18px;
+  border-top: 1px solid #edf0f3;
+  color: #39485b;
+}
+.admin-project-row > span {
+  min-width: 0;
+  padding-right: 12px;
+}
+.admin-project-row > span:first-child b,
+.admin-project-row > span:first-child small {
+  display: block;
+}
+.admin-project-row > span:first-child b {
+  color: #1f2f45;
+}
+.admin-project-row > span:first-child small {
+  margin-top: 5px;
+  color: #8290a2;
+}
+.admin-project-actions {
+  display: flex;
+  gap: 7px;
+  padding-right: 0 !important;
+}
+.admin-project-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 36px;
+  border: 1px solid #d9dfe7;
+  border-radius: 7px;
+  background: #fff;
+  color: #45556a;
+  padding: 7px 10px;
+  font-weight: 750;
+}
+.admin-project-actions button.danger {
+  border-color: #efc0c4;
+  background: #fff7f7;
+  color: #b4232d;
+}
+.admin-project-editor {
+  margin: 18px;
+  border: 1px solid #cfd8e5;
+  border-radius: 11px;
+  background: #fbfcfe;
+  overflow: hidden;
+}
+.admin-project-editor > header,
+.admin-project-editor > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 17px;
+}
+.admin-project-editor > header {
+  border-bottom: 1px solid #e2e7ed;
+}
+.admin-project-editor > header small,
+.admin-project-editor > header h3 {
+  display: block;
+  margin: 0;
+}
+.admin-project-editor > header small {
+  color: #728197;
+}
+.admin-project-editor > header h3 {
+  margin-top: 4px;
+}
+.admin-project-editor > header > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: #eef1f5;
+  place-items: center;
+}
+.admin-project-editor > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 17px;
+}
+.admin-project-editor label {
+  display: grid;
+  gap: 7px;
+  color: #43536a;
+  font-weight: 750;
+}
+.admin-project-editor input,
+.admin-project-editor textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #ccd5e0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 11px;
+  color: #23344b;
+  font: inherit;
+}
+.admin-project-editor textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+.admin-project-editor > footer {
+  justify-content: flex-end;
+  border-top: 1px solid #e2e7ed;
+  background: #fff;
+}
+
+@media (max-width: 760px) {
+  .project-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .admin-project-editor > div {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* New Agent request dialog legibility */
 .chat-wizard {
   width: min(1240px, calc(100vw - 40px));

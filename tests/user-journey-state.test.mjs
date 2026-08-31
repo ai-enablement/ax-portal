@@ -87,3 +87,17 @@ test("keeps the new Agent request dialog readable", () => {
   assert.ok(css.includes("font-size: 28px !important"));
   assert.ok(css.includes("font-size: 14px !important"));
 });
+
+test("limits user deletion to intake and gives admin full project controls", () => {
+  assert.ok(page.includes("agent-portal-deleted-projects"));
+  assert.ok(page.includes("agent-portal-project-overrides"));
+  assert.ok(page.includes("current.journeyStep === 0"));
+  assert.ok(page.includes("role === ACCOUNT_ROLES.user"));
+  assert.ok(page.includes("과제 삭제"));
+  assert.ok(page.includes("Agent 과제 관리"));
+  assert.ok(page.includes("Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나"));
+  assert.ok(page.includes("onUpdateProject"));
+  assert.ok(page.includes("deleteAnyProject"));
+  assert.ok(page.includes("teamRequirements.map(teamRequirementAsHomeProject)"));
+  assert.ok(css.includes("Project deletion and admin-wide project controls"));
+});
