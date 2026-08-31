@@ -134,7 +134,6 @@ const navGroups = [
   {
     label: "SERVICE & CONTROL",
     items: [
-      { id: "hub" as View, icon: "▤", label: "AX Projects Hub" },
       { id: "gallery" as View, icon: "▦", label: "Agent Gallery" },
       { id: "governance" as View, icon: "✓", label: "Admin & Governance" },
     ],
