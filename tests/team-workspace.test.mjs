@@ -130,6 +130,16 @@ test("lets the assigned developer write DES EVP and EVR while other roles review
   assert.ok(css.includes(".document-readonly-note"));
 });
 
+test("requires the team leader to assign an independent G3 reviewer", () => {
+  assert.ok(page.includes("reviewerAssignments"));
+  assert.ok(page.includes("동료 리뷰어 배정"));
+  assert.ok(page.includes("G3 동료 리뷰어 선택"));
+  assert.ok(page.includes("개발 담당자와 다른 AI 활성화팀 팀원"));
+  assert.ok(page.includes("배정된 리뷰어에게 EVR·DEP 검토와 G3 서명 권한"));
+  assert.ok(page.includes("Boolean(assignedReviewer)"));
+  assert.ok(css.includes(".g3-reviewer-assignment"));
+});
+
 test("preserves the full-width readable visual baseline", () => {
   for (const selector of [
     ".team-workspace-page",

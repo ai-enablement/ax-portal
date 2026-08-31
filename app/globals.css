@@ -5412,6 +5412,102 @@ body {
   color: #a8a29e;
   margin: 0 0 8px;
 }
+.g3-reviewer-assignment {
+  margin: 14px 18px 0;
+  overflow: hidden;
+  border: 1px solid #f0d5a7;
+  border-radius: 9px;
+  background: #fffbf2;
+}
+.g3-reviewer-assignment.assigned {
+  border-color: #b9dfd0;
+  background: #f5fbf8;
+}
+.reviewer-assignment-head {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+}
+.reviewer-assignment-head > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff4db;
+  color: #a66600;
+  font-size: 9px;
+  font-weight: 900;
+}
+.reviewer-assignment-head > span.complete {
+  background: #e9f8f1;
+  color: #087552;
+}
+.reviewer-assignment-head small,
+.reviewer-assignment-head b {
+  display: block;
+}
+.reviewer-assignment-head small {
+  color: #9b7a48;
+  font-size: 8px !important;
+}
+.reviewer-assignment-head b {
+  margin-top: 2px;
+  color: #3c4654;
+  font-size: 11px !important;
+}
+.reviewer-assignment-head p {
+  margin: 3px 0 0;
+  color: #7b8491;
+  font-size: 8px !important;
+  line-height: 1.45;
+}
+.reviewer-assignment-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(192, 148, 75, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+}
+.reviewer-assignment-form label {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  color: #536174;
+  font-size: 9px !important;
+  font-weight: 800;
+}
+.reviewer-assignment-form select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #cfd8e3;
+  border-radius: 7px;
+  background: #fff;
+  padding: 7px 10px;
+  color: #2f4056;
+  font: inherit;
+}
+.reviewer-assignment-view {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-top: 1px solid rgba(59, 139, 105, 0.14);
+  background: rgba(255, 255, 255, 0.68);
+}
+.reviewer-assignment-view small,
+.reviewer-assignment-view span {
+  color: #718096;
+  font-size: 8px !important;
+}
+.reviewer-assignment-view b {
+  color: #315e4e;
+  font-size: 10px !important;
+}
 .g3-signatures {
   display: flex;
   align-items: center;
@@ -5467,6 +5563,22 @@ body {
   margin-left: auto;
   display: flex;
   gap: 7px;
+}
+@media (max-width: 760px) {
+  .reviewer-assignment-head {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+  .reviewer-assignment-head > .pill {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .reviewer-assignment-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .reviewer-assignment-view {
+    grid-template-columns: 1fr;
+  }
 }
 .release-grid {
   display: grid;

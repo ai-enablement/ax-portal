@@ -9945,6 +9945,15 @@ function DeliveryWorkplace({
   const [g3ReviewerApproved, setG3ReviewerApproved] = useState(
     projectNo === "2026-018" || projectNo === "2026-014",
   );
+  const [reviewerAssignments, setReviewerAssignments] = useState<
+    Record<string, string>
+  >({
+    "2026-018": "허정환",
+    "2026-014": "허정환",
+  });
+  const [reviewerDrafts, setReviewerDrafts] = useState<Record<string, string>>(
+    {},
+  );
   const [g3SecurityApproved, setG3SecurityApproved] = useState(
     projectNo === "2026-018",
   );
@@ -9961,7 +9970,7 @@ function DeliveryWorkplace({
       dept: "품질혁신팀",
       owner: "박정민 팀장",
       builder: "허정환",
-      reviewer: "이재승",
+      reviewer: "미배정",
       track: "중",
       stage: "평가 진행",
       progress: 68,
@@ -10059,6 +10068,19 @@ function DeliveryWorkplace({
     },
   ];
   const current = deliveryProjects[selectedProject];
+  const reviewerCandidates = [
+    "정지헌",
+    "허정환",
+    "허시영",
+    "황수정",
+    "박혜빈",
+    "이재승",
+  ].filter((name) => name !== current.builder);
+  const assignedReviewer =
+    reviewerAssignments[current.no] ||
+    (current.reviewer === "미배정" ? "" : current.reviewer);
+  const reviewerDraft =
+    reviewerDrafts[current.no] || assignedReviewer || reviewerCandidates[0];
   useEffect(() => {
     setDepChecks(
       current.no === "2026-014" || current.no === "2026-018"
@@ -10082,7 +10104,9 @@ function DeliveryWorkplace({
   const isGeneralUser = role === ACCOUNT_ROLES.user;
   const currentRelationships = getProjectRelationships(role, current.no);
   const isDeveloper = currentRelationships.includes("DEVELOPER");
-  const isReviewer = currentRelationships.includes("REVIEWER");
+  const isReviewer =
+    currentRelationships.includes("REVIEWER") ||
+    (isAiTeamMember && assignedReviewer === "허정환");
   const isOwner = currentRelationships.includes("OWNER");
   const isSecurity = currentRelationships.includes("SECURITY_REVIEWER");
   const visibleDeliveryProjectIndexes = deliveryProjects
@@ -10775,7 +10799,7 @@ function DeliveryWorkplace({
               </div>
               <div>
                 <dt>리뷰어</dt>
-                <dd>{current.reviewer} · 검토 완료</dd>
+                <dd>{assignedReviewer || "미배정"} · 검토 완료</dd>
               </div>
               <div>
                 <dt>승인(G3)</dt>
@@ -10836,9 +10860,9 @@ function DeliveryWorkplace({
           : `${current.no}-EVP · 평가 실행 로그 및 실패 케이스`,
     reviewNote:
       doc === "EVP"
-        ? `현업 정답 라벨 담당자와 리뷰어 ${current.reviewer}의 독립 검토 필요`
+        ? `현업 정답 라벨 담당자와 리뷰어 ${assignedReviewer || "미배정"}의 독립 검토 필요`
         : doc === "EVR"
-          ? `리뷰어 ${current.reviewer} 검토 후 G3 승인 근거로 사용`
+          ? `리뷰어 ${assignedReviewer || "미배정"} 검토 후 G3 승인 근거로 사용`
           : "개발 중 변경 시 설계 결정 사유와 버전을 함께 갱신",
   });
   const docData = {
@@ -10856,7 +10880,7 @@ function DeliveryWorkplace({
     EVP: {
       title: "평가 계획서",
       version: "v1.0",
-      owner: `${current.builder} · ${current.reviewer}`,
+      owner: `${current.builder} · ${assignedReviewer || "리뷰어 미배정"}`,
       progress: documentProgress("EVP"),
       status:
         completedDocuments[documentKey("EVP")] ||
@@ -10867,7 +10891,7 @@ function DeliveryWorkplace({
     EVR: {
       title: "평가 결과 보고서",
       version: "v0.6",
-      owner: `${current.builder} · ${current.reviewer}`,
+      owner: `${current.builder} · ${assignedReviewer || "리뷰어 미배정"}`,
       progress: documentProgress("EVR"),
       status:
         completedDocuments[documentKey("EVR")] ||
@@ -10889,7 +10913,8 @@ function DeliveryWorkplace({
     current.guardrail === "0건";
   const depReady = depChecks.every(Boolean);
   const securityRequired = current.track === "상";
-  const canReviewerApproveG3 = documentsReady && depReady;
+  const canReviewerApproveG3 =
+    Boolean(assignedReviewer) && documentsReady && depReady;
   const canLeaderApproveG3 =
     canReviewerApproveG3 &&
     g3ReviewerApproved &&
@@ -11134,7 +11159,7 @@ function DeliveryWorkplace({
             </strong>
             <p>
               {current.dept} · 프로젝트 Owner {current.owner} · 개발 담당{" "}
-              {current.builder} · 리뷰어 {current.reviewer}
+              {current.builder} · 리뷰어 {assignedReviewer || "미배정"}
             </p>
           </div>
           <label>
@@ -11716,6 +11741,77 @@ function DeliveryWorkplace({
               </Pill>
             </article>
           </div>
+          {!isLowTrack && (
+            <div className={`g3-reviewer-assignment ${assignedReviewer ? "assigned" : ""}`}>
+              <div className="reviewer-assignment-head">
+                <span className={assignedReviewer ? "complete" : "pending"}>
+                  {assignedReviewer ? <Check size={15} weight="bold" /> : "1"}
+                </span>
+                <div>
+                  <small>G3 독립 검토자 지정</small>
+                  <b>동료 리뷰어 배정</b>
+                  <p>
+                    개발 담당자와 다른 AI 활성화팀 팀원을 팀장이 지정합니다.
+                    배정된 리뷰어에게 EVR·DEP 검토와 G3 서명 권한이 열립니다.
+                  </p>
+                </div>
+                <Pill tone={assignedReviewer ? "green" : "orange"}>
+                  {assignedReviewer ? `배정 완료 · ${assignedReviewer}` : "팀장 배정 필요"}
+                </Pill>
+              </div>
+              {isLeader && visibleG3Decision !== "APPROVED" ? (
+                <div className="reviewer-assignment-form">
+                  <label>
+                    동료 리뷰어
+                    <select
+                      value={reviewerDraft}
+                      onChange={(event) =>
+                        setReviewerDrafts((items) => ({
+                          ...items,
+                          [current.no]: event.target.value,
+                        }))
+                      }
+                      aria-label="G3 동료 리뷰어 선택"
+                    >
+                      {reviewerCandidates.map((name) => (
+                        <option key={name} value={name}>
+                          {name} · AI 활성화팀 팀원
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => {
+                      setReviewerAssignments((items) => ({
+                        ...items,
+                        [current.no]: reviewerDraft,
+                      }));
+                      setG3ReviewerApproved(false);
+                      notify(
+                        `${reviewerDraft} 담당자를 ${current.name}의 G3 동료 리뷰어로 배정했습니다.`,
+                      );
+                    }}
+                  >
+                    {assignedReviewer ? "리뷰어 변경·저장" : "리뷰어 배정"}
+                  </button>
+                </div>
+              ) : (
+                <div className="reviewer-assignment-view">
+                  <small>현재 배정</small>
+                  <b>{assignedReviewer || "아직 배정되지 않았습니다."}</b>
+                  <span>
+                    {assignedReviewer
+                      ? isReviewer
+                        ? "내 리뷰 과제 · 전체 프로젝트 이력과 승인 근거 열람 가능"
+                        : "배정된 리뷰어만 독립 검토와 승인 가능"
+                      : "AI 활성화팀장이 리뷰어를 배정하면 검토가 시작됩니다."}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="g3-signatures">
             {!isLowTrack && (
               <div>
@@ -11725,7 +11821,7 @@ function DeliveryWorkplace({
                 <p>
                   <b>동료 리뷰어</b>
                   <small>
-                    {current.reviewer} ·{" "}
+                    {assignedReviewer || "미배정"} ·{" "}
                     {g3ReviewerApproved ? "승인 완료" : "독립 교차 검토 대기"}
                   </small>
                 </p>
@@ -11806,7 +11902,9 @@ function DeliveryWorkplace({
               <p>
                 <b>G3 최종 승인이 잠겨 있습니다.</b>
                 <span>
-                  {!documentsReady
+                  {!assignedReviewer
+                    ? "AI활성화팀장이 동료 리뷰어를 먼저 배정해야 합니다."
+                    : !documentsReady
                     ? "DES·EVP·EVR과 금칙 평가를 먼저 완료해야 합니다."
                     : !depReady
                       ? "배포 체크리스트[DEP] 9개 항목을 모두 확인해야 합니다."
