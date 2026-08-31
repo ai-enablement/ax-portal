@@ -12,7 +12,7 @@ const css = await readFile(
 );
 
 test("keeps role navigation and home actions separated", () => {
-  assert.ok(page.includes('role === "일반 User"'));
+  assert.ok(page.includes("role === ACCOUNT_ROLES.user"));
   assert.ok(
     page.includes('view === "teamboard" && role.includes("AI활성화팀")'),
   );
@@ -20,13 +20,28 @@ test("keeps role navigation and home actions separated", () => {
   assert.ok(page.includes("AI 활성화팀 대시보드"));
 });
 
-test("uses one consistent approval queue and gate filter", () => {
+test("keeps gate approvals with the leader and system administration separate", () => {
   assert.ok(page.includes("const approvalQueue"));
   assert.ok(page.includes('gate: "G3"'));
   assert.ok(page.includes('gate: "G2"'));
-  assert.ok(page.includes("visibleApprovals"));
-  assert.ok(page.includes("승인 대기 과제가 없습니다"));
+  assert.ok(page.includes('role === ACCOUNT_ROLES.admin'));
+  assert.ok(page.includes("MS 계정 역할, 프로젝트 권한 정책과 변경 감사 이력"));
   assert.ok(page.includes("G1 0 · G2 2 · G3 1 · G4 0"));
+});
+
+test("uses four account roles and project-scoped assignments", () => {
+  for (const role of ["leader", "member", "user", "admin"])
+    assert.ok(page.includes(`${role}:`));
+  for (const relationship of [
+    "REQUESTER",
+    "OWNER",
+    "DEVELOPER",
+    "REVIEWER",
+    "OPERATOR",
+  ])
+    assert.ok(page.includes(`\"${relationship}\"`));
+  assert.ok(page.includes('"2026-018": { [ACCOUNT_ROLES.member]: ["REVIEWER"] }'));
+  assert.ok(page.includes("hasProjectRelationship(role, project.no)"));
 });
 
 test("keeps the standard lifecycle order and role ownership", () => {

@@ -38,6 +38,78 @@ type View =
   | "gallery"
   | "governance";
 
+const ACCOUNT_ROLES = {
+  leader: "AI활성화팀 최병두 팀장",
+  member: "AI활성화팀 허정환 담당자",
+  user: "일반 User",
+  admin: "admin",
+} as const;
+
+type AccountRole = (typeof ACCOUNT_ROLES)[keyof typeof ACCOUNT_ROLES];
+type ProjectRelationship =
+  | "REQUESTER"
+  | "OWNER"
+  | "DEVELOPER"
+  | "REVIEWER"
+  | "OPERATOR"
+  | "SECURITY_REVIEWER";
+
+const projectAssignments: Record<
+  string,
+  Partial<Record<AccountRole, ProjectRelationship[]>>
+> = {
+  "2026-033": { [ACCOUNT_ROLES.member]: ["DEVELOPER"] },
+  "2026-031": { [ACCOUNT_ROLES.user]: ["REQUESTER"] },
+  "2026-028": {
+    [ACCOUNT_ROLES.member]: ["DEVELOPER"],
+    [ACCOUNT_ROLES.user]: ["REQUESTER", "OWNER"],
+  },
+  "2026-026": { [ACCOUNT_ROLES.user]: ["OWNER"] },
+  "2026-024": { [ACCOUNT_ROLES.user]: ["OWNER"] },
+  "2026-021": {
+    [ACCOUNT_ROLES.member]: ["DEVELOPER"],
+    [ACCOUNT_ROLES.user]: ["REQUESTER"],
+  },
+  "2026-018": { [ACCOUNT_ROLES.member]: ["REVIEWER"] },
+  "2026-014": {
+    [ACCOUNT_ROLES.member]: ["REVIEWER"],
+    [ACCOUNT_ROLES.user]: ["REQUESTER", "OWNER"],
+  },
+  "2026-011": { [ACCOUNT_ROLES.member]: ["OPERATOR"] },
+};
+
+function getProjectRelationships(role: string, projectNo?: string) {
+  if (!projectNo) return [] as ProjectRelationship[];
+  return projectAssignments[projectNo]?.[role as AccountRole] || [];
+}
+
+function hasProjectRelationship(
+  role: string,
+  projectNo: string,
+  relationships?: ProjectRelationship[],
+) {
+  const assigned = getProjectRelationships(role, projectNo);
+  return relationships
+    ? assigned.some((relationship) => relationships.includes(relationship))
+    : assigned.length > 0;
+}
+
+function projectRelationshipLabel(role: string, projectNo: string) {
+  const labels: Record<ProjectRelationship, string> = {
+    REQUESTER: "요청자",
+    OWNER: "Owner",
+    DEVELOPER: "개발 담당",
+    REVIEWER: "리뷰어",
+    OPERATOR: "운영 담당",
+    SECURITY_REVIEWER: "정보보호 검토",
+  };
+  const assigned = getProjectRelationships(role, projectNo);
+  if (assigned.length === 0 && role === ACCOUNT_ROLES.user) return "요청자";
+  return assigned
+    .map((relationship) => labels[relationship])
+    .join(" · ");
+}
+
 const navGroups = [
   {
     label: "WORKSPACE",
@@ -345,6 +417,78 @@ const memberAdditionalProjects: UserProject[] = [
     scheduleState: "운영 정상",
     checkpoints: "16/16",
     route: "operations" as View,
+  },
+  {
+    no: "2026-018",
+    name: "해외 출장기안 지원 Agent",
+    stage: 4,
+    status: "리뷰 요청",
+    tone: "violet",
+    progress: 91,
+    owner: "김도윤",
+    handler: "AI활성화팀 이재승 개발 담당",
+    updated: "오늘 09:40",
+    nextAction: "EVR·DEP 근거를 검토하고 G3 리뷰 의견을 남기세요",
+    description:
+      "동료 리뷰어로 배정되어 요구 접수부터 현재 G3까지의 전체 이력을 조회할 수 있습니다.",
+    journeyStep: 6,
+    nextGate: "G3 배포 승인",
+    teamOwner: "AI활성화팀 이재승 개발 담당 · 리뷰어 허정환",
+    dueDate: "2026.09.02",
+    requestedDate: "2026.09.05",
+    committedDate: "2026.09.02",
+    scheduleState: "리뷰 D-2",
+    checkpoints: "13/16",
+    route: "delivery" as View,
+  },
+];
+
+const generalUserOwnerProjects: UserProject[] = [
+  {
+    no: "2026-024",
+    name: "구매계약 검토 Agent",
+    stage: 2,
+    status: "Owner 검토 필요",
+    tone: "orange",
+    progress: 34,
+    owner: "김민지",
+    handler: "AI활성화팀 이재승 개발 담당",
+    updated: "오늘 11:05",
+    nextAction: "ARD의 업무 범위와 운영 책임을 확인하세요",
+    description:
+      "프로젝트 Owner로 배정되어 요구 접수 이후 전체 이력과 현재 요구 정의 내용을 조회할 수 있습니다.",
+    journeyStep: 3,
+    nextGate: "G2 개발 착수",
+    teamOwner: "AI활성화팀 이재승 개발 담당",
+    dueDate: "2026.09.25",
+    requestedDate: "2026.09.30",
+    committedDate: "2026.09.25",
+    scheduleState: "일정대로 진행",
+    checkpoints: "5/13",
+    route: "definition" as View,
+  },
+  {
+    no: "2026-026",
+    name: "SAP 사용자 가이드 Agent",
+    stage: 2,
+    status: "Owner 검토 필요",
+    tone: "cyan",
+    progress: 24,
+    owner: "박수현",
+    handler: "AI활성화팀 김서연 개발 담당",
+    updated: "어제 17:30",
+    nextAction: "ARD 보완 내용과 운영 책임자를 확인하세요",
+    description:
+      "프로젝트 Owner로서 범위·성공 기준·지식 갱신 책임을 조회합니다.",
+    journeyStep: 3,
+    nextGate: "G2 개발 착수",
+    teamOwner: "AI활성화팀 김서연 개발 담당",
+    dueDate: "2026.10.02",
+    requestedDate: "2026.10.10",
+    committedDate: "2026.10.02",
+    scheduleState: "보완 진행 중",
+    checkpoints: "4/13",
+    route: "definition" as View,
   },
 ];
 
@@ -805,7 +949,7 @@ function Progress({ value }: { value: number }) {
 
 export default function Home() {
   const [view, setView] = useState<View>("home");
-  const [role, setRole] = useState("일반 User");
+  const [role, setRole] = useState<AccountRole>(ACCOUNT_ROLES.user);
   const [query, setQuery] = useState("");
   const [requestOpen, setRequestOpen] = useState(false);
   const [detail, setDetail] = useState<(typeof projects)[0] | null>(null);
@@ -835,7 +979,7 @@ export default function Home() {
   }, []);
 
   const userProjectItems = useMemo<UserProject[]>(
-    () => [...submittedProjects, ...userProjects],
+    () => [...submittedProjects, ...userProjects, ...generalUserOwnerProjects],
     [submittedProjects],
   );
 
@@ -850,7 +994,7 @@ export default function Home() {
   );
   const visibleNavGroups = useMemo(() => {
     const allowed =
-      role === "일반 User"
+      role === ACCOUNT_ROLES.user
         ? new Set<View>([
             "home",
             "intake",
@@ -859,7 +1003,7 @@ export default function Home() {
             "hub",
             "gallery",
           ])
-        : role.includes("허정환")
+        : role === ACCOUNT_ROLES.member
           ? new Set<View>([
               "home",
               "teamboard",
@@ -870,30 +1014,15 @@ export default function Home() {
               "hub",
               "gallery",
             ])
-          : role.includes("현업 Owner")
-            ? new Set<View>([
-                "home",
-                "definition",
-                "delivery",
-                "operations",
-                "hub",
-                "gallery",
-              ])
-            : role.includes("리뷰어") || role.includes("정보보호")
-              ? new Set<View>(["home", "delivery", "hub", "gallery"])
-              : role === "운영 담당자"
-                ? new Set<View>([
-                    "home",
-                    "delivery",
-                    "operations",
-                    "hub",
-                    "gallery",
-                  ])
-                : new Set<View>(nav.map((item) => item.id));
+          : role === ACCOUNT_ROLES.leader
+            ? new Set<View>(nav.map((item) => item.id).filter((id) => id !== "governance"))
+            : new Set<View>(["governance", "hub", "gallery"]);
 
     return navGroups
       .filter((group) =>
-        role === "일반 User" ? group.label !== "AGENT LIFECYCLE" : true,
+        role === ACCOUNT_ROLES.user || role === ACCOUNT_ROLES.admin
+          ? group.label !== "AGENT LIFECYCLE"
+          : true,
       )
       .map((group) => ({
         ...group,
@@ -919,7 +1048,7 @@ export default function Home() {
     go(next);
   };
 
-  const notifications = role.includes("허정환")
+  const notifications = role === ACCOUNT_ROLES.member
     ? [
         {
           projectNo: "2026-033",
@@ -941,6 +1070,13 @@ export default function Home() {
           body: "EVR 실패 사례 12건의 원인과 조치를 확인하세요.",
           view: "delivery" as View,
           tone: "info",
+        },
+        {
+          projectNo: "2026-018",
+          title: "G3 동료 리뷰 배정",
+          body: "EVR·DEP와 프로젝트 전체 이력을 확인하고 독립 리뷰를 기록하세요.",
+          view: "delivery" as View,
+          tone: "warning",
         },
         {
           projectNo: "2026-011",
@@ -1021,7 +1157,12 @@ export default function Home() {
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
-        <div className="brand" onClick={() => go("home")}>
+        <div
+          className="brand"
+          onClick={() =>
+            go(role === ACCOUNT_ROLES.admin ? "governance" : "home")
+          }
+        >
           <span className="brand-mark">AX</span>
           <span>
             <strong>Agent Portal</strong>
@@ -1040,14 +1181,14 @@ export default function Home() {
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span className="nav-copy">
-                    {item.id === "home" && role === "일반 User"
+                    {item.id === "home" && role === ACCOUNT_ROLES.user
                       ? "내 Agent 과제"
                       : item.label}
                   </span>
                   {item.id === "teamboard" && role.includes("AI활성화팀") && (
                     <em className="team-nav-count">3</em>
                   )}
-                  {item.id === "governance" && role.includes("팀장") && (
+                  {item.id === "governance" && role === ACCOUNT_ROLES.admin && (
                     <em>{approvalQueue.length}</em>
                   )}
                 </button>
@@ -1090,38 +1231,34 @@ export default function Home() {
           <div className="crumb">
             Agent Portal <span>/</span>{" "}
             <strong>
-              {view === "home" && role === "일반 User"
+              {view === "home" && role === ACCOUNT_ROLES.user
                 ? "내 Agent 과제"
                 : nav.find((n) => n.id === view)?.label}
             </strong>
           </div>
           <div className="top-actions">
             <label className="role-select">
-              <span>Role</span>
+              <span>MS 계정</span>
               <select
                 value={role}
                 onChange={(e) => {
                   const nextRole = e.target.value;
-                  setRole(nextRole);
+                  setRole(nextRole as AccountRole);
                   go(
-                    nextRole === "운영 담당자"
-                      ? "operations"
-                      : nextRole.includes("리뷰어") ||
-                          nextRole.includes("정보보호")
-                        ? "delivery"
-                        : nextRole.includes("현업 Owner")
-                          ? "definition"
-                          : "home",
+                    nextRole === ACCOUNT_ROLES.admin ? "governance" : "home",
                   );
                 }}
               >
-                <option>AI활성화팀 최병두 팀장</option>
-                <option>AI활성화팀 허정환 담당자</option>
-                <option>AI활성화팀 이재승 리뷰어</option>
-                <option>현업 Owner 박정민 팀장</option>
-                <option>정보보호 담당자</option>
-                <option>일반 User</option>
-                <option>운영 담당자</option>
+                <option value={ACCOUNT_ROLES.leader}>
+                  AI 활성화팀 최병두 팀장
+                </option>
+                <option value={ACCOUNT_ROLES.member}>
+                  AI 활성화팀 팀원 · 허정환
+                </option>
+                <option value={ACCOUNT_ROLES.user}>
+                  일반 User · 김현우
+                </option>
+                <option value={ACCOUNT_ROLES.admin}>admin</option>
               </select>
             </label>
             <button
@@ -1166,17 +1303,13 @@ export default function Home() {
               </section>
             )}
             <div className="avatar">
-              {role === "일반 User"
+              {role === ACCOUNT_ROLES.user
                 ? "김"
-                : role.includes("허정환")
+                : role === ACCOUNT_ROLES.member
                   ? "허"
-                  : role.includes("리뷰어")
-                    ? "이"
-                    : role.includes("Owner")
-                      ? "박"
-                      : role.includes("정보보호")
-                        ? "보"
-                        : "최"}
+                  : role === ACCOUNT_ROLES.admin
+                    ? "A"
+                    : "최"}
             </div>
           </div>
         </header>
@@ -1189,8 +1322,9 @@ export default function Home() {
             setDetail={setDetail}
             userProjectItems={userProjectItems}
             openGovernance={(gate) => {
-              setGovernanceGate(gate);
-              go("governance");
+              if (gate === "G1") return go("intake");
+              if (gate === "G2") return go("definition");
+              go("delivery");
             }}
             openWorkflow={openWorkflow}
           />
@@ -1205,7 +1339,6 @@ export default function Home() {
         {view === "intake" && (
           <IntakeFeasibility
             role={role}
-            setRole={setRole}
             notify={notify}
             goDefinition={() => go("definition")}
             projectNo={workflowTarget}
@@ -1214,7 +1347,6 @@ export default function Home() {
         {view === "definition" && (
           <RequirementDefinition
             role={role}
-            setRole={setRole}
             notify={notify}
             goDelivery={() => go("delivery")}
             projectNo={workflowTarget}
@@ -1223,7 +1355,6 @@ export default function Home() {
         {view === "delivery" && (
           <DeliveryWorkplace
             role={role}
-            setRole={setRole}
             openHub={() => openHub()}
             notify={notify}
             projectNo={workflowTarget}
@@ -1252,7 +1383,7 @@ export default function Home() {
             notify={notify}
           />
         )}
-        {view === "governance" && (
+        {view === "governance" && role === ACCOUNT_ROLES.admin && (
           <Governance
             onDetail={setDetail}
             notify={notify}
@@ -1432,101 +1563,7 @@ function Dashboard({
   openGovernance: (gate: string) => void;
   openWorkflow: (view: View, projectNo: string) => void;
 }) {
-  if (
-    [
-      "운영 담당자",
-      "AI활성화팀 이재승 리뷰어",
-      "현업 Owner 박정민 팀장",
-      "정보보호 담당자",
-    ].includes(role)
-  ) {
-    const roleHome =
-      role === "운영 담당자"
-        ? {
-            eyebrow: "OPERATIONS",
-            title: "운영 점검과 개선 기록을 관리합니다.",
-            body: "월간 점검, 지식 최신성, 재평가와 변경 이력을 기록합니다.",
-            primary: "운영 · 개선 열기",
-            view: "operations" as View,
-            tasks: [
-              "월간 OPS 점검 기록",
-              "CHG 변경·재평가 연결",
-              "지식 최신성·폐기 기준 확인",
-            ],
-          }
-        : role.includes("리뷰어")
-          ? {
-              eyebrow: "INDEPENDENT REVIEW",
-              title: "개발자와 분리된 동료 검토를 수행합니다.",
-              body: "EVP·EVR과 실패 케이스를 교차 검토하고 G3에 독립 서명합니다.",
-              primary: "평가·G3 검토 열기",
-              view: "delivery" as View,
-              tasks: [
-                "평가 계획·정답 라벨 확인",
-                "실패 케이스 전수 검토",
-                "G3 리뷰어 승인 또는 보완",
-              ],
-            }
-          : role.includes("Owner")
-            ? {
-                eyebrow: "BUSINESS OWNER",
-                title: "현업 범위와 운영 책임을 확인합니다.",
-                body: "ARD의 업무 범위·자율성을 조회하고 파일럿 결과를 근거로 G4에 공동 서명합니다.",
-                primary: "ARD 결과 확인",
-                view: "definition" as View,
-                tasks: [
-                  "ARD 범위·Out of Scope 조회",
-                  "운영 책임·지식 갱신 담당 확인",
-                  "G4 확산 승인·운영 책임 인수",
-                ],
-              }
-            : {
-                eyebrow: "INFORMATION SECURITY",
-                title: "상 트랙의 보안 통제를 검토합니다.",
-                body: "데이터 분류, 권한 최소화, 로그·보존 정책을 확인하고 G3에 추가 서명합니다.",
-                primary: "상 트랙 G3 검토 열기",
-                view: "delivery" as View,
-                tasks: [
-                  "개인정보·기밀 처리 확인",
-                  "도구 권한·감사 로그 검토",
-                  "상 트랙 정보보호 승인 또는 보완",
-                ],
-              };
-    return (
-      <div className="page role-home">
-        <section className="welcome">
-          <div>
-            <p className="eyebrow">{roleHome.eyebrow}</p>
-            <h1>{roleHome.title}</h1>
-            <p>{roleHome.body}</p>
-          </div>
-          <button className="primary" onClick={() => setView(roleHome.view)}>
-            {roleHome.primary}
-            <ArrowRight size={14} weight="bold" />
-          </button>
-        </section>
-        <section className="panel role-home-tasks">
-          <div className="panel-title">
-            <div>
-              <h2>이 역할의 필수 액션</h2>
-              <p>표준체계에서 본인에게 배정된 작성·검토·승인만 표시합니다.</p>
-            </div>
-            <Pill tone="blue">권한 분리</Pill>
-          </div>
-          <div>
-            {roleHome.tasks.map((task, index) => (
-              <article key={task}>
-                <span>{index + 1}</span>
-                <b>{task}</b>
-                <small>다른 역할의 승인 액션은 조회만 가능합니다.</small>
-              </article>
-            ))}
-          </div>
-        </section>
-      </div>
-    );
-  }
-  if (role !== "AI활성화팀 최병두 팀장")
+  if (role !== ACCOUNT_ROLES.leader)
     return (
       <UserDashboard
         role={role}
@@ -1534,12 +1571,13 @@ function Dashboard({
         openWorkflow={openWorkflow}
         openNewRequest={() => setRequestOpen(true)}
         projectItems={
-          role.includes("허정환")
+          role === ACCOUNT_ROLES.member
             ? [
                 memberAdditionalProjects[0],
                 ...userProjectItems.filter((project) =>
-                  ["2026-028", "2026-021"].includes(project.no),
+                  ["2026-028", "2026-021", "2026-014"].includes(project.no),
                 ),
+                memberAdditionalProjects[2],
                 memberAdditionalProjects[1],
               ]
             : userProjectItems
@@ -6347,7 +6385,7 @@ function UserDashboard({
   openNewRequest: () => void;
   projectItems: UserProject[];
 }) {
-  const isAiTeamMember = role.includes("AI활성화팀") && role.includes("담당자");
+  const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const [selected, setSelected] = useState(0);
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
@@ -6396,7 +6434,7 @@ function UserDashboard({
           : "진행 중"
         : "생성 전";
   const assignedProjects = isAiTeamMember
-    ? projectItems.filter((project) => project.teamOwner.includes("허정환"))
+    ? projectItems.filter((project) => hasProjectRelationship(role, project.no))
     : projectItems;
   const visible = assignedProjects.filter(
     (project) =>
@@ -6458,8 +6496,8 @@ function UserDashboard({
           </h1>
           <p>
             {isAiTeamMember
-              ? "G1에서 배정된 과제만 표시되며, 단계별 작성 업무와 승인 상태를 확인할 수 있습니다."
-              : "과제를 고르고 단계 원을 누르면 작성 결과와 남은 대화를 한 화면에서 확인할 수 있습니다."}
+              ? "개발·리뷰·운영 역할로 배정된 과제를 함께 표시하며, 배정 시점부터 프로젝트 전체 이력을 확인할 수 있습니다."
+              : "요청자 또는 프로젝트 Owner로 연결된 과제를 한 화면에서 확인할 수 있습니다."}
           </p>
         </div>
         {!isAiTeamMember && (
@@ -6483,8 +6521,8 @@ function UserDashboard({
               <h2>{isAiTeamMember ? "내 담당 Agent 과제" : "내 Agent 과제"}</h2>
               <p>
                 {isAiTeamMember
-                  ? "G1에서 개발 담당자로 지정된 과제입니다."
-                  : "과제를 선택해 신청 결과를 확인하세요."}
+                  ? "개발 담당·리뷰어·운영 담당으로 배정된 과제입니다."
+                  : "요청자·Owner 관계로 연결된 과제입니다."}
               </p>
             </div>
             <div className="compact-filters">
@@ -6517,6 +6555,17 @@ function UserDashboard({
                     <p>
                       <small>{project.no}</small>
                       <Pill tone={project.tone}>{project.status}</Pill>
+                      <Pill
+                        tone={
+                          getProjectRelationships(role, project.no).includes(
+                            "REVIEWER",
+                          )
+                            ? "violet"
+                            : "blue"
+                        }
+                      >
+                        {projectRelationshipLabel(role, project.no)}
+                      </Pill>
                     </p>
                     <strong>{project.name}</strong>
                     <small>
@@ -6865,7 +6914,6 @@ function UserDashboard({
           ) : selectedJourney >= 5 && selectedJourney <= 8 ? (
             <DeliveryWorkplace
               role={role}
-              setRole={() => undefined}
               openHub={() => setView("hub")}
               notify={() => undefined}
               embedded
@@ -6966,29 +7014,38 @@ type LifecycleRoleStage = "intake" | "definition" | "delivery" | "operations";
 function LifecycleRoleGuide({
   role,
   stage,
+  projectNo,
 }: {
   role: string;
   stage: LifecycleRoleStage;
+  projectNo?: string;
 }) {
-  const isLeader = role === "AI활성화팀 최병두 팀장";
-  const isMember = role.includes("AI활성화팀") && role.includes("담당자");
-  const isOperator = role === "운영 담당자";
-  const isReviewer = role.includes("리뷰어");
-  const isOwner = role.includes("현업 Owner");
-  const isSecurity = role.includes("정보보호");
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isMember = role === ACCOUNT_ROLES.member;
+  const relationships = getProjectRelationships(role, projectNo);
+  const isDeveloper = relationships.includes("DEVELOPER");
+  const isOperator = relationships.includes("OPERATOR");
+  const isReviewer = relationships.includes("REVIEWER");
+  const isOwner = relationships.includes("OWNER");
+  const isRequester = relationships.includes("REQUESTER") || role === ACCOUNT_ROLES.user;
+  const isSecurity = relationships.includes("SECURITY_REVIEWER");
   const roleLabel = isLeader
     ? "AI활성화팀장"
-    : isMember
-      ? "AI활성화팀 개발 담당자"
-      : isReviewer
-        ? "동료 리뷰어"
+    : isReviewer
+      ? "AI활성화팀 팀원 · 동료 리뷰어"
+      : isDeveloper
+        ? "AI활성화팀 팀원 · 개발 담당"
         : isOwner
           ? "프로젝트 Owner"
           : isSecurity
             ? "정보보호 담당자"
             : isOperator
-              ? "운영 담당자"
-              : "요구자";
+              ? "AI활성화팀 팀원 · 운영 담당"
+              : isRequester
+                ? "요구자"
+                : isMember
+                  ? "AI활성화팀 팀원 · 조회"
+                  : "조회 전용";
   const matrix = {
     intake: isLeader
       ? {
@@ -6996,13 +7053,19 @@ function LifecycleRoleGuide({
           view: "작성 완료된 INT·FEA와 인터뷰 근거 확인",
           permission: "착수 승인",
         }
-      : isMember
+      : isDeveloper
         ? {
             action: "현업 인터뷰 · 타당성 평가서[FEA] 작성",
             view: "작성 완료된 에이전트 요구 접수서[INT] 확인",
             permission: "작성",
           }
-        : {
+        : isMember
+          ? {
+              action: "배정된 프로젝트 전체 이력 확인",
+              view: "INT·FEA와 G1 판정 근거 조회",
+              permission: "조회",
+            }
+          : {
             action: "요구 접수 Agent와 접수서 작성",
             view: "제출 결과와 보완 요청 확인",
             permission: "작성",
@@ -7019,13 +7082,19 @@ function LifecycleRoleGuide({
             view: "범위·자율성·성공 기준·3자 승인 현황",
             permission: "검토·승인",
           }
-        : isMember
+        : isDeveloper
           ? {
               action: "현업 미팅 · ARD 공동 작성·보완",
               view: "INT·FEA·G1 조건과 G2 승인 현황",
               permission: "작성",
             }
-          : {
+          : isMember
+            ? {
+                action: "배정된 프로젝트의 ARD·G2 이력 검토",
+                view: "요구 접수부터 현재 단계까지 전체 이력",
+                permission: "조회",
+              }
+            : {
               action: "개발 담당자와 ARD 공동 작성 · G2 승인",
               view: "정의 내용과 3자 승인·보완 상태",
               permission: "작성·승인",
@@ -7054,7 +7123,7 @@ function LifecycleRoleGuide({
                 view: "DES·EVP·EVR·DEP·UG와 파일럿 결과 확인",
                 permission: "검토·승인",
               }
-            : isMember
+            : isDeveloper
               ? {
                   action: "DES·EVP·EVR 작성 · DEP/UG·파일럿 관리",
                   view: "G3·G4 승인 상태와 보완 의견 확인",
@@ -7071,7 +7140,7 @@ function LifecycleRoleGuide({
           view: "OPS·CHG 및 재승인 필요 항목 확인",
           permission: "감독·승인",
         }
-      : isMember
+      : isOperator || isDeveloper
         ? {
             action: "운영 대장[OPS]·개선 이력서[CHG] 관리",
             view: "실패 사례 등록·회귀 평가·변경 기록",
@@ -7092,7 +7161,7 @@ function LifecycleRoleGuide({
 
   return (
     <section
-      className={`lifecycle-role-guide ${isLeader ? "leader" : isMember ? "member" : isReviewer || isSecurity ? "reviewer" : isOwner ? "owner" : "user"}`}
+      className={`lifecycle-role-guide ${isLeader ? "leader" : isReviewer || isSecurity ? "reviewer" : isOwner ? "owner" : isMember ? "member" : "user"}`}
       aria-label={`${roleLabel} 역할별 업무`}
     >
       <div>
@@ -7135,20 +7204,17 @@ function LifecycleRoleGuide({
 
 function IntakeFeasibility({
   role,
-  setRole,
   notify,
   goDefinition,
   projectNo,
 }: {
   role: string;
-  setRole: (r: string) => void;
   notify: (s: string) => void;
   goDefinition: () => void;
   projectNo?: string;
 }) {
-  const isLeader = role === "AI활성화팀 최병두 팀장";
-  const isAiTeam = role.includes("AI활성화팀");
-  const canEditFea = role.includes("AI활성화팀") && role.includes("담당자");
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isAiTeam = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member;
   const [chatStep, setChatStep] = useState(2);
   const [chatInput, setChatInput] = useState("");
   const [selectedRequest, setSelectedRequest] = useState(
@@ -7240,6 +7306,7 @@ function IntakeFeasibility({
     },
   ];
   const current = intakeRequests[selectedRequest];
+  const canEditFea = hasProjectRelationship(role, current.no, ["DEVELOPER"]);
   const isCertificateFea = current.no === "2026-033";
   const requestedCompletion = isCertificateFea ? "2026.09.10" : "2026.10.30";
   const alternativeFindings = isCertificateFea
@@ -7279,29 +7346,18 @@ function IntakeFeasibility({
                 : "요구 접수 Agent와 대화하면 업무의 문제와 기대효과가 에이전트 요구 접수서[INT]로 정리됩니다."}
           </p>
         </div>
-        <div className="perspective-switch">
-          <span>현재 화면</span>
-          <button
-            className={!isAiTeam ? "active" : ""}
-            onClick={() => setRole("일반 User")}
-          >
-            일반 User
-          </button>
-          <button
-            className={isAiTeam && !isLeader ? "active" : ""}
-            onClick={() => setRole("AI활성화팀 허정환 담당자")}
-          >
-            팀원
-          </button>
-          <button
-            className={isLeader ? "active" : ""}
-            onClick={() => setRole("AI활성화팀 최병두 팀장")}
-          >
-            팀장
-          </button>
+        <div className="perspective-switch account-context" aria-label="현재 MS 계정 역할">
+          <span>MS 계정 역할</span>
+          <b>
+            {isLeader
+              ? "AI 활성화팀 팀장"
+              : isAiTeam
+                ? "AI 활성화팀 팀원"
+                : "일반 User"}
+          </b>
         </div>
       </section>
-      <LifecycleRoleGuide role={role} stage="intake" />
+      <LifecycleRoleGuide role={role} stage="intake" projectNo={current.no} />
       <div className="intake-stage-line">
         <div className="active">
           <span>1</span>
@@ -8036,25 +8092,25 @@ function IntakeFeasibility({
 
 function RequirementDefinition({
   role,
-  setRole,
   notify,
   goDelivery,
   projectNo,
 }: {
   role: string;
-  setRole: (s: string) => void;
   notify: (s: string) => void;
   goDelivery: () => void;
   projectNo?: string;
 }) {
-  const isLeader = role === "AI활성화팀 최병두 팀장";
-  const isAiTeamMember = role.includes("AI활성화팀") && role.includes("담당자");
-  const isOwner = role.includes("현업 Owner");
-  const isReviewRole = isLeader || isOwner;
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const [ardStep, setArdStep] = useState(4);
   const [chatInput, setChatInput] = useState("");
   const [selectedArd, setSelectedArd] = useState(
-    projectNo === "2026-026" ? 1 : projectNo === "2026-028" ? 2 : 0,
+    projectNo === "2026-026"
+      ? 1
+      : projectNo === "2026-028" || role === ACCOUNT_ROLES.member
+        ? 2
+        : 0,
   );
   const [expandedArdSection, setExpandedArdSection] = useState<number | null>(1);
   const [assignee, setAssignee] = useState("미배정");
@@ -8116,6 +8172,12 @@ function RequirementDefinition({
     },
   ];
   const current = ardQueue[selectedArd];
+  const currentRelationships = getProjectRelationships(role, current.no);
+  const isAssignedDeveloper = currentRelationships.includes("DEVELOPER");
+  const isRequester = currentRelationships.includes("REQUESTER");
+  const isOwner = currentRelationships.includes("OWNER") && !isRequester;
+  const canEditArd = isAssignedDeveloper || isRequester;
+  const isReviewRole = isLeader || !canEditArd;
   const ardSectionDetails = [
     "이 에이전트는 출장 신청 직원이 규정을 확인하고 기안할 때 승인된 근거를 찾아 비용 한도와 초안을 제공하며, 요구자·오너·개발·운영 책임자를 명시합니다.",
     "현행 프로세스는 요청 유형 확인 → 규정 검색 → 비용 한도 계산 → 첨부자료 확인 → 기안 작성 순서입니다. 단계 수는 케이스별로 자유롭게 기록하며, Pain Point와 처리시간·월 건수 Baseline도 함께 남깁니다.",
@@ -8160,40 +8222,25 @@ function RequirementDefinition({
               ? "현업 Owner는 작성된 업무 범위와 운영 책임을 조회합니다. G2 공식 서명자는 요구자·개발 담당자·AI활성화팀장입니다."
               : isLeader
                 ? "요구자와 지정 개발 담당자가 함께 작성한 에이전트 요구사항 정의서[ARD] 결과를 확인하고 G2 승인 또는 보완 요청을 결정합니다."
-                : isAiTeamMember
+                : isAssignedDeveloper
                   ? "G1에서 지정된 개발 담당자로서 현업 요구자와 미팅하며 ARD를 함께 작성하고 G2에 서명합니다."
-                  : "G1에서 지정된 개발 담당자와 업무 범위·성공 기준을 함께 정의하고 ARD를 완성한 뒤 G2에 서명합니다."}
+                  : isOwner
+                    ? "프로젝트 Owner로서 ARD의 업무 범위·성공 기준·운영 책임을 조회합니다."
+                    : "G1에서 지정된 개발 담당자와 업무 범위·성공 기준을 함께 정의하고 ARD를 완성한 뒤 G2에 서명합니다."}
           </p>
         </div>
-        <div className="perspective-switch">
-          <span>현재 화면</span>
-          <button
-            className={!isReviewRole && !isAiTeamMember ? "active" : ""}
-            onClick={() => setRole("일반 User")}
-          >
-            요구자
-          </button>
-          <button
-            className={isAiTeamMember ? "active" : ""}
-            onClick={() => setRole("AI활성화팀 허정환 담당자")}
-          >
-            개발 담당
-          </button>
-          <button
-            className={isOwner ? "active" : ""}
-            onClick={() => setRole("현업 Owner 박정민 팀장")}
-          >
-            Owner
-          </button>
-          <button
-            className={isLeader ? "active" : ""}
-            onClick={() => setRole("AI활성화팀 최병두 팀장")}
-          >
-            AI팀장
-          </button>
+        <div className="perspective-switch account-context" aria-label="현재 계정과 프로젝트 역할">
+          <span>현재 권한</span>
+          <b>
+            {isLeader
+              ? "AI 활성화팀 팀장"
+              : isAiTeamMember
+                ? projectRelationshipLabel(role, current.no) || "AI 활성화팀 팀원 · 조회"
+                : projectRelationshipLabel(role, current.no) || "일반 User"}
+          </b>
         </div>
       </section>
-      <LifecycleRoleGuide role={role} stage="definition" />
+      <LifecycleRoleGuide role={role} stage="definition" projectNo={current.no} />
       <section
         className="intake-stage-line definition-stage-line"
         aria-label="요구 정의 진행 단계"
@@ -8216,7 +8263,7 @@ function RequirementDefinition({
         <i />
         <div
           className={
-            isLeader || isAiTeamMember || !isReviewRole ? "active" : ""
+            isLeader || canEditArd ? "active" : ""
           }
         >
           <span>G2</span>
@@ -8981,7 +9028,6 @@ function RequirementDefinition({
 
 function DeliveryWorkplace({
   role,
-  setRole,
   openHub,
   notify,
   embedded = false,
@@ -8991,7 +9037,6 @@ function DeliveryWorkplace({
   lifecycleState = "진행 중",
 }: {
   role: string;
-  setRole: (r: string) => void;
   openHub: () => void;
   notify: (s: string) => void;
   embedded?: boolean;
@@ -9011,9 +9056,7 @@ function DeliveryWorkplace({
             ? 4
             : projectNo === "2026-031"
               ? 5
-              : role.includes("정보보호")
-                ? 1
-                : 0;
+              : 0;
   const [selectedProject, setSelectedProject] = useState(initialProject);
   const [activeDoc, setActiveDoc] = useState<"DES" | "EVP" | "EVR">("DES");
   const [activeDocSection, setActiveDocSection] = useState<number | null>(
@@ -9163,28 +9206,27 @@ function DeliveryWorkplace({
     );
   }, [current.no, current.evr, current.guardrail]);
   const isPlanned = lifecycleState === "생성 전";
-  const isLeader = role.includes("최병두");
-  const isAiTeamMember = role.includes("AI활성화팀") && role.includes("담당자");
-  const isReviewer = role.includes("리뷰어");
-  const isOwner = role.includes("현업 Owner");
-  const isSecurity = role.includes("정보보호");
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isAiTeamMember = role === ACCOUNT_ROLES.member;
+  const isGeneralUser = role === ACCOUNT_ROLES.user;
+  const currentRelationships = getProjectRelationships(role, current.no);
+  const isDeveloper = currentRelationships.includes("DEVELOPER");
+  const isReviewer = currentRelationships.includes("REVIEWER");
+  const isOwner = currentRelationships.includes("OWNER");
+  const isSecurity = currentRelationships.includes("SECURITY_REVIEWER");
   const visibleDeliveryProjectIndexes = deliveryProjects
     .map((item, index) => ({ item, index }))
     .filter(({ item }) =>
-      isAiTeamMember
-        ? item.builder === "허정환" && !item.stage.includes("G2")
-        : true,
+      isLeader ? true : hasProjectRelationship(role, item.no),
     );
   const canEditCurrentProject =
-    isAiTeamMember &&
-    current.builder === "허정환" &&
-    !current.stage.includes("G2");
+    isDeveloper && !current.stage.includes("G2");
   const perspective = isLeader
     ? "leader"
-    : isAiTeamMember
-      ? "builder"
-      : isReviewer
+    : isReviewer
         ? "reviewer"
+        : isDeveloper
+          ? "builder"
         : isOwner
           ? "owner"
           : isSecurity
@@ -10048,10 +10090,10 @@ function DeliveryWorkplace({
 
   const deliveryRoleClass = isLeader
     ? "role-leader-delivery"
-    : isAiTeamMember
-      ? "role-builder-delivery"
-      : isReviewer
+    : isReviewer
         ? "role-reviewer-delivery"
+        : isDeveloper
+          ? "role-builder-delivery"
         : isOwner
           ? "role-owner-delivery"
           : isSecurity
@@ -10086,45 +10128,20 @@ function DeliveryWorkplace({
               </p>
             </div>
             <div className="delivery-actions">
-              <div className="perspective-switch">
-                <span>현재 화면</span>
-                <button
-                  className={perspective === "builder" ? "active" : ""}
-                  onClick={() => setRole("AI활성화팀 허정환 담당자")}
-                >
-                  개발 담당
-                </button>
-                <button
-                  className={perspective === "reviewer" ? "active" : ""}
-                  onClick={() => setRole("AI활성화팀 이재승 리뷰어")}
-                >
-                  리뷰어
-                </button>
-                <button
-                  className={perspective === "owner" ? "active" : ""}
-                  onClick={() => setRole("현업 Owner 박정민 팀장")}
-                >
-                  Owner
-                </button>
-                <button
-                  className={perspective === "security" ? "active" : ""}
-                  onClick={() => setRole("정보보호 담당자")}
-                >
-                  정보보호
-                </button>
-                <button
-                  className={perspective === "leader" ? "active" : ""}
-                  onClick={() => setRole("AI활성화팀 최병두 팀장")}
-                >
-                  AI팀장
-                </button>
+              <div className="perspective-switch account-context" aria-label="현재 계정과 프로젝트 역할">
+                <span>현재 권한</span>
+                <b>
+                  {isLeader
+                    ? "AI 활성화팀 팀장"
+                    : projectRelationshipLabel(role, current.no) || "조회 전용"}
+                </b>
               </div>
               <button className="secondary" onClick={openHub}>
                 일정·작업은 AX Projects Hub →
               </button>
             </div>
           </section>
-          <LifecycleRoleGuide role={role} stage="delivery" />
+          <LifecycleRoleGuide role={role} stage="delivery" projectNo={current.no} />
         </>
       )}
 
@@ -10436,7 +10453,7 @@ function DeliveryWorkplace({
                   <span>
                     {isPlanned
                       ? "G2 통과 후 자동 생성"
-                      : isAiTeamMember
+                      : canEditCurrentProject
                         ? "자동 저장됨"
                         : "조회 전용 · 담당자 작성"}
                   </span>
@@ -10473,8 +10490,8 @@ function DeliveryWorkplace({
               <div>
                 <p className="eyebrow">DEPLOYMENT APPROVAL</p>
                 <h2>
-                  {viewerMode
-                    ? "배포 승인 결과 현황"
+                    {viewerMode || isGeneralUser
+                      ? "배포 승인 결과 현황"
                     : isLowTrack
                       ? "하 트랙 간소화 배포 승인"
                       : "기능·보안 공동 검토 및 배포 승인"}
@@ -10502,7 +10519,7 @@ function DeliveryWorkplace({
                   : "선행 조건 확인 중"}
             </Pill>
           </div>
-          {viewerMode && (
+          {(viewerMode || isGeneralUser) && (
             <div className="g3-viewer-notice">
               <Info size={17} weight="fill" />
               <p>
@@ -10514,7 +10531,7 @@ function DeliveryWorkplace({
               </p>
             </div>
           )}
-          {!viewerMode && isAiTeamMember && (
+          {!viewerMode && isDeveloper && (
             <div className="gate-role-readonly">
               <ShieldCheck size={17} weight="fill" />
               <p>
@@ -10705,7 +10722,7 @@ function DeliveryWorkplace({
                     <input
                       type="checkbox"
                       checked={depChecks[Number(checkIndex)]}
-                      disabled={!isAiTeamMember}
+                       disabled={!canEditCurrentProject}
                       onChange={(event) =>
                         setDepChecks((currentChecks) =>
                           currentChecks.map((value, index) =>
@@ -11008,7 +11025,7 @@ function DeliveryWorkplace({
                                 ? true
                                 : depChecks[index]
                             }
-                            disabled={!isAiTeamMember}
+                             disabled={!canEditCurrentProject}
                             onChange={(event) =>
                               setDepChecks((currentChecks) =>
                                 currentChecks.map((value, itemIndex) =>
@@ -11259,7 +11276,7 @@ function DeliveryWorkplace({
             <footer>
               <span>
                 {releaseDocument === "DEP"
-                  ? isAiTeamMember
+                   ? canEditCurrentProject
                     ? "자동 저장 · 개발 담당자 작성"
                     : "조회 전용 · 개발 담당자 작성"
                   : "사용자 배포본 · v1.0 · 2페이지"}
@@ -11272,7 +11289,7 @@ function DeliveryWorkplace({
               </button>
               <button
                 className="primary"
-                disabled={releaseDocument === "DEP" && !isAiTeamMember}
+                 disabled={releaseDocument === "DEP" && !canEditCurrentProject}
                 onClick={() => {
                   notify(
                     `${releaseDocument === "DEP" ? "배포 체크리스트" : "사용자 가이드"}가 확인되었습니다.`,
@@ -11281,7 +11298,7 @@ function DeliveryWorkplace({
                 }}
               >
                 {releaseDocument === "DEP"
-                  ? isAiTeamMember
+                   ? canEditCurrentProject
                     ? "체크 상태 저장"
                     : "조회 전용"
                   : "가이드 확인 완료"}
@@ -11301,10 +11318,7 @@ function OperationsImprovement({
   role: string;
   notify: (s: string) => void;
 }) {
-  const isLeader = role === "AI활성화팀 최병두 팀장";
-  const canEditOperations =
-    role === "운영 담당자" ||
-    (role.includes("AI활성화팀") && role.includes("담당자"));
+  const isLeader = role === ACCOUNT_ROLES.leader;
   const [activeDocument, setActiveDocument] = useState<"OPS" | "CHG">("OPS");
   const [selectedAgent, setSelectedAgent] = useState(0);
   const [selectedChange, setSelectedChange] = useState<ChangeRow | null>(null);
@@ -11405,6 +11419,17 @@ function OperationsImprovement({
     },
   ];
   const current = agents[selectedAgent];
+  const currentProjectNo = current.id.replace("AGT-", "");
+  const canEditOperations = hasProjectRelationship(role, currentProjectNo, [
+    "OPERATOR",
+  ]);
+  const visibleOperationAgents = agents
+    .map((agent, index) => ({ agent, index }))
+    .filter(({ agent }) =>
+      isLeader
+        ? true
+        : hasProjectRelationship(role, agent.id.replace("AGT-", "")),
+    );
   const changesByAgent: Record<string, ChangeRow[]> = {
     "AGT-2026-011": [
       [
@@ -11499,7 +11524,11 @@ function OperationsImprovement({
             </Pill>
           )}
         </section>
-        <LifecycleRoleGuide role={role} stage="operations" />
+        <LifecycleRoleGuide
+          role={role}
+          stage="operations"
+          projectNo={currentProjectNo}
+        />
         <div className="operations-principle">
           <span>
             <ArrowsClockwise size={18} weight="bold" />
@@ -11608,7 +11637,7 @@ function OperationsImprovement({
                       </tr>
                     </thead>
                     <tbody>
-                      {agents.map((agent, index) => (
+                      {visibleOperationAgents.map(({ agent, index }) => (
                         <tr
                           key={agent.id}
                           role="button"
@@ -12050,15 +12079,16 @@ function Governance({
   selectedGate: string;
   onGateChange: (gate: string) => void;
 }) {
-  const [tab, setTab] = useState("승인 대기");
-  const [search, setSearch] = useState("");
-  const visibleApprovals = approvalQueue.filter(
-    (item) =>
-      (selectedGate === "전체" || item.gate === selectedGate) &&
-      `${item.project.no} ${item.project.name} ${item.project.dept}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
+  const [tab, setTab] = useState("계정·역할");
+  const accounts = [
+    ["최병두", "choi.bd@changshininc.com", "AI 활성화팀 팀장", "전 과제 감독·게이트 승인", "Entra 그룹", "활성"],
+    ["허정환", "heo.jh@changshininc.com", "AI 활성화팀 팀원", "개발 3 · 리뷰 2 · 운영 1", "Entra 그룹", "활성"],
+    ["김현우", "kim.hw@changshininc.com", "일반 User", "요청자 4 · Owner 3", "기본 역할", "활성"],
+    ["Portal Admin", "portal.admin@changshininc.com", "admin", "계정·정책·감사 관리", "보안 그룹", "활성"],
+  ];
+  void onDetail;
+  void selectedGate;
+  void onGateChange;
   return (
     <div className="page">
       <section className="page-heading">
@@ -12066,127 +12096,117 @@ function Governance({
           <p className="eyebrow">CONTROL & ASSURANCE</p>
           <h1>Admin & Governance</h1>
           <p>
-            단계별 게이트 승인 근거와 Agent Master 기준정보를 통합 관리합니다.
+            MS 계정 역할, 프로젝트 권한 정책과 변경 감사 이력을 관리합니다.
           </p>
         </div>
         <button
           className="secondary"
-          onClick={() => notify("거버넌스 리포트를 준비했습니다.")}
+          onClick={() => notify("계정·권한 감사 리포트를 준비했습니다.")}
         >
-          거버넌스 리포트 내보내기
+          권한 감사 리포트 내보내기
         </button>
       </section>
       <section className="governance-summary">
         <div>
-          <p>승인 SLA 준수율</p>
-          <strong>92.4%</strong>
-          <Progress value={92} />
+          <p>등록 MS 계정</p>
+          <strong>128</strong>
+          <small>활성 125 · 잠금 3</small>
         </div>
         <div>
-          <p>G3 평가 통과율</p>
-          <strong>84.1%</strong>
-          <Progress value={84} />
+          <p>계정 역할</p>
+          <strong>4</strong>
+          <small>팀장 · 팀원 · User · admin</small>
         </div>
         <div>
-          <p>운영 Agent 정상률</p>
-          <strong>94.1%</strong>
-          <Progress value={94} />
+          <p>프로젝트 배정</p>
+          <strong>186</strong>
+          <small>요청·Owner·개발·리뷰·운영</small>
         </div>
         <div>
-          <p>이번 분기 절감 시간</p>
-          <strong>1,284h</strong>
-          <small>목표 대비 107%</small>
+          <p>권한 검토 필요</p>
+          <strong>3</strong>
+          <small>퇴직·조직이동·장기 미사용</small>
         </div>
       </section>
       <section className="panel admin-panel">
         <div className="admin-tabs">
-          {["승인 대기", "Agent Master"].map((t) => (
+          {["계정·역할", "권한 정책", "감사 로그"].map((t) => (
             <button
               key={t}
               className={tab === t ? "active" : ""}
               onClick={() => setTab(t)}
             >
               {t}
-              {t === "승인 대기" && <b>{approvalQueue.length}</b>}
+              {t === "감사 로그" && <b>3</b>}
             </button>
           ))}
         </div>
-        {tab === "승인 대기" && (
+        {tab === "계정·역할" && (
           <div className="admin-content">
             <div className="filter-row">
               <div>
-                {["전체", "G1", "G2", "G3", "G4"].map((gate) => {
-                  const count =
-                    gate === "전체"
-                      ? approvalQueue.length
-                      : approvalQueue.filter((item) => item.gate === gate)
-                          .length;
-                  return (
-                    <button
-                      key={gate}
-                      className={selectedGate === gate ? "active" : ""}
-                      aria-pressed={selectedGate === gate}
-                      onClick={() => onGateChange(gate)}
-                    >
-                      {gate} {count}
-                    </button>
-                  );
-                })}
+                <button className="active">전체 128</button>
+                <button>AI팀 9</button>
+                <button>일반 User 115</button>
+                <button>admin 4</button>
               </div>
               <label>
                 ⌕{" "}
                 <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="프로젝트 검색"
+                  aria-label="MS 계정 검색"
+                  placeholder="이름 또는 MS 계정 검색"
                 />
               </label>
             </div>
             <div className="approval-table">
               <div className="approval-head">
-                <span>프로젝트</span>
-                <span>게이트</span>
-                <span>필수 조건</span>
-                <span>승인자</span>
-                <span>요청일</span>
+                <span>사용자 · MS 계정</span>
+                <span>계정 역할</span>
+                <span>프로젝트별 권한</span>
+                <span>할당 기준</span>
+                <span>상태</span>
                 <span />
               </div>
-              {visibleApprovals.map((item) => (
+              {accounts.map(([name, email, accountRole, scope, source, status]) => (
                 <button
-                  key={item.project.no}
-                  onClick={() => onDetail(item.project)}
+                  key={email}
+                  onClick={() => notify(`${name} 계정의 역할·배정 이력을 열었습니다.`)}
                 >
                   <span>
-                    <b>{item.project.name}</b>
-                    <small>
-                      {item.project.no} · {item.project.dept}
-                    </small>
+                    <b>{name}</b>
+                    <small>{email}</small>
                   </span>
                   <span>
-                    <Pill tone={item.project.tone}>{item.gate}</Pill>
+                    <Pill tone={accountRole === "admin" ? "violet" : "blue"}>
+                      {accountRole}
+                    </Pill>
                   </span>
                   <span>
-                    <b>{item.condition}</b>
-                    <Progress value={item.progress} />
+                    <b>{scope}</b>
+                    <small>프로젝트 배정과 함께 자동 갱신</small>
                   </span>
-                  <span>
-                    <small>{item.approvers}</small>
-                  </span>
-                  <span>{item.requested}</span>
+                  <span><small>{source}</small></span>
+                  <span><Pill tone="green">{status}</Pill></span>
                   <span className="chev">›</span>
                 </button>
               ))}
-              {visibleApprovals.length === 0 && (
-                <div className="approval-empty-state">
-                  <CheckCircle size={24} weight="duotone" />
-                  <b>{selectedGate} 승인 대기 과제가 없습니다.</b>
-                  <span>새 승인 요청이 들어오면 이 목록에 표시됩니다.</span>
-                </div>
-              )}
             </div>
           </div>
         )}
-        {tab === "Agent Master" && <MasterTable onDetail={onDetail} />}
+        {tab === "권한 정책" && (
+          <div className="admin-content approval-empty-state">
+            <ShieldCheck size={28} weight="duotone" />
+            <b>계정 역할과 프로젝트 배정 권한을 분리합니다.</b>
+            <span>리뷰어는 배정 시점부터 전체 이력을 조회하고 지정된 게이트에서만 승인할 수 있습니다.</span>
+          </div>
+        )}
+        {tab === "감사 로그" && (
+          <div className="admin-content approval-empty-state">
+            <ClipboardText size={28} weight="duotone" />
+            <b>최근 권한 변경 3건</b>
+            <span>역할 변경·프로젝트 배정·회수 이력을 MS 계정과 시각 기준으로 보관합니다.</span>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -12523,9 +12543,11 @@ function ProjectDrawer({
   openWorkflow: (view: View, projectNo: string) => void;
   notify: (s: string) => void;
 }) {
-  const isLeader = role.includes("팀장");
-  const isTeamMember = role.includes("AI활성화팀") && role.includes("담당자");
-  const isOperator = role === "운영 담당자";
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isTeamMember = role === ACCOUNT_ROLES.member;
+  const relationships = getProjectRelationships(role, p.no);
+  const isReviewer = relationships.includes("REVIEWER");
+  const isOperator = relationships.includes("OPERATOR");
   const workflowView: View =
     p.step.includes("요구 정의") || p.step.includes("G2")
       ? "definition"
@@ -12534,8 +12556,10 @@ function ProjectDrawer({
         : "intake";
   const primaryLabel = isLeader
     ? "승인 검토 열기"
-    : isTeamMember
-      ? "담당 업무 열기"
+    : isReviewer
+      ? "전체 이력 · 리뷰 열기"
+      : isTeamMember
+        ? "담당 업무 열기"
       : isOperator
         ? "운영 점검 열기"
         : "진행 화면 열기";

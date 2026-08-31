@@ -20,13 +20,13 @@ test("persists submitted intake and advances to FEA waiting", () => {
 test("keeps FEA read-only for leaders and locks G1 until complete", () => {
   assert.ok(page.includes('className="fea-grid"'));
   assert.ok(page.includes("disabled={!canEditFea}"));
-  assert.ok(page.includes('basisReady={current.no !== "2026-031"}'));
+  assert.ok(page.includes('["2026-031", "2026-033"]'));
   assert.ok(page.includes("FEA가 아직 작성 중입니다"));
   assert.ok(page.includes('g1DraftDecision === "PENDING"'));
 });
 
 test("closes rejected G2 rounds and uses the correct three signers", () => {
-  assert.ok(page.includes('canActOnG2 && !rejected && myG2Vote === "PENDING"'));
+  assert.ok(page.includes("canActOnG2 && !rejected && myApprovalPending"));
   assert.ok(page.includes("이 승인 라운드는 보완 요청으로 종료되었습니다"));
   assert.ok(page.includes("요구자·개발 담당자·AI활성화팀장"));
   assert.ok(page.includes("보완 중인 ARD 보기"));
