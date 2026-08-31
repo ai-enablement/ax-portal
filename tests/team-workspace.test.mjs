@@ -115,6 +115,21 @@ test("enforces gate separation and autonomy track escalation", () => {
     assert.ok(page.includes(roleClass));
 });
 
+test("lets the assigned developer write DES EVP and EVR while other roles review", () => {
+  assert.ok(page.includes("canEditCurrentProject"));
+  assert.ok(page.includes("documentDrafts"));
+  assert.ok(page.includes("savedDocumentSections"));
+  assert.ok(page.includes("섹션 저장 · 완료"));
+  assert.ok(page.includes("문서 작성 완료"));
+  assert.ok(page.includes("조회·검토 전용"));
+  assert.ok(page.includes("프로젝트 개발 담당자"));
+  assert.ok(page.includes("독립 리뷰"));
+  assert.ok(page.includes("보완 요청을 개발 담당자에게 전달했습니다"));
+  assert.ok(css.includes(".delivery-document-editor"));
+  assert.ok(css.includes(".delivery-document-reviewer"));
+  assert.ok(css.includes(".document-readonly-note"));
+});
+
 test("preserves the full-width readable visual baseline", () => {
   for (const selector of [
     ".team-workspace-page",

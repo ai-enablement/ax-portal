@@ -9921,6 +9921,18 @@ function DeliveryWorkplace({
   const [activeDocSection, setActiveDocSection] = useState<number | null>(
     lifecycleState === "생성 전" ? null : 0,
   );
+  const [documentDrafts, setDocumentDrafts] = useState<
+    Record<string, { body: string; evidence: string; reviewNote: string }>
+  >({});
+  const [savedDocumentSections, setSavedDocumentSections] = useState<
+    Record<string, boolean>
+  >({});
+  const [completedDocuments, setCompletedDocuments] = useState<
+    Record<string, boolean>
+  >({});
+  const [documentReviews, setDocumentReviews] = useState<
+    Record<string, { note: string; status: "PENDING" | "APPROVED" | "REWORK" }>
+  >({});
   const [releaseDocument, setReleaseDocument] = useState<"DEP" | "UG" | null>(
     null,
   );
@@ -10776,30 +10788,92 @@ function DeliveryWorkplace({
     ],
   };
   const activeSections = deliveryDocSections[activeDoc];
+  const baseDocProgress = (doc: "DES" | "EVP" | "EVR") =>
+    doc === "DES" ? current.des : doc === "EVP" ? current.evp : current.evr;
+  const documentSectionKey = (
+    doc: "DES" | "EVP" | "EVR",
+    sectionIndex: number,
+  ) => `${current.no}:${doc}:${sectionIndex}`;
+  const documentKey = (doc: "DES" | "EVP" | "EVR") =>
+    `${current.no}:${doc}`;
+  const sectionComplete = (
+    doc: "DES" | "EVP" | "EVR",
+    sectionIndex: number,
+  ) => {
+    const sections = deliveryDocSections[doc];
+    return (
+      savedDocumentSections[documentSectionKey(doc, sectionIndex)] ||
+      baseDocProgress(doc) >=
+        Math.ceil(((sectionIndex + 1) / sections.length) * 100)
+    );
+  };
+  const documentProgress = (doc: "DES" | "EVP" | "EVR") => {
+    const sections = deliveryDocSections[doc];
+    const completed = sections.filter((_, index) =>
+      sectionComplete(doc, index),
+    ).length;
+    return Math.max(
+      baseDocProgress(doc),
+      Math.round((completed / sections.length) * 100),
+    );
+  };
+  const defaultDocumentDraft = (
+    doc: "DES" | "EVP" | "EVR",
+    title: string,
+    summary: string,
+  ) => ({
+    body:
+      doc === "DES"
+        ? `${title}\n${summary}\n\n선택한 설계와 적용 범위, 예외 처리 방식을 구체적으로 기록합니다.`
+        : doc === "EVP"
+          ? `${title}\n${summary}\n\n평가 케이스 구성, 판정 기준과 반복 평가 계획을 구체적으로 기록합니다.`
+          : `${title}\n${summary}\n\n실행 결과, 실패 원인과 후속 조치를 근거와 함께 기록합니다.`,
+    evidence:
+      doc === "DES"
+        ? `${current.no}-ARD · 승인된 설계 기준 및 Decision Log`
+        : doc === "EVP"
+          ? `${current.no}-ARD 7번 · 평가셋 및 정답 라벨`
+          : `${current.no}-EVP · 평가 실행 로그 및 실패 케이스`,
+    reviewNote:
+      doc === "EVP"
+        ? `현업 정답 라벨 담당자와 리뷰어 ${current.reviewer}의 독립 검토 필요`
+        : doc === "EVR"
+          ? `리뷰어 ${current.reviewer} 검토 후 G3 승인 근거로 사용`
+          : "개발 중 변경 시 설계 결정 사유와 버전을 함께 갱신",
+  });
   const docData = {
     DES: {
       title: "에이전트 설계서",
       version: "v0.8",
       owner: current.builder,
-      progress: current.des,
-      status: current.des === 100 ? "작성 완료" : "작성 중",
+      progress: documentProgress("DES"),
+      status:
+        completedDocuments[documentKey("DES")] ||
+        documentProgress("DES") === 100
+          ? "작성 완료"
+          : "작성 중",
     },
     EVP: {
       title: "평가 계획서",
       version: "v1.0",
       owner: `${current.builder} · ${current.reviewer}`,
-      progress: current.evp,
-      status: current.evp === 100 ? "검토 완료" : "작성 중",
+      progress: documentProgress("EVP"),
+      status:
+        completedDocuments[documentKey("EVP")] ||
+        documentProgress("EVP") === 100
+          ? "검토 완료"
+          : "작성 중",
     },
     EVR: {
       title: "평가 결과 보고서",
       version: "v0.6",
       owner: `${current.builder} · ${current.reviewer}`,
-      progress: current.evr,
+      progress: documentProgress("EVR"),
       status:
-        current.evr === 100
+        completedDocuments[documentKey("EVR")] ||
+        documentProgress("EVR") === 100
           ? "승인 요청 가능"
-          : current.evr
+          : documentProgress("EVR")
             ? "평가 중"
             : "평가 전",
     },
@@ -11221,7 +11295,7 @@ function DeliveryWorkplace({
                     <small>
                       {isPlanned
                         ? "예정"
-                        : `${doc === "DES" ? current.des : doc === "EVP" ? current.evp : current.evr}%`}
+                        : `${documentProgress(doc)}%`}
                     </small>
                   </button>
                 ))}
@@ -11264,11 +11338,12 @@ function DeliveryWorkplace({
               </div>
               <div className="doc-checklist delivery-doc-accordion">
                 {activeSections.map((item, i) => {
-                  const complete =
-                    !isPlanned &&
-                    visibleDocData.progress >=
-                      Math.ceil(((i + 1) / activeSections.length) * 100);
+                  const complete = !isPlanned && sectionComplete(activeDoc, i);
                   const active = !isPlanned && activeDocSection === i;
+                  const sectionKey = documentSectionKey(activeDoc, i);
+                  const draft =
+                    documentDrafts[sectionKey] ||
+                    defaultDocumentDraft(activeDoc, item.title, item.summary);
                   return (
                     <div className="delivery-document-section" key={item.title}>
                       <button
@@ -11301,6 +11376,184 @@ function DeliveryWorkplace({
                           aria-label={`${item.title} 상세 내용`}
                         >
                           {item.content}
+                          {canEditCurrentProject && (
+                            <div className="delivery-document-editor" aria-label={`${item.title} 작성 영역`}>
+                              <div className="document-editor-title">
+                                <div>
+                                  <Pill tone={complete ? "green" : "blue"}>
+                                    {complete ? "저장 완료" : "개발 담당자 작성"}
+                                  </Pill>
+                                  <h4>{String(i + 1).padStart(2, "0")} · {item.title} 편집</h4>
+                                </div>
+                                <small>담당 {current.builder} · 변경 내용 자동 기록</small>
+                              </div>
+                              <label>
+                                섹션 본문
+                                <textarea
+                                  value={draft.body}
+                                  onChange={(event) =>
+                                    setDocumentDrafts((items) => ({
+                                      ...items,
+                                      [sectionKey]: {
+                                        ...draft,
+                                        body: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                  aria-label={`${activeDoc} ${item.title} 본문`}
+                                />
+                              </label>
+                              <div className="document-editor-fields">
+                                <label>
+                                  근거·참조 문서
+                                  <input
+                                    value={draft.evidence}
+                                    onChange={(event) =>
+                                      setDocumentDrafts((items) => ({
+                                        ...items,
+                                        [sectionKey]: {
+                                          ...draft,
+                                          evidence: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    aria-label={`${activeDoc} ${item.title} 근거`}
+                                  />
+                                </label>
+                                <label>
+                                  검토·인계 메모
+                                  <input
+                                    value={draft.reviewNote}
+                                    onChange={(event) =>
+                                      setDocumentDrafts((items) => ({
+                                        ...items,
+                                        [sectionKey]: {
+                                          ...draft,
+                                          reviewNote: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    aria-label={`${activeDoc} ${item.title} 검토 메모`}
+                                  />
+                                </label>
+                              </div>
+                              <div className="document-editor-actions">
+                                <span>
+                                  {savedDocumentSections[sectionKey]
+                                    ? "방금 저장됨 · 문서 버전에 반영"
+                                    : "입력 내용은 이 화면에서 임시 보관됩니다."}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="primary"
+                                  disabled={
+                                    !draft.body.trim() || !draft.evidence.trim()
+                                  }
+                                  onClick={() => {
+                                    setDocumentDrafts((items) => ({
+                                      ...items,
+                                      [sectionKey]: draft,
+                                    }));
+                                    setSavedDocumentSections((items) => ({
+                                      ...items,
+                                      [sectionKey]: true,
+                                    }));
+                                    notify(
+                                      `${visibleDocData.title}의 '${item.title}' 항목을 저장하고 완료 처리했습니다.`,
+                                    );
+                                  }}
+                                >
+                                  {complete ? "수정 내용 저장" : "섹션 저장 · 완료"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {!canEditCurrentProject && isReviewer && !isPlanned && (
+                            <div className="delivery-document-reviewer" aria-label={`${item.title} 리뷰 영역`}>
+                              <div>
+                                <Pill
+                                  tone={
+                                    documentReviews[sectionKey]?.status === "APPROVED"
+                                      ? "green"
+                                      : documentReviews[sectionKey]?.status === "REWORK"
+                                        ? "red"
+                                        : "blue"
+                                  }
+                                >
+                                  {documentReviews[sectionKey]?.status === "APPROVED"
+                                    ? "검토 완료"
+                                    : documentReviews[sectionKey]?.status === "REWORK"
+                                      ? "보완 요청"
+                                      : "독립 리뷰"}
+                                </Pill>
+                                <h4>{item.title} 검토 의견</h4>
+                              </div>
+                              <label>
+                                검토 의견 또는 보완 사유
+                                <textarea
+                                  value={documentReviews[sectionKey]?.note || ""}
+                                  onChange={(event) =>
+                                    setDocumentReviews((items) => ({
+                                      ...items,
+                                      [sectionKey]: {
+                                        status: items[sectionKey]?.status || "PENDING",
+                                        note: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder="ARD 기준 충족 여부와 보완이 필요한 근거를 기록하세요."
+                                  aria-label={`${activeDoc} ${item.title} 리뷰 의견`}
+                                />
+                              </label>
+                              <div className="document-review-actions">
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  disabled={!documentReviews[sectionKey]?.note.trim()}
+                                  onClick={() => {
+                                    setDocumentReviews((items) => ({
+                                      ...items,
+                                      [sectionKey]: {
+                                        note: items[sectionKey]?.note || "",
+                                        status: "REWORK",
+                                      },
+                                    }));
+                                    notify(`${item.title} 보완 요청을 개발 담당자에게 전달했습니다.`);
+                                  }}
+                                >
+                                  보완 요청
+                                </button>
+                                <button
+                                  type="button"
+                                  className="primary"
+                                  onClick={() => {
+                                    setDocumentReviews((items) => ({
+                                      ...items,
+                                      [sectionKey]: {
+                                        note: items[sectionKey]?.note || "기준 충족 확인",
+                                        status: "APPROVED",
+                                      },
+                                    }));
+                                    notify(`${item.title} 독립 검토 완료를 기록했습니다.`);
+                                  }}
+                                >
+                                  검토 완료
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {!canEditCurrentProject && !isReviewer && !isPlanned && (
+                            <div className="document-readonly-note">
+                              <Info size={16} weight="fill" />
+                              <p>
+                                <b>조회·검토 전용</b>
+                                <span>
+                                  이 문서는 프로젝트 개발 담당자 {current.builder}가 작성합니다.
+                                  팀장·Owner·리뷰어는 저장된 결과와 변경 이력을 확인합니다.
+                                </span>
+                              </p>
+                            </div>
+                          )}
                         </section>
                       )}
                     </div>
@@ -11321,15 +11574,34 @@ function DeliveryWorkplace({
                 <button
                   className="primary"
                   disabled={isPlanned || !canEditCurrentProject}
-                  onClick={() =>
+                  onClick={() => {
+                    const allComplete = activeSections.every((_, index) =>
+                      sectionComplete(activeDoc, index),
+                    );
+                    if (!allComplete) {
+                      notify(
+                        `${visibleDocData.title}[${activeDoc}] 임시본을 저장했습니다. 작성 필요 항목을 완료해 주세요.`,
+                      );
+                      return;
+                    }
+                    setCompletedDocuments((items) => ({
+                      ...items,
+                      [documentKey(activeDoc)]: true,
+                    }));
                     notify(
-                      `${visibleDocData.title}[${activeDoc}]이 저장되었습니다.`,
-                    )
-                  }
+                      `${visibleDocData.title}[${activeDoc}] 작성 완료본을 저장했습니다.`,
+                    );
+                  }}
                 >
                   {canEditCurrentProject
-                    ? "문서 저장"
-                    : isAiTeamMember
+                    ? activeSections.every((_, index) =>
+                        sectionComplete(activeDoc, index),
+                      )
+                      ? "문서 작성 완료"
+                      : "문서 임시 저장"
+                    : isReviewer
+                      ? "리뷰어 검토 전용"
+                      : isAiTeamMember
                       ? "다른 담당자 문서 · 조회 전용"
                       : "담당자 작성 문서"}
                 </button>

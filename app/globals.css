@@ -14970,6 +14970,157 @@ body {
   background: #f8fbff;
   color: #415066;
 }
+.delivery-document-editor {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #cbd9ed;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(43, 69, 104, 0.06);
+}
+.document-editor-title,
+.document-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.document-editor-title h4 {
+  margin: 7px 0 0;
+  color: #263b57;
+  font-size: 13px !important;
+}
+.document-editor-title > small,
+.document-editor-actions > span {
+  color: #748196;
+  font-size: 9px !important;
+}
+.delivery-document-editor label {
+  display: grid;
+  gap: 6px;
+  color: #3f5067;
+  font-size: 10px !important;
+  font-weight: 800;
+}
+.delivery-document-editor textarea,
+.delivery-document-editor input {
+  width: 100%;
+  border: 1px solid #ccd6e3;
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px 11px;
+  color: #263548;
+  font: inherit;
+  font-weight: 500;
+}
+.delivery-document-editor textarea {
+  min-height: 132px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.delivery-document-editor :is(textarea, input):focus {
+  border-color: #3979e5;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(57, 121, 229, 0.12);
+}
+.document-editor-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.document-editor-actions {
+  padding-top: 2px;
+}
+.document-readonly-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 12px 13px;
+  border: 1px solid #dce5ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #66768b;
+}
+.document-readonly-note > svg {
+  flex: 0 0 auto;
+  color: #4d78a9;
+}
+.document-readonly-note p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+.document-readonly-note b {
+  color: #32465f;
+  font-size: 10px !important;
+}
+.document-readonly-note span {
+  font-size: 9px !important;
+  line-height: 1.55;
+}
+.delivery-document-reviewer {
+  display: grid;
+  gap: 11px;
+  margin-top: 16px;
+  padding: 15px;
+  border: 1px solid #d9d1f0;
+  border-radius: 9px;
+  background: #fcfaff;
+}
+.delivery-document-reviewer h4 {
+  margin: 7px 0 0;
+  color: #493b68;
+  font-size: 12px !important;
+}
+.delivery-document-reviewer label {
+  display: grid;
+  gap: 6px;
+  color: #574a73;
+  font-size: 10px !important;
+  font-weight: 800;
+}
+.delivery-document-reviewer textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid #d5cbe9;
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px 11px;
+  color: #3e3651;
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.55;
+}
+.delivery-document-reviewer textarea:focus {
+  border-color: #8068bd;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(128, 104, 189, 0.12);
+}
+.document-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 760px) {
+  .document-editor-title,
+  .document-editor-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .document-editor-fields {
+    grid-template-columns: 1fr;
+  }
+  .document-review-actions {
+    justify-content: stretch;
+  }
+  .document-review-actions button {
+    flex: 1;
+  }
+}
 .delivery-detail-stack {
   display: grid;
   gap: 11px;
