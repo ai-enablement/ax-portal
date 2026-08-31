@@ -80,3 +80,10 @@ test("prevents page-level horizontal overflow", () => {
   assert.ok(css.includes(".oneview-grid"));
   assert.ok(css.includes(".wizard-steps"));
 });
+
+test("keeps the new Agent request dialog readable", () => {
+  assert.ok(css.includes("New Agent request dialog legibility"));
+  assert.ok(css.includes(".chat-wizard .chat-message p"));
+  assert.ok(css.includes("font-size: 28px !important"));
+  assert.ok(css.includes("font-size: 14px !important"));
+});

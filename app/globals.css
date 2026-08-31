@@ -12469,6 +12469,175 @@ body {
   }
 }
 
+/* New Agent request dialog legibility */
+.chat-wizard {
+  width: min(1240px, calc(100vw - 40px));
+}
+.chat-wizard > header {
+  padding: 24px 28px 18px;
+}
+.chat-wizard > header .pill {
+  font-size: 13px !important;
+}
+.chat-wizard > header h2 {
+  margin-top: 10px;
+  font-size: 28px !important;
+  line-height: 1.3;
+}
+.chat-wizard > header p {
+  font-size: 15px !important;
+  line-height: 1.6;
+}
+.chat-wizard > header > button {
+  width: 38px;
+  height: 38px;
+}
+.chat-wizard .wizard-steps {
+  padding: 0 28px 20px;
+}
+.chat-wizard .wizard-steps span {
+  width: 34px;
+  height: 34px;
+  font-size: 13px !important;
+}
+.chat-wizard .wizard-steps > div:not(:last-child)::after {
+  top: 16px;
+}
+.chat-wizard .wizard-steps small {
+  margin-top: 7px;
+  font-size: 12px !important;
+  line-height: 1.4;
+}
+.chat-wizard-grid {
+  grid-template-columns: minmax(430px, 0.95fr) minmax(480px, 1.05fr);
+  gap: 18px;
+  padding: 0 28px 24px;
+}
+.chat-wizard .wizard-document-preview > header {
+  padding: 18px 20px;
+}
+.chat-wizard .wizard-document-preview > header small {
+  font-size: 12px !important;
+}
+.chat-wizard .wizard-document-preview > header h3 {
+  margin-top: 7px;
+  font-size: 21px !important;
+}
+.chat-wizard .wizard-document-preview > div {
+  min-height: 88px;
+  padding: 15px 19px;
+}
+.chat-wizard .wizard-document-preview > div b {
+  font-size: 14px !important;
+  line-height: 1.45;
+}
+.chat-wizard .wizard-document-preview > div p {
+  margin-top: 8px;
+  font-size: 13px !important;
+  line-height: 1.65;
+}
+.chat-wizard .wizard-document-preview > footer {
+  padding: 14px 19px;
+}
+.chat-wizard .wizard-document-preview > footer span,
+.chat-wizard .wizard-document-preview > footer b {
+  font-size: 12px !important;
+}
+.chat-wizard .wizard-chat-panel {
+  min-height: 560px;
+}
+.chat-wizard .wizard-chat-panel > header {
+  gap: 12px;
+  padding: 17px 18px;
+}
+.chat-wizard .wizard-chat-panel .brand-mark {
+  width: 40px;
+  height: 40px;
+  font-size: 11px !important;
+}
+.chat-wizard .wizard-chat-panel header strong {
+  font-size: 16px !important;
+}
+.chat-wizard .wizard-chat-panel header small {
+  margin-top: 4px;
+  font-size: 12px !important;
+}
+.chat-wizard .wizard-chat-history {
+  padding: 18px;
+}
+.chat-wizard .chat-message {
+  margin-bottom: 16px;
+}
+.chat-wizard .chat-message small {
+  margin-bottom: 6px;
+  font-size: 12px !important;
+}
+.chat-wizard .chat-message p {
+  padding: 12px 14px;
+  font-size: 14px !important;
+  line-height: 1.65;
+}
+.chat-wizard .wizard-chat-input {
+  padding: 15px;
+}
+.chat-wizard .wizard-chat-input textarea {
+  min-height: 104px;
+  padding: 13px 14px;
+  font-size: 14px !important;
+  line-height: 1.6;
+}
+.chat-wizard .wizard-chat-input button {
+  min-height: 46px;
+  margin-top: 10px;
+  font-size: 14px !important;
+}
+.chat-wizard .wizard-date-input span {
+  font-size: 14px !important;
+}
+.chat-wizard .wizard-date-input input {
+  min-height: 48px;
+  font-size: 14px !important;
+}
+.chat-wizard .wizard-owner-field {
+  gap: 9px 12px;
+  padding: 11px 13px;
+}
+.chat-wizard .wizard-owner-field legend {
+  font-size: 14px !important;
+}
+.chat-wizard .wizard-owner-field p {
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+.chat-wizard .wizard-owner-field label {
+  gap: 7px;
+  font-size: 13px !important;
+}
+.chat-wizard .wizard-owner-field > input {
+  min-height: 42px;
+  font-size: 14px !important;
+}
+.chat-wizard > footer {
+  padding: 17px 28px;
+}
+.chat-wizard > footer button {
+  min-height: 42px;
+  font-size: 14px !important;
+}
+.chat-wizard > footer span {
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .chat-wizard-grid {
+    grid-template-columns: 1fr;
+  }
+  .chat-wizard > header h2 {
+    font-size: 25px !important;
+  }
+}
+
 /* User journey state and responsive corrections */
 html,
 body {
