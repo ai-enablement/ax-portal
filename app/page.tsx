@@ -7202,6 +7202,72 @@ function LifecycleRoleGuide({
   );
 }
 
+type FeasibilityTrack = "LOW" | "MEDIUM" | "HIGH";
+
+function judgeFeasibilityTrack(input: {
+  writeExec: boolean;
+  sensitive: boolean;
+  scope: string;
+  damageFinancial: boolean;
+  autonomy: string;
+}) {
+  const highSignals = [
+    input.writeExec && "쓰기·실행 권한",
+    input.sensitive && "개인정보·기밀 취급",
+    input.damageFinancial && "금전·법적 피해 가능성",
+    ["L2", "L3", "L4"].includes(input.autonomy) && "자율성 L2 이상",
+  ].filter(Boolean) as string[];
+  const mediumSignal = ["DEPT", "MULTI_DEPT", "COMPANY"].includes(
+    input.scope,
+  );
+  const track: FeasibilityTrack = highSignals.length
+    ? "HIGH"
+    : mediumSignal
+      ? "MEDIUM"
+      : "LOW";
+
+  return {
+    track,
+    label: track === "HIGH" ? "상" : track === "MEDIUM" ? "중" : "하",
+    signals:
+      highSignals.length > 0
+        ? highSignals
+        : mediumSignal
+          ? ["부서 단위 이상 사용"]
+          : ["개인·팀 내 보조 도구"],
+    citation: "에이전트 개발 표준체계 0.3절",
+  };
+}
+
+function calculateFeasibilityRoi(input: {
+  countPerMonth: number;
+  asIsMinutes: number;
+  people: number;
+  toBeMinutes: string;
+}) {
+  const toBe = Number(input.toBeMinutes);
+  if (!input.toBeMinutes.trim() || !Number.isFinite(toBe) || toBe < 0) {
+    return {
+      computed: false as const,
+      reason:
+        "To-Be 시간/건이 확보되지 않아 ROI를 산출하지 않았습니다. 추정치로 대체하지 않습니다.",
+    };
+  }
+  const asIsHours =
+    (input.countPerMonth * input.asIsMinutes * input.people) / 60;
+  const toBeHours = (input.countPerMonth * toBe * input.people) / 60;
+  const savedHours = asIsHours - toBeHours;
+  return {
+    computed: true as const,
+    asIsHours: Math.round(asIsHours * 10) / 10,
+    toBeHours: Math.round(toBeHours * 10) / 10,
+    savedHours: Math.round(savedHours * 10) / 10,
+    savedHoursYear: Math.round(savedHours * 12 * 10) / 10,
+    savedMdYear: Math.round((savedHours * 12 * 10) / 8) / 10,
+    formula: `(${input.asIsMinutes}분 - ${toBe}분) × ${input.countPerMonth}건/월 × ${input.people}명 ÷ 60`,
+  };
+}
+
 function IntakeFeasibility({
   role,
   notify,
@@ -7231,8 +7297,13 @@ function IntakeFeasibility({
     assignee: string;
     reason: string;
   } | null>(null);
-  const [trackDraft, setTrackDraft] = useState("MEDIUM");
+  const [trackDraft, setTrackDraft] = useState<FeasibilityTrack>("HIGH");
   const [autonomyDraft, setAutonomyDraft] = useState("L0");
+  const [riskWriteExec, setRiskWriteExec] = useState(false);
+  const [riskSensitive, setRiskSensitive] = useState(true);
+  const [riskScope, setRiskScope] = useState("COMPANY");
+  const [riskDamageFinancial, setRiskDamageFinancial] = useState(true);
+  const [toBeMinutes, setToBeMinutes] = useState("");
   const updateAutonomyDraft = (next: string) => {
     setAutonomyDraft(next);
     if (["L2", "L3", "L4"].includes(next)) {
@@ -7257,6 +7328,9 @@ function IntakeFeasibility({
       volume: "월 60건 · 건당 18분 · 월 18시간",
       outcome: "인증서 누락·만료·규격 불일치 후보와 원문 근거를 담당자 검토 목록으로 제공",
       impact: "만료 또는 부적합 인증서를 놓치면 입고 지연과 품질 승인 보류 가능",
+      countPerMonth: 60,
+      minutesPerCase: 18,
+      people: 1,
     },
     {
       no: "2026-031",
@@ -7272,6 +7346,9 @@ function IntakeFeasibility({
       volume: "월 20건 · 건당 45분 · 월 15시간",
       outcome: "변경 부품과 영향 문서 목록을 근거 링크와 함께 자동 제시",
       impact: "검토 누락 시 샘플 재작업 및 개발 일정 지연 가능",
+      countPerMonth: 20,
+      minutesPerCase: 45,
+      people: 1,
     },
     {
       no: "2026-030",
@@ -7288,6 +7365,9 @@ function IntakeFeasibility({
       outcome:
         "승인 규정의 근거 조항을 포함한 답변 초안과 담당자 확인 항목 제시",
       impact: "잘못된 규정 안내 시 협력사 조치 지연과 품질 분쟁 가능",
+      countPerMonth: 140,
+      minutesPerCase: 20,
+      people: 1,
     },
     {
       no: "2026-029",
@@ -7303,6 +7383,9 @@ function IntakeFeasibility({
       volume: "월 12회 · 건당 30분 · 담당자 2명",
       outcome: "회의록에서 Action Item을 추출해 담당자 확인용 목록으로 제공",
       impact: "업무량과 정답 검수 책임자가 아직 명확하지 않아 보완 필요",
+      countPerMonth: 12,
+      minutesPerCase: 30,
+      people: 2,
     },
   ];
   const current = intakeRequests[selectedRequest];
@@ -7325,6 +7408,51 @@ function IntakeFeasibility({
   const feaConclusion = isCertificateFea
     ? "네 가지 저비용 대안만으로는 분산된 인증서의 유효기간과 규격 조건을 근거와 함께 일관되게 판정하기 어려워, 읽기 전용 연동과 담당자 최종 확인을 포함한 Agent 개발이 타당합니다."
     : "네 가지 저비용 대안만으로는 시스템 간 영향 관계와 근거 추적을 함께 해결할 수 없어, 읽기 전용 데이터 연동과 사람 검토를 포함한 Agent 개발이 타당합니다.";
+  const engineTrack = useMemo(
+    () =>
+      judgeFeasibilityTrack({
+        writeExec: riskWriteExec,
+        sensitive: riskSensitive,
+        scope: riskScope,
+        damageFinancial: riskDamageFinancial,
+        autonomy: autonomyDraft,
+      }),
+    [
+      autonomyDraft,
+      riskDamageFinancial,
+      riskScope,
+      riskSensitive,
+      riskWriteExec,
+    ],
+  );
+  const engineRoi = useMemo(
+    () =>
+      calculateFeasibilityRoi({
+        countPerMonth: current.countPerMonth,
+        asIsMinutes: current.minutesPerCase,
+        people: current.people,
+        toBeMinutes,
+      }),
+    [current.countPerMonth, current.minutesPerCase, current.people, toBeMinutes],
+  );
+  const engineRecommendation = engineRoi.computed ? "Go 권고" : "Conditional Go 권고";
+  const engineGuardrails = [
+    ["G-1", "상 트랙 조건 전건 검사", true],
+    ["G-2", "권고와 G1 확정 분리", true],
+    ["G-3", "미확보 수치 추정 금지", !engineRoi.computed],
+    ["G-4", "판정 근거 조항 표시", true],
+    ["G-5", "Drop 시 대안 안내", true],
+    ["G-6", "민감정보 원문 차단", true],
+    ["G-7", "범위 밖 실행 거절", true],
+  ] as const;
+
+  useEffect(() => {
+    setTrackDraft(engineTrack.track);
+  }, [engineTrack.track]);
+
+  useEffect(() => {
+    setToBeMinutes("");
+  }, [selectedRequest]);
   const sendChat = () => {
     if (!chatInput.trim()) return;
     setChatStep(Math.min(5, chatStep + 1));
@@ -7780,6 +7908,73 @@ function IntakeFeasibility({
                 )}
               </div>
             </div>
+            <section className="feasibility-engine" aria-label="타당성 판정 엔진">
+              <header>
+                <div>
+                  <span className="engine-mark">
+                    <ShieldCheck size={18} weight="fill" />
+                  </span>
+                  <div>
+                    <b>타당성 판정 엔진</b>
+                    <p>결정적 규칙이 계산하고, LLM은 결과를 바꾸지 않습니다.</p>
+                  </div>
+                </div>
+                <div className="engine-standard">
+                  <Pill tone="blue">표준체계 v1.0</Pill>
+                  <small>기준 2026.07.30 · SHA 3fa0cb3db344</small>
+                </div>
+              </header>
+              <div className="engine-result-grid">
+                <article>
+                  <small>규칙 트랙 판정</small>
+                  <strong>{engineTrack.label} 트랙</strong>
+                  <p>{engineTrack.signals.join(" · ")}</p>
+                  <span>{engineTrack.citation}</span>
+                </article>
+                <article>
+                  <small>Agent 유형 판정</small>
+                  <strong>혼합형</strong>
+                  <p>규칙 대조 + 비정형 문서 해석</p>
+                  <span>에이전트 개발 표준체계 0.4절</span>
+                </article>
+                <article>
+                  <small>자율성 정합성</small>
+                  <strong>{autonomyDraft} · 정합</strong>
+                  <p>{autonomyDraft === "L0" ? "정보 제공·조회만" : "사람 검토 범위 확인"}</p>
+                  <span>자율성-트랙 기준표</span>
+                </article>
+                <article className="engine-recommendation">
+                  <small>엔진 권고 · 참고용</small>
+                  <strong>{engineRecommendation}</strong>
+                  <p>
+                    {engineRoi.computed
+                      ? "대안 배제와 정량 효과가 확인되었습니다."
+                      : "To-Be 처리시간 확보 후 ROI를 다시 계산해야 합니다."}
+                  </p>
+                  <span>최종 결정은 최병두 팀장이 G1에서 확정</span>
+                </article>
+              </div>
+              <div className="engine-assurance">
+                <div className="guardrail-list" aria-label="금칙 검사 결과">
+                  {engineGuardrails.map(([id, label, passed]) => (
+                    <span key={id} className={passed ? "passed" : "waiting"}>
+                      {passed ? <Check size={12} weight="bold" /> : "…"}
+                      <b>{id}</b> {label}
+                    </span>
+                  ))}
+                </div>
+                <div className="engine-readiness">
+                  <span>
+                    <b>규칙 회귀 40/40</b>
+                    <small>인계 기준 확인</small>
+                  </span>
+                  <span className="blocked">
+                    <b>리뷰어 정답 라벨 0/15</b>
+                    <small>완료 전 G3 배포 승인 불가</small>
+                  </span>
+                </div>
+              </div>
+            </section>
             <fieldset className="fea-grid" disabled={!canEditFea}>
               <article>
                 <header>
@@ -7894,27 +8089,51 @@ function IntakeFeasibility({
                 </header>
                 <div className="roi-box">
                   <div>
-                    <small>절감 산식</small>
-                    <b>{isCertificateFea ? "60건 × 18분 × 1명" : "20건 × 45분 × 1명"}</b>
-                    <p>{isCertificateFea ? "월 18시간" : "월 15시간"}</p>
+                    <small>확보된 As-Is</small>
+                    <b>{current.countPerMonth}건 × {current.minutesPerCase}분 × {current.people}명</b>
+                    <p>
+                      월 {Math.round((current.countPerMonth * current.minutesPerCase * current.people) / 6) / 10}시간
+                    </p>
                   </div>
                   <span>→</span>
                   <div>
-                    <small>예상 절감</small>
-                    <b>{isCertificateFea ? "월 12시간" : "월 10.5시간"}</b>
-                    <p>{isCertificateFea ? "67% 절감" : "70% 절감"}</p>
+                    <small>To-Be 시간/건 · 필수</small>
+                    <label className="roi-input">
+                      <input
+                        type="number"
+                        min="0"
+                        value={toBeMinutes}
+                        onChange={(event) => setToBeMinutes(event.target.value)}
+                        placeholder="⬜ 미확보"
+                      />
+                      <span>분</span>
+                    </label>
+                    <p>인터뷰에서 확인한 값만 입력</p>
                   </div>
-                  <div>
-                    <small>품질 효과</small>
-                    <b>{isCertificateFea ? "만료·규격 누락 0건 목표" : "영향 문서 누락 0건 목표"}</b>
-                    <p>{isCertificateFea ? "입고 보류·승인 지연 감소" : "재작업·일정 지연 감소"}</p>
+                  <div className={engineRoi.computed ? "roi-computed" : "roi-missing"}>
+                    <small>규칙 계산 결과</small>
+                    <b>
+                      {engineRoi.computed
+                        ? `월 ${engineRoi.savedHours}시간 절감`
+                        : "⬜ 미확보"}
+                    </b>
+                    <p>
+                      {engineRoi.computed
+                        ? `연 ${engineRoi.savedHoursYear}시간 · ${engineRoi.savedMdYear} M/D`
+                        : engineRoi.reason}
+                    </p>
                   </div>
                   <div>
                     <small>개발 비용</small>
-                    <b>22 M/D + API 월 30만원</b>
-                    <p>파일럿 포함 추정</p>
+                    <b>⬜ 미확보</b>
+                    <p>담당자가 확인한 인력 M/D·플랫폼/API 비용만 입력</p>
                   </div>
                 </div>
+                {engineRoi.computed && (
+                  <p className="roi-rule-footnote">
+                    <CheckCircle size={15} weight="fill" /> {engineRoi.formula} = 월 {engineRoi.savedHours}시간 절감 · 표준체계 문서② 4번
+                  </p>
+                )}
               </article>
               <article>
                 <header>
@@ -7923,28 +8142,37 @@ function IntakeFeasibility({
                     <h3>위험 식별·유형·트랙 판정</h3>
                     <p>권한·데이터·사용 범위·최대 피해를 근거로 분류합니다.</p>
                   </div>
-                  <Pill tone={trackDraft === "HIGH" ? "red" : "orange"}>
-                    {trackDraft === "HIGH" ? "상 트랙" : "확정 필요"}
+                  <Pill tone={trackDraft === "HIGH" ? "red" : trackDraft === "MEDIUM" ? "orange" : "green"}>
+                    {engineTrack.label} 트랙 · 규칙 판정
                   </Pill>
                 </header>
                 <div className="fea-risk-fields">
                   <label>
                     쓰기·실행 권한
-                    <select defaultValue="NO">
+                    <select
+                      value={riskWriteExec ? "YES" : "NO"}
+                      onChange={(event) => setRiskWriteExec(event.target.value === "YES")}
+                    >
                       <option value="NO">아니오</option>
                       <option value="YES">예</option>
                     </select>
                   </label>
                   <label>
                     개인정보·기밀 취급
-                    <select defaultValue="YES">
+                    <select
+                      value={riskSensitive ? "YES" : "NO"}
+                      onChange={(event) => setRiskSensitive(event.target.value === "YES")}
+                    >
                       <option value="NO">아니오</option>
                       <option value="YES">예 · 마스킹 필요</option>
                     </select>
                   </label>
                   <label>
                     사용 범위
-                    <select defaultValue="COMPANY">
+                    <select
+                      value={riskScope}
+                      onChange={(event) => setRiskScope(event.target.value)}
+                    >
                       <option value="PERSONAL">개인</option>
                       <option value="TEAM">팀</option>
                       <option value="DEPT">부서</option>
@@ -7953,7 +8181,13 @@ function IntakeFeasibility({
                   </label>
                   <label>
                     오답의 최대 피해
-                    <input defaultValue="부품 영향 누락에 따른 재작업·품질 승인 지연" />
+                    <select
+                      value={riskDamageFinancial ? "YES" : "NO"}
+                      onChange={(event) => setRiskDamageFinancial(event.target.value === "YES")}
+                    >
+                      <option value="NO">운영상 불편 · 사람 검토로 회복 가능</option>
+                      <option value="YES">금전 손실·법적 문제로 이어질 수 있음</option>
+                    </select>
                   </label>
                 </div>
                 <div className="classification">
@@ -7967,10 +8201,7 @@ function IntakeFeasibility({
                   </label>
                   <label>
                     트랙
-                    <select
-                      value={trackDraft}
-                      onChange={(event) => setTrackDraft(event.target.value)}
-                    >
+                    <select value={trackDraft} disabled>
                       <option value="LOW">하</option>
                       <option value="MEDIUM">중</option>
                       <option value="HIGH">상</option>
@@ -7998,6 +8229,9 @@ function IntakeFeasibility({
                     따라 상 트랙·정보보호 추가 승인으로 고정됩니다.
                   </p>
                 )}
+                <p className="engine-rule-note">
+                  <Info size={15} weight="fill" /> 트랙은 5개 응답을 전건 검사해 자동 산출합니다. 작성자가 직접 낮출 수 없습니다.
+                </p>
               </article>
               <article className="decision-card fea-g1-link">
                 <header>
