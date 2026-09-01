@@ -6221,6 +6221,7 @@ function UserDashboard({
   const [pilotReleaseDocument, setPilotReleaseDocument] = useState<
     "DEP" | "UG" | null
   >(null);
+  const [openedDeferredDocuments, setOpenedDeferredDocuments] = useState<string[]>([]);
   const currentStageDetailRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState([
     {
@@ -6285,6 +6286,7 @@ function UserDashboard({
       : "Go";
   const intakeComplete =
     hasProjects &&
+    !current.documentsDeferred &&
     (current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted));
   const effectiveJourneyStep = !hasProjects
     ? -1
@@ -6296,6 +6298,8 @@ function UserDashboard({
           ? 1
           : current.journeyStep;
   const selectedOutput = lifecycleOutputs[selectedJourney];
+  const deferredDocumentKey = `${current.no}:${selectedJourney}`;
+  const deferredDocumentOpened = openedDeferredDocuments.includes(deferredDocumentKey);
   const selectedOutputState = !hasProjects
     ? "생성 전"
     : selectedJourney < effectiveJourneyStep
@@ -6358,6 +6362,16 @@ function UserDashboard({
         behavior: "smooth",
         block: "start",
       });
+      currentStageDetailRef.current?.focus({ preventScroll: true });
+    });
+  };
+  const openDeferredDocumentEditor = () => {
+    setOpenedDeferredDocuments((items) =>
+      items.includes(deferredDocumentKey) ? items : [...items, deferredDocumentKey],
+    );
+    notify(`${selectedOutput.title} 작성 화면을 현재 과제에서 열었습니다.`);
+    window.requestAnimationFrame(() => {
+      currentStageDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       currentStageDetailRef.current?.focus({ preventScroll: true });
     });
   };
@@ -6662,7 +6676,10 @@ function UserDashboard({
               title="선택된 Agent 과제가 없습니다."
               description="과제를 등록하거나 왼쪽 목록에서 선택하면 현재 단계와 문서 상태가 여기에 표시됩니다."
             />
-          ) : current.documentsDeferred && selectedJourney <= effectiveJourneyStep ? (
+          ) : current.documentsDeferred &&
+            selectedJourney !== 0 &&
+            selectedJourney <= effectiveJourneyStep &&
+            !deferredDocumentOpened ? (
             <section className="deferred-document-card">
               <header>
                 <div>
@@ -6679,7 +6696,7 @@ function UserDashboard({
               </div>
               <footer>
                 <span>현재 단계: {userJourney[effectiveJourneyStep].title}</span>
-                <button onClick={() => setView(current.route)}>
+                <button onClick={openDeferredDocumentEditor}>
                   해당 단계에서 문서 추가 <ArrowRight size={14} weight="bold" />
                 </button>
               </footer>
@@ -6698,13 +6715,21 @@ function UserDashboard({
                     <h3>에이전트 요구 접수서</h3>
                   </div>
                   <Pill tone={intakeComplete ? "green" : "orange"}>
-                    {intakeComplete ? "작성 완료" : "작성 중 · 자동 저장"}
+                    {current.documentsDeferred
+                      ? "이관 정보 · 보완 필요"
+                      : intakeComplete
+                        ? "작성 완료"
+                        : "작성 중 · 자동 저장"}
                   </Pill>
                 </header>
                 <div className="intake-document-body">
                   <section>
                     <b>1. 기본 정보</b>
                     <dl>
+                      <div>
+                        <dt>과제명</dt>
+                        <dd>{current.name}</dd>
+                      </div>
                       <div>
                         <dt>요구자</dt>
                         <dd>{current.requester || (current.owner ? `${current.owner} · 요청 부서` : "")}</dd>
@@ -6715,28 +6740,31 @@ function UserDashboard({
                       </div>
                       <div>
                         <dt>접수일</dt>
-                        <dd>{hasProjects ? current.updated : ""}</dd>
+                        <dd>{hasProjects ? current.receivedDate || current.updated : ""}</dd>
                       </div>
                       <div>
                         <dt>접수 유형</dt>
-                        <dd>신규 Agent 과제</dd>
+                        <dd>{current.historicalImport ? "과거 Agent 과제 이관" : "신규 Agent 과제"}</dd>
                       </div>
                     </dl>
                   </section>
                   <section>
                     <b>2. 해결하려는 업무 문제</b>
                     <p>
-                      {current.intakeAnswers?.[0] || ""}
+                      {current.intakeAnswers?.[0]?.trim() || "미입력 · 담당자가 추후 보완할 수 있습니다."}
                     </p>
                   </section>
                   <section>
                     <b>3. 현재 처리 방식과 업무량</b>
                     <p>
-                      {current.intakeAnswers
-                        ? `${current.intakeAnswers[1]} 사용 자료: ${current.intakeAnswers[2]}`
-                        : ""}
+                      {[
+                        current.intakeAnswers?.[1]?.trim(),
+                        current.intakeAnswers?.[2]?.trim()
+                          ? `사용 자료: ${current.intakeAnswers[2].trim()}`
+                          : "",
+                      ].filter(Boolean).join(" · ") || "미입력 · 담당자가 추후 보완할 수 있습니다."}
                     </p>
-                    {!intakeComplete && (
+                    {!intakeComplete && !current.historicalImport && (
                       <span className="missing-answer">
                         월 발생 건수와 평균 소요시간 확인 필요
                       </span>
@@ -6745,12 +6773,12 @@ function UserDashboard({
                   <section>
                     <b>4. 기대 결과</b>
                     <p>
-                      {current.intakeAnswers?.[3] || ""}
+                      {current.intakeAnswers?.[3]?.trim() || "미입력 · 담당자가 추후 보완할 수 있습니다."}
                     </p>
                   </section>
                   <section>
                     <b>5. 위험 및 고려사항</b>
-                    <p />
+                    <p>{current.historicalImport ? "미입력 · 담당자가 추후 보완할 수 있습니다." : ""}</p>
                   </section>
                   <section>
                     <b>6. 접수 처리</b>
@@ -6774,7 +6802,7 @@ function UserDashboard({
                     </dl>
                   </section>
                 </div>
-                {!intakeComplete && (
+                {!intakeComplete && !current.historicalImport && (
                   <footer>
                     <button onClick={() => setDraftCompleted(true)}>
                       작성 완료 및 AI Agent 검토{" "}
@@ -6784,7 +6812,7 @@ function UserDashboard({
                 )}
               </section>
 
-              {!intakeComplete && (
+              {!intakeComplete && !current.historicalImport && (
                 <aside
                   className="intake-chat"
                   aria-label="요구 접수 대화 이어쓰기"

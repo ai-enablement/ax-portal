@@ -143,6 +143,17 @@ test("assigns multiple registered developers while importing a historical projec
   assert.ok(css.includes(".historical-developer-list"));
 });
 
+test("opens deferred documents in the selected project and restores intake values", () => {
+  assert.ok(page.includes("openedDeferredDocuments"));
+  assert.ok(page.includes("openDeferredDocumentEditor"));
+  assert.ok(page.includes("selectedJourney !== 0"));
+  assert.ok(page.includes("current.receivedDate || current.updated"));
+  assert.ok(page.includes('current.historicalImport ? "과거 Agent 과제 이관"'));
+  assert.ok(page.includes("current.intakeAnswers?.[0]?.trim()"));
+  assert.ok(page.includes("이관 정보 · 보완 필요"));
+  assert.ok(!page.includes('onClick={() => setView(current.route)}>\n                  해당 단계에서 문서 추가'));
+});
+
 test("shows no completed or current lifecycle step when there are no projects", () => {
   assert.match(page, /const effectiveJourneyStep = !hasProjects\s*\? -1/);
   assert.ok(page.includes('title="선택된 Agent 과제가 없습니다."'));
