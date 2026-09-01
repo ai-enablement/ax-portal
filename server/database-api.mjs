@@ -9,15 +9,115 @@ const statusToDatabase = {
   REJECTED: "rejected",
 };
 
-async function findUser(client, email) {
-  if (!email) return null;
-  const result = await client.query(
-    `select id, email, display_name, app_role
-       from agent_portal.users
-      where lower(email) = lower($1) and is_active = true`,
-    [email],
+async function ensurePortalCatalog(client) {
+  const organization = await client.query(
+    `insert into agent_portal.organizations (
+       organization_code, organization_name, is_active
+     ) values ($1, $2, true)
+     on conflict (organization_code) do update set
+       organization_name = excluded.organization_name,
+       is_active = true,
+       updated_at = now()
+     returning id`,
+    [
+      process.env.PORTAL_ORGANIZATION_CODE || "CHANGSHIN_INC",
+      process.env.PORTAL_ORGANIZATION_NAME || "창신INC",
+    ],
   );
-  return result.rows[0] || null;
+  const team = await client.query(
+    `insert into agent_portal.teams (
+       organization_id, team_code, team_name, team_type, is_active
+     ) values ($1, $2, $3, 'ai_enablement', true)
+     on conflict (organization_id, team_code) do update set
+       team_name = excluded.team_name,
+       team_type = 'ai_enablement',
+       is_active = true,
+       updated_at = now()
+     returning id`,
+    [
+      organization.rows[0].id,
+      process.env.PORTAL_AI_TEAM_CODE || "AI_ENABLEMENT",
+      process.env.PORTAL_AI_TEAM_NAME || "AI 활성화팀",
+    ],
+  );
+  return { organizationId: organization.rows[0].id, aiTeamId: team.rows[0].id };
+}
+
+export async function ensurePortalUser(client, identity) {
+  if (!identity?.email) return null;
+  const result = await client.query(
+    `select id, email, display_name, app_role, is_active
+       from agent_portal.users
+      where lower(email) = lower($1) or ($2 <> '' and ms_account_id = $2)
+      order by is_active desc, id
+      limit 1`,
+    [identity.email, identity.objectId || ""],
+  );
+  const user = result.rows[0] || null;
+  const bootstrapRole = ["admin", "team_leader"].includes(identity.appRole)
+    ? identity.appRole
+    : null;
+
+  if (user) {
+    const synchronized = await client.query(
+      `update agent_portal.users
+          set ms_account_id = coalesce(nullif($2, ''), ms_account_id),
+              email = $3,
+              display_name = coalesce(nullif($4, ''), display_name),
+              app_role = coalesce($5, app_role),
+              is_active = true,
+              last_login_at = now(),
+              updated_at = now()
+        where id = $1
+        returning id, email, display_name, app_role, is_active`,
+      [
+        user.id,
+        identity.objectId || "",
+        identity.email,
+        identity.displayName || "",
+        bootstrapRole,
+      ],
+    );
+    return synchronized.rows[0];
+  }
+
+  const catalog = await ensurePortalCatalog(client);
+  const initialRole = bootstrapRole || "general_user";
+  const teamId = ["team_member", "team_leader", "admin"].includes(initialRole)
+    ? catalog.aiTeamId
+    : null;
+
+  const created = await client.query(
+    `insert into agent_portal.users (
+       organization_id, team_id, ms_account_id, email, display_name,
+       app_role, is_active, last_login_at
+     ) values ($1,$2,nullif($3,''),$4,$5,$6,true,now())
+     on conflict (lower(email)) where email is not null do update set
+       team_id = excluded.team_id,
+       ms_account_id = coalesce(excluded.ms_account_id, users.ms_account_id),
+       display_name = excluded.display_name,
+       app_role = case
+         when excluded.app_role in ('admin', 'team_leader') then excluded.app_role
+         else users.app_role
+       end,
+       is_active = true,
+       last_login_at = now(),
+       updated_at = now()
+     returning id, email, display_name, app_role, is_active`,
+    [
+      catalog.organizationId,
+      teamId,
+      identity.objectId || "",
+      identity.email,
+      identity.displayName || identity.email.split("@")[0],
+      initialRole,
+    ],
+  );
+  return created.rows[0];
+}
+
+async function findUser(client, identity) {
+  return ensurePortalUser(client, identity);
 }
 
 const gallerySelect = `
@@ -66,10 +166,9 @@ const gallerySelect = `
   join agent_portal.users u on u.id = gs.submitted_by
   left join agent_portal.projects p on p.id = gs.project_id`;
 
-async function listGalleryApplications(searchParams) {
-  const email = searchParams.get("email");
+async function listGalleryApplications(identity) {
   const pool = getPool();
-  const user = await findUser(pool, email);
+  const user = await findUser(pool, identity);
   if (!user) return { status: 404, body: { error: "Active portal user not found." } };
   const canReview = ["team_member", "team_leader", "admin"].includes(user.app_role);
   const result = await pool.query(
@@ -120,7 +219,6 @@ function assertSubmission(body) {
     "targetUsers",
     "dataClass",
     "supportOwner",
-    "actorEmail",
   ];
   const missing = required.filter((key) => !String(body[key] || "").trim());
   if (missing.length) throw new Error(`Missing fields: ${missing.join(", ")}`);
@@ -129,10 +227,10 @@ function assertSubmission(body) {
   }
 }
 
-async function createGalleryApplication(body) {
+async function createGalleryApplication(body, identity) {
   assertSubmission(body);
   return withTransaction(async (client) => {
-    const actor = await findUser(client, body.actorEmail);
+    const actor = await findUser(client, identity);
     if (!actor || !["general_user", "team_member", "team_leader"].includes(actor.app_role)) {
       return { status: 403, body: { error: "An active portal User or AI Enablement Team member is required." } };
     }
@@ -187,7 +285,7 @@ async function createGalleryApplication(body) {
   });
 }
 
-async function updateGalleryApplication(submissionNumber, body) {
+async function updateGalleryApplication(submissionNumber, body, identity) {
   const databaseStatus = statusToDatabase[body.status];
   if (!databaseStatus) throw new Error("Invalid review status.");
   return withTransaction(async (client) => {
@@ -197,7 +295,7 @@ async function updateGalleryApplication(submissionNumber, body) {
       [submissionNumber],
     );
     if (!existing.rows[0]) return { status: 404, body: { error: "Submission not found." } };
-    const actor = await findUser(client, body.actorEmail);
+    const actor = await findUser(client, identity);
     if (!actor) return { status: 403, body: { error: "Active portal user not found." } };
 
     if (databaseStatus === "submitted") {
@@ -306,18 +404,147 @@ async function health() {
   return { status: 200, body: { ok: true, ...result.rows[0] } };
 }
 
-export async function handleDatabaseRequest({ method, pathname, searchParams, body = {} }) {
+const governanceRoles = new Set(["team_member", "team_leader", "admin"]);
+
+async function governanceActor(client, identity) {
+  const actor = await findUser(client, identity);
+  if (!actor || !actor.is_active || !governanceRoles.has(actor.app_role)) return null;
+  return actor;
+}
+
+async function listGovernanceUsers(identity) {
+  const pool = getPool();
+  const actor = await governanceActor(pool, identity);
+  if (!actor) return { status: 403, body: { error: "AI Enablement Team permission is required." } };
+  const result = await pool.query(
+    `select u.id, u.email, u.display_name as "displayName", u.app_role as "appRole",
+            u.is_active as "isActive", u.last_login_at as "lastLoginAt",
+            t.team_name as "teamName"
+       from agent_portal.users u
+       left join agent_portal.teams t on t.id = u.team_id
+      order by case u.app_role when 'admin' then 1 when 'team_leader' then 2
+                 when 'team_member' then 3 else 4 end, u.display_name, u.email`,
+  );
+  return { status: 200, body: { users: result.rows, actorRole: actor.app_role } };
+}
+
+function allowedRoleChange(actorRole, newRole) {
+  if (actorRole === "admin") return ["general_user", "team_member", "team_leader", "admin"].includes(newRole);
+  return actorRole === "team_leader" && ["general_user", "team_member"].includes(newRole);
+}
+
+async function registerGovernanceUser(body, identity) {
+  const email = String(body.email || "").trim().toLowerCase();
+  const displayName = String(body.displayName || "").trim();
+  const newRole = String(body.appRole || "team_member");
+  if (!['team_member', 'team_leader', 'admin'].includes(newRole)) {
+    return { status: 400, body: { error: "Only AI Enablement Team accounts can be registered here." } };
+  }
+  if (!email || !email.includes("@") || !displayName) {
+    return { status: 400, body: { error: "Name and a valid MS account email are required." } };
+  }
+  return withTransaction(async (client) => {
+    const actor = await governanceActor(client, identity);
+    if (!actor || !allowedRoleChange(actor.app_role, newRole)) {
+      return { status: 403, body: { error: "Role assignment permission is required." } };
+    }
+    const catalog = await ensurePortalCatalog(client);
+    const existing = await client.query(
+      `select id, app_role from agent_portal.users where lower(email) = lower($1) limit 1 for update`,
+      [email],
+    );
+    let user;
+    if (existing.rows[0]) {
+      return { status: 409, body: { error: "This MS account is already registered. Change its role in the account list." } };
+    } else {
+      user = (await client.query(
+        `insert into agent_portal.users (organization_id, team_id, email, display_name, app_role, is_active)
+         values ($1,case when $4 in ('team_member','team_leader','admin') then $2 else null end,$3,$5,$4,true)
+         returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
+        [catalog.organizationId, catalog.aiTeamId, email, newRole, displayName],
+      )).rows[0];
+      await client.query(
+        `insert into agent_portal.user_role_history (user_id, previous_role, new_role, changed_by, change_reason)
+         values ($1,null,$2,$3,$4)`,
+        [user.id, newRole, actor.id, "Admin & Governance 사전 등록"],
+      );
+    }
+    return { status: 201, body: { user } };
+  });
+}
+
+async function updateGovernanceUser(userId, body, identity) {
+  const newRole = String(body.appRole || "");
+  return withTransaction(async (client) => {
+    const actor = await governanceActor(client, identity);
+    if (!actor || !allowedRoleChange(actor.app_role, newRole)) {
+      return { status: 403, body: { error: "Role assignment permission is required." } };
+    }
+    const target = (await client.query(
+      `select id, app_role, is_active from agent_portal.users where id=$1 for update`, [userId],
+    )).rows[0];
+    if (!target) return { status: 404, body: { error: "User not found." } };
+    if (target.id === actor.id) return { status: 409, body: { error: "You cannot change your own role." } };
+    if (actor.app_role === "team_leader" && !["general_user", "team_member"].includes(target.app_role)) {
+      return { status: 403, body: { error: "Team leaders can only manage general users and team members." } };
+    }
+    if (target.app_role === "admin" && newRole !== "admin") {
+      const count = await client.query(`select count(*)::int as count from agent_portal.users where app_role='admin' and is_active=true`);
+      if (count.rows[0].count <= 1) return { status: 409, body: { error: "The last active admin cannot be demoted." } };
+    }
+    const catalog = await ensurePortalCatalog(client);
+    const updated = (await client.query(
+      `update agent_portal.users set app_role=$2,
+              team_id=case when $2 in ('team_member','team_leader','admin') then $3 else null end,
+              updated_at=now() where id=$1
+       returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
+      [target.id, newRole, catalog.aiTeamId],
+    )).rows[0];
+    if (target.app_role !== newRole) await client.query(
+      `insert into agent_portal.user_role_history (user_id, previous_role, new_role, changed_by, change_reason)
+       values ($1,$2,$3,$4,$5)`,
+      [target.id, target.app_role, newRole, actor.id, String(body.reason || "Admin & Governance 역할 변경")],
+    );
+    return { status: 200, body: { user: updated } };
+  });
+}
+
+async function listRoleHistory(identity) {
+  const pool = getPool();
+  const actor = await governanceActor(pool, identity);
+  if (!actor) return { status: 403, body: { error: "AI Enablement Team permission is required." } };
+  const result = await pool.query(
+    `select h.id, u.display_name as "userName", u.email, h.previous_role as "previousRole",
+            h.new_role as "newRole", a.display_name as "changedBy", h.change_reason as reason,
+            h.changed_at as "changedAt"
+       from agent_portal.user_role_history h
+       join agent_portal.users u on u.id=h.user_id
+       left join agent_portal.users a on a.id=h.changed_by
+      order by h.changed_at desc limit 200`,
+  );
+  return { status: 200, body: { history: result.rows } };
+}
+
+export async function handleDatabaseRequest({ method, pathname, body = {}, identity }) {
   if (method === "GET" && pathname === "/health") return health();
   if (method === "GET" && pathname === "/gallery/applications") {
-    return listGalleryApplications(searchParams);
+    return listGalleryApplications(identity);
   }
   if (method === "POST" && pathname === "/gallery/applications") {
-    return createGalleryApplication(body);
+    return createGalleryApplication(body, identity);
   }
   if (method === "PATCH" && pathname.startsWith("/gallery/applications/")) {
     const id = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "");
     if (!id) throw new Error("Submission number is required.");
-    return updateGalleryApplication(id, body);
+    return updateGalleryApplication(id, body, identity);
   }
+  if (method === "GET" && pathname === "/governance/users") return listGovernanceUsers(identity);
+  if (method === "POST" && pathname === "/governance/users") return registerGovernanceUser(body, identity);
+  if (method === "PATCH" && pathname.startsWith("/governance/users/")) {
+    const id = Number(pathname.split("/").filter(Boolean).at(-1));
+    if (!Number.isInteger(id) || id <= 0) return { status: 400, body: { error: "Valid user id is required." } };
+    return updateGovernanceUser(id, body, identity);
+  }
+  if (method === "GET" && pathname === "/governance/role-history") return listRoleHistory(identity);
   return { status: 404, body: { error: "Route not found." } };
 }

@@ -46,6 +46,15 @@ const ACCOUNT_ROLES = {
 } as const;
 
 type AccountRole = (typeof ACCOUNT_ROLES)[keyof typeof ACCOUNT_ROLES];
+type PortalIdentity = {
+  email: string;
+  displayName: string;
+  objectId: string;
+  appRole: "team_leader" | "team_member" | "general_user" | "admin";
+  accountRole: AccountRole;
+  source: "entra" | "development";
+  canSwitchRole: boolean;
+};
 const ACCOUNT_EMAILS: Record<AccountRole, string> = {
   [ACCOUNT_ROLES.leader]: "choi.bd@changshininc.com",
   [ACCOUNT_ROLES.member]: "heo.jh@changshininc.com",
@@ -631,6 +640,10 @@ function EmptyDataPage({
 export default function Home() {
   const [view, setView] = useState<View>("home");
   const [role, setRole] = useState<AccountRole>(ACCOUNT_ROLES.user);
+  const [identity, setIdentity] = useState<PortalIdentity | null>(null);
+  const [identityStatus, setIdentityStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
   const [query, setQuery] = useState("");
   const [requestOpen, setRequestOpen] = useState(false);
   const [detail, setDetail] = useState<(typeof projects)[0] | null>(null);
@@ -656,6 +669,44 @@ export default function Home() {
     GalleryApplication[]
   >(initialGalleryApplications);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>("checking");
+
+  const actorEmail = identity?.canSwitchRole
+    ? ACCOUNT_EMAILS[role]
+    : identity?.email || ACCOUNT_EMAILS[role];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadIdentity() {
+      try {
+        const response = await fetch("/api/auth/session", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Microsoft Entra identity is unavailable.");
+        const authenticatedIdentity = (await response.json()) as PortalIdentity;
+        if (!active) return;
+        setIdentity(authenticatedIdentity);
+        setRole(authenticatedIdentity.accountRole);
+        setView(
+          authenticatedIdentity.accountRole === ACCOUNT_ROLES.admin
+            ? "governance"
+            : "home",
+        );
+        setIdentityStatus("ready");
+      } catch (error) {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
+        setIdentityStatus("error");
+      }
+    }
+
+    loadIdentity();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -697,13 +748,13 @@ export default function Home() {
     let active = true;
 
     async function loadDatabaseData() {
+      if (identityStatus !== "ready") return;
       try {
         const [healthResponse, galleryResponse] = await Promise.all([
           fetch("/api/database/health", { signal: controller.signal }),
-          fetch(
-            `/api/database/gallery/applications?email=${encodeURIComponent(ACCOUNT_EMAILS[role])}`,
-            { signal: controller.signal },
-          ),
+          fetch("/api/database/gallery/applications", {
+            signal: controller.signal,
+          }),
         ]);
         if (!healthResponse.ok || !galleryResponse.ok) {
           throw new Error("Database gateway is unavailable.");
@@ -730,7 +781,7 @@ export default function Home() {
       active = false;
       controller.abort();
     };
-  }, [role]);
+  }, [identityStatus, role]);
 
   const userProjectItems = useMemo<UserProject[]>(
     () =>
@@ -867,7 +918,7 @@ export default function Home() {
         const response = await fetch("/api/database/gallery/applications", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...application, actorEmail: ACCOUNT_EMAILS[role] }),
+          body: JSON.stringify({ ...application, actorEmail }),
         });
         const payload = (await response.json()) as {
           application?: GalleryApplication;
@@ -906,7 +957,7 @@ export default function Home() {
         {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...changes, actorEmail: ACCOUNT_EMAILS[role] }),
+          body: JSON.stringify({ ...changes, actorEmail }),
         },
       );
       const payload = (await response.json()) as {
@@ -1097,30 +1148,51 @@ export default function Home() {
             </strong>
           </div>
           <div className="top-actions">
-            <label className="role-select">
-              <span>MS 계정</span>
-              <select
-                value={role}
-                onChange={(e) => {
-                  const nextRole = e.target.value;
-                  setRole(nextRole as AccountRole);
-                  go(
-                    nextRole === ACCOUNT_ROLES.admin ? "governance" : "home",
-                  );
-                }}
-              >
-                <option value={ACCOUNT_ROLES.leader}>
-                  AI 활성화팀 최병두 팀장
-                </option>
-                <option value={ACCOUNT_ROLES.member}>
-                  AI 활성화팀 팀원 · 허정환
-                </option>
-                <option value={ACCOUNT_ROLES.user}>
-                  일반 User · 김현우
-                </option>
-                <option value={ACCOUNT_ROLES.admin}>admin</option>
-              </select>
-            </label>
+            {identity?.canSwitchRole ? (
+              <label className="role-select">
+                <span>로컬 역할</span>
+                <select
+                  value={role}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    setRole(nextRole as AccountRole);
+                    go(
+                      nextRole === ACCOUNT_ROLES.admin ? "governance" : "home",
+                    );
+                  }}
+                >
+                  <option value={ACCOUNT_ROLES.leader}>
+                    AI 활성화팀 최병두 팀장
+                  </option>
+                  <option value={ACCOUNT_ROLES.member}>
+                    AI 활성화팀 팀원 · 허정환
+                  </option>
+                  <option value={ACCOUNT_ROLES.user}>
+                    일반 User · 김현우
+                  </option>
+                  <option value={ACCOUNT_ROLES.admin}>admin</option>
+                </select>
+              </label>
+            ) : (
+              <div className="role-select authenticated-account" aria-label="로그인 계정과 포털 역할">
+                <span>MS 계정</span>
+                <div>
+                  <b>{identity?.displayName || "계정 확인 중"}</b>
+                  <small>{identity?.email || role}</small>
+                </div>
+                <em>
+                  {identityStatus === "error"
+                    ? "인증 확인 필요"
+                    : role === ACCOUNT_ROLES.leader
+                      ? "AI 활성화팀 팀장"
+                      : role === ACCOUNT_ROLES.member
+                        ? "AI 활성화팀 팀원"
+                        : role === ACCOUNT_ROLES.admin
+                          ? "Admin"
+                          : "일반 User"}
+                </em>
+              </div>
+            )}
             <button
               className="icon-button"
               aria-label="알림"
@@ -1163,13 +1235,8 @@ export default function Home() {
               </section>
             )}
             <div className="avatar">
-              {role === ACCOUNT_ROLES.user
-                ? "김"
-                : role === ACCOUNT_ROLES.member
-                  ? "허"
-                  : role === ACCOUNT_ROLES.admin
-                    ? "A"
-                    : "최"}
+              {identity?.displayName?.trim().charAt(0) ||
+                (role === ACCOUNT_ROLES.admin ? "A" : "U")}
             </div>
           </div>
         </header>
@@ -1260,6 +1327,7 @@ export default function Home() {
             agents={filteredAgents}
             notify={notify}
             role={role}
+            identity={identity}
             databaseStatus={databaseStatus}
             applications={galleryApplications}
             initialDraft={galleryDraft}
@@ -1285,6 +1353,7 @@ export default function Home() {
       {requestOpen && (
         <RequestWizard
           role={role}
+          identity={identity}
           step={requestStep}
           setStep={setRequestStep}
           close={() => {
@@ -12688,6 +12757,7 @@ function Gallery({
   agents: list,
   notify,
   role,
+  identity,
   databaseStatus,
   applications,
   initialDraft,
@@ -12700,6 +12770,7 @@ function Gallery({
   agents: typeof agents;
   notify: (s: string) => void;
   role: AccountRole;
+  identity: PortalIdentity | null;
   databaseStatus: DatabaseStatus;
   applications: GalleryApplication[];
   initialDraft: GalleryDraft | null;
@@ -12715,10 +12786,10 @@ function Gallery({
   const isLeader = role === ACCOUNT_ROLES.leader;
   const submitterProfile =
     role === ACCOUNT_ROLES.leader
-      ? { name: "최병두", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀장" }
+      ? { name: identity?.displayName || "최병두", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀장" }
       : role === ACCOUNT_ROLES.member
-        ? { name: "허정환", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀원" }
-        : { name: "김현우", department: "개발1팀", roleLabel: "일반 User" };
+        ? { name: identity?.displayName || "허정환", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀원" }
+        : { name: identity?.displayName || "김현우", department: "현업", roleLabel: "일반 User" };
   const [tab, setTab] = useState<"catalog" | "applications" | "review">(
     initialDraft ? "applications" : isTeam ? "review" : "catalog",
   );
@@ -12882,7 +12953,7 @@ function Gallery({
           : ["사용 화면 링크", "공개 범위·운영 책임 입력", "AI 활성화팀 안전성 검토 예정"]),
         form.submissionMode === "PROXY"
           ? `대리 등록 · 실제 제작자 ${form.creatorName.trim()} · ${form.creatorDepartment.trim()} · ${form.creatorEmail.trim()}`
-          : `본인 제작 · ${submitterProfile.name} · ${submitterProfile.department} · ${ACCOUNT_EMAILS[role]}`,
+          : `본인 제작 · ${submitterProfile.name} · ${submitterProfile.department} · ${identity?.email || ACCOUNT_EMAILS[role]}`,
       ],
     };
     if (editingApplicationId) {
@@ -13153,7 +13224,16 @@ function Governance({
   onGateChange: (gate: string) => void;
 }) {
   const isAdmin = role === ACCOUNT_ROLES.admin;
+  const isLeader = role === ACCOUNT_ROLES.leader;
+  type GovernanceUser = { id: number; email: string; displayName: string; appRole: string; isActive: boolean; teamName?: string; lastLoginAt?: string };
+  type RoleHistory = { id: number; userName: string; email: string; previousRole?: string; newRole: string; changedBy?: string; reason?: string; changedAt: string };
   const [tab, setTab] = useState("계정·역할");
+  const [accounts, setAccounts] = useState<GovernanceUser[]>([]);
+  const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([]);
+  const [accountSearch, setAccountSearch] = useState("");
+  const [accountDraft, setAccountDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
+  const [accountError, setAccountError] = useState("");
+  const [selectedRoleAccount, setSelectedRoleAccount] = useState<GovernanceUser | null>(null);
   const [editingProjectNo, setEditingProjectNo] = useState<string | null>(null);
   const [adminDraft, setAdminDraft] = useState({
     name: "",
@@ -13163,7 +13243,46 @@ function Governance({
     dueDate: "",
     nextAction: "",
   });
-  const accounts: string[][] = [];
+  const loadAccounts = async () => {
+    const [usersResponse, historyResponse] = await Promise.all([
+      fetch("/api/database/governance/users", { cache: "no-store" }),
+      fetch("/api/database/governance/role-history", { cache: "no-store" }),
+    ]);
+    if (!usersResponse.ok) throw new Error("계정 목록을 불러오지 못했습니다.");
+    setAccounts((await usersResponse.json()).users || []);
+    if (historyResponse.ok) setRoleHistory((await historyResponse.json()).history || []);
+  };
+  // The initial request synchronizes this view with the server-side role catalog.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadAccounts().catch((error) => setAccountError(error.message)); }, []);
+  const registerAccount = async () => {
+    setAccountError("");
+    const response = await fetch("/api/database/governance/users", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(accountDraft),
+    });
+    const result = await response.json();
+    if (!response.ok) return setAccountError(result.error || "계정을 등록하지 못했습니다.");
+    setAccountDraft({ displayName: "", email: "", appRole: "team_member" });
+    await loadAccounts();
+    notify("MS 계정 역할을 등록했습니다. 다음 로그인부터 해당 화면이 적용됩니다.");
+  };
+  const changeAccountRole = async (account: GovernanceUser, appRole: string) => {
+    const response = await fetch(`/api/database/governance/users/${account.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ appRole }),
+    });
+    const result = await response.json();
+    if (!response.ok) return setAccountError(result.error || "역할을 변경하지 못했습니다.");
+    await loadAccounts();
+    notify(`${account.displayName} 계정 역할을 변경했습니다.`);
+  };
+  const visibleAccounts = accounts.filter((account) => `${account.displayName} ${account.email}`.toLowerCase().includes(accountSearch.toLowerCase()));
+  const roleLabel = (appRole: string) => ({ general_user: "일반 User", team_member: "AI 활성화팀 팀원", team_leader: "AI 활성화팀 팀장", admin: "admin" }[appRole] || appRole);
+  const projectPermission = (appRole: string) => ({
+    team_leader: { title: "팀 전체 과제 감독", detail: "전체 이력 조회 · 담당자/리뷰어 지정 · G1/G3/G4 승인" },
+    team_member: { title: "배정된 과제 수행", detail: "담당 또는 리뷰어 배정 시 전체 이력 조회" },
+    admin: { title: "전체 시스템 관리", detail: "모든 과제 수정·삭제 및 역할 관리" },
+    general_user: { title: "요청·Owner 과제", detail: "요청자 또는 Project Owner 범위" },
+  }[appRole] || { title: "역할 기준 접근", detail: "등록된 역할에 따라 접근" });
   void onDetail;
   void selectedGate;
   void onGateChange;
@@ -13221,7 +13340,7 @@ function Governance({
         <div>
           <p>등록 MS 계정</p>
           <strong>{accounts.length}</strong>
-          <small>DB 계정 연동 후 표시</small>
+          <small>포털 DB 역할 기준</small>
         </div>
         <div>
           <p>계정 역할</p>
@@ -13248,7 +13367,7 @@ function Governance({
               onClick={() => setTab(t)}
             >
               {t}
-              {t === "감사 로그" && <b>3</b>}
+              {t === "감사 로그" && <b>{roleHistory.length}</b>}
             </button>
           ))}
         </div>
@@ -13257,18 +13376,34 @@ function Governance({
             <div className="filter-row">
               <div>
                 <button className="active">전체 {accounts.length}</button>
-                <button>AI팀 0</button>
-                <button>일반 User 0</button>
-                <button>admin 0</button>
+                <button>AI팀 {accounts.filter((item) => ["team_member", "team_leader"].includes(item.appRole)).length}</button>
+                <button>일반 User {accounts.filter((item) => item.appRole === "general_user").length}</button>
+                <button>admin {accounts.filter((item) => item.appRole === "admin").length}</button>
               </div>
               <label>
                 ⌕{" "}
                 <input
                   aria-label="MS 계정 검색"
                   placeholder="이름 또는 MS 계정 검색"
+                  value={accountSearch}
+                  onChange={(event) => setAccountSearch(event.target.value)}
                 />
               </label>
             </div>
+            {(isLeader || isAdmin) && (
+              <div className="governance-account-form">
+                <div><b>AI 활성화팀 계정 등록</b><small>로그인 전에도 MS 계정을 미리 등록할 수 있습니다.</small></div>
+                <input aria-label="등록할 사용자 이름" placeholder="이름" value={accountDraft.displayName} onChange={(event) => setAccountDraft({ ...accountDraft, displayName: event.target.value })} />
+                <input aria-label="등록할 MS 계정" type="email" placeholder="name@changshininc.com" value={accountDraft.email} onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })} />
+                <select aria-label="등록할 역할" value={accountDraft.appRole} onChange={(event) => setAccountDraft({ ...accountDraft, appRole: event.target.value })}>
+                  <option value="team_member">AI 활성화팀 팀원</option>
+                  {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}
+                  {isAdmin && <option value="admin">admin</option>}
+                </select>
+                <button className="primary" onClick={registerAccount}>계정 등록</button>
+              </div>
+            )}
+            {accountError && <p className="governance-account-error">{accountError}</p>}
             <div className="approval-table">
               <div className="approval-head">
                 <span>사용자 · MS 계정</span>
@@ -13278,28 +13413,35 @@ function Governance({
                 <span>상태</span>
                 <span />
               </div>
-              {accounts.map(([name, email, accountRole, scope, source, status]) => (
-                <button
-                  key={email}
-                  onClick={() => notify(`${name} 계정의 역할·배정 이력을 열었습니다.`)}
+              {visibleAccounts.map((account) => (
+                <div
+                  className={`governance-account-row ${["team_member", "team_leader"].includes(account.appRole) ? "is-clickable" : ""}`}
+                  key={account.email}
+                  role={["team_member", "team_leader"].includes(account.appRole) ? "button" : undefined}
+                  tabIndex={["team_member", "team_leader"].includes(account.appRole) ? 0 : undefined}
+                  onClick={() => ["team_member", "team_leader"].includes(account.appRole) && setSelectedRoleAccount(account)}
+                  onKeyDown={(event) => { if (["Enter", " "].includes(event.key) && ["team_member", "team_leader"].includes(account.appRole)) setSelectedRoleAccount(account); }}
                 >
                   <span>
-                    <b>{name}</b>
-                    <small>{email}</small>
+                    <b>{account.displayName}</b>
+                    <small>{account.email}</small>
                   </span>
                   <span>
-                    <Pill tone={accountRole === "admin" ? "violet" : "blue"}>
-                      {accountRole}
-                    </Pill>
+                    {(isAdmin || (isLeader && ["general_user", "team_member"].includes(account.appRole))) ? (
+                      <select value={account.appRole} onClick={(event) => event.stopPropagation()} onChange={(event) => changeAccountRole(account, event.target.value)}>
+                        <option value="general_user">일반 User</option><option value="team_member">AI 활성화팀 팀원</option>
+                        {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}{isAdmin && <option value="admin">admin</option>}
+                      </select>
+                    ) : <Pill tone={account.appRole === "admin" ? "violet" : "blue"}>{roleLabel(account.appRole)}</Pill>}
                   </span>
                   <span>
-                    <b>{scope}</b>
-                    <small>프로젝트 배정과 함께 자동 갱신</small>
+                    <b>{projectPermission(account.appRole).title}</b>
+                    <small>{projectPermission(account.appRole).detail}</small>
                   </span>
-                  <span><small>{source}</small></span>
-                  <span><Pill tone="green">{status}</Pill></span>
+                  <span><small>{account.lastLoginAt ? "Entra 로그인 연동" : "사전 등록"}</small></span>
+                  <span><Pill tone={account.isActive ? "green" : "gray"}>{account.isActive ? "활성" : "비활성"}</Pill></span>
                   <span className="chev">›</span>
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -13449,13 +13591,38 @@ function Governance({
           </div>
         )}
         {tab === "감사 로그" && (
-          <div className="admin-content approval-empty-state">
-            <ClipboardText size={28} weight="duotone" />
-            <b>최근 권한 변경 3건</b>
-            <span>역할 변경·프로젝트 배정·회수 이력을 MS 계정과 시각 기준으로 보관합니다.</span>
+          <div className="admin-content governance-history">
+            <header><ClipboardText size={28} weight="duotone" /><div><b>계정 역할 변경 이력</b><span>변경자와 변경 시각을 DB에 보관합니다.</span></div></header>
+            {roleHistory.length ? roleHistory.map((item) => <div key={item.id}><span><b>{item.userName}</b><small>{item.email}</small></span><span>{roleLabel(item.previousRole || "미등록")} → <b>{roleLabel(item.newRole)}</b></span><span><b>{item.changedBy || "시스템"}</b><small>{item.reason || "역할 변경"}</small></span><time>{new Date(item.changedAt).toLocaleString("ko-KR")}</time></div>) : <p>아직 기록된 역할 변경이 없습니다.</p>}
           </div>
         )}
       </section>
+      {selectedRoleAccount && (
+        <div className="gallery-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedRoleAccount(null); }}>
+          <section className="governance-role-modal" role="dialog" aria-modal="true" aria-labelledby="governance-role-title">
+            <header>
+              <div><small>AI ENABLEMENT ROLE</small><h2 id="governance-role-title">{roleLabel(selectedRoleAccount.appRole)} 권한</h2><p>{selectedRoleAccount.displayName} · {selectedRoleAccount.email}</p></div>
+              <button aria-label="역할 설명 닫기" onClick={() => setSelectedRoleAccount(null)}><X size={20} /></button>
+            </header>
+            {selectedRoleAccount.appRole === "team_leader" ? (
+              <div className="governance-role-details">
+                <article><b>전체 과제 감독</b><p>접수 시점부터 운영까지 팀 전체 Agent 과제와 변경 이력을 조회합니다.</p></article>
+                <article><b>담당자·리뷰어 지정</b><p>G1에서 개발 담당자를, 배포 승인 준비 과정에서 독립 동료 리뷰어를 지정합니다.</p></article>
+                <article><b>Gate 의사결정</b><p>FEA를 근거로 G1 착수 승인하고, 지정된 승인 단계에서 최종 판단합니다.</p></article>
+                <article><b>계정 역할 관리</b><p>일반 User를 AI 활성화팀 팀원으로 등록하거나 팀원 역할을 회수할 수 있습니다.</p></article>
+              </div>
+            ) : (
+              <div className="governance-role-details">
+                <article><b>배정된 과제 수행</b><p>개발 담당자로 지정된 시점부터 내 Agent 과제에서 전체 업무를 수행합니다.</p></article>
+                <article><b>리뷰 과제 조회</b><p>리뷰어로 배정되면 담당자가 아니어도 해당 프로젝트의 전체 이력을 조회합니다.</p></article>
+                <article><b>문서 작성</b><p>FEA, 요구 정의서, 설계서, 평가 계획·결과, 배포 체크리스트와 사용자 가이드를 역할에 맞게 작성합니다.</p></article>
+                <article><b>Governance 조회</b><p>AI 활성화팀 계정과 역할 변경 이력을 볼 수 있지만 역할을 변경할 수는 없습니다.</p></article>
+              </div>
+            )}
+            <footer><button className="primary" onClick={() => setSelectedRoleAccount(null)}>확인</button></footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -13476,12 +13643,14 @@ function suggestRequestTitle(problem: string) {
 
 function RequestWizard({
   role,
+  identity,
   step,
   setStep,
   close,
   onSubmit,
 }: {
   role: AccountRole;
+  identity: PortalIdentity | null;
   step: number;
   setStep: (n: number) => void;
   close: () => void;
@@ -13528,7 +13697,7 @@ function RequestWizard({
     ? requesterName.trim() && requesterDepartment.trim() && requesterEmail.trim()
       ? `${requesterName.trim()} · ${requesterDepartment.trim()} · ${requesterEmail.trim()}`
       : ""
-    : "김현우 · 개발1팀 · kim.hw@changshininc.com";
+    : `${identity?.displayName || "김현우"} · 현업 · ${identity?.email || "kim.hw@changshininc.com"}`;
   const requesterOwnerLabel = isAiTeam
     ? requesterName.trim() && requesterDepartment.trim()
       ? `${requesterName.trim()} · ${requesterDepartment.trim()}`

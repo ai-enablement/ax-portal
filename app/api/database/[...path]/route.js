@@ -1,4 +1,5 @@
 import { handleDatabaseRequest } from "../../../../server/database-api.mjs";
+import { resolvePortalIdentity } from "../../../../server/auth.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -6,6 +7,7 @@ export const dynamic = "force-dynamic";
 async function route(request, context) {
   const { path = [] } = await context.params;
   const url = new URL(request.url);
+  const pathname = `/${path.join("/")}`;
   let body = {};
 
   if (!['GET', 'HEAD'].includes(request.method)) {
@@ -17,11 +19,19 @@ async function route(request, context) {
   }
 
   try {
+    const identity = resolvePortalIdentity(request.headers);
+    if (pathname !== "/health" && !identity) {
+      return Response.json(
+        { error: "Authenticated Microsoft Entra identity is required." },
+        { status: 401, headers: { "cache-control": "no-store" } },
+      );
+    }
     const result = await handleDatabaseRequest({
       method: request.method,
-      pathname: `/${path.join("/")}`,
+      pathname,
       searchParams: url.searchParams,
-      body,
+      body: identity ? { ...body, actorEmail: identity.email } : body,
+      identity,
     });
     return Response.json(result.body, {
       status: result.status,

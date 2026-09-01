@@ -44,11 +44,23 @@ test("PostgreSQL pool is bounded, timeout-protected, and SSL-disabled", async ()
 test("gallery database API uses parameterized queries and enforces role boundaries", async () => {
   const databaseApi = await read("server/database-api.mjs");
 
-  assert.match(databaseApi, /where lower\(email\) = lower\(\$1\)/);
+  assert.match(databaseApi, /lower\(email\) = lower\(\$1\)/);
+  assert.match(databaseApi, /insert into agent_portal\.users/);
+  assert.match(databaseApi, /identity\.appRole/);
   assert.match(databaseApi, /active portal User or AI Enablement Team member/);
   assert.match(databaseApi, /Only the original applicant can resubmit/);
   assert.match(databaseApi, /AI Enablement Team review permission is required/);
   assert.match(databaseApi, /Only the AI Enablement Team leader can publish/);
+});
+
+test("governance roles are stored in PostgreSQL and enforced by the server", async () => {
+  const api = await readFile(new URL("../server/database-api.mjs", import.meta.url), "utf8");
+  assert.match(api, /agent_portal\.user_role_history/);
+  assert.match(api, /\/governance\/users/);
+  assert.match(api, /\/governance\/role-history/);
+  assert.match(api, /Team leaders can only manage general users and team members/);
+  assert.match(api, /The last active admin cannot be demoted/);
+  assert.match(api, /You cannot change your own role/);
 });
 
 test("Azure Web App build and Hybrid Connection settings are present", async () => {

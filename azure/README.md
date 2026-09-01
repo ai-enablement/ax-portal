@@ -45,3 +45,31 @@ https://<web-app-name>.azurewebsites.net/api/database/health
 
 Agent Gallery 상단 표시가 `목업 데이터`에서 `PostgreSQL 연결`로 바뀌면 화면과 DB
 연동까지 완료된 상태입니다.
+
+## 5. Microsoft Entra 로그인과 역할
+
+Web App → Settings → Authentication에서 Microsoft를 단일 테넌트 ID 공급자로
+추가하고 인증되지 않은 요청은 Microsoft 로그인으로 리디렉션합니다. 사용자 이름과
+이메일, 앱 역할은 App Service Easy Auth의 `X-MS-CLIENT-PRINCIPAL` 헤더에서 읽으므로
+Microsoft Graph `User.ReadBasic.All` 권한은 추가하지 않습니다.
+
+Microsoft Entra는 회사 계정 인증과 이메일·이름·Object ID 전달만 담당합니다. 최종
+화면과 권한은 `agent_portal.users.app_role`로 결정하며 AI 활성화팀의
+`Admin & Governance → 계정·역할`에서 관리합니다. 새 사용자는 첫 로그인 때 일반 User로
+자동 등록됩니다. 팀장은 일반 User와 AI 활성화팀 팀원을 등록·변경할 수 있고, 팀원은
+목록과 감사 이력을 조회만 할 수 있습니다. Admin은 전체 역할을 관리합니다.
+
+처음 역할을 관리할 팀장과 Admin만 Web App 환경 변수로 부트스트랩합니다.
+
+```text
+PORTAL_BOOTSTRAP_LEADER_EMAILS=choi.bd@changshininc.com
+PORTAL_BOOTSTRAP_ADMIN_EMAILS=portal.admin@changshininc.com
+PORTAL_ORGANIZATION_CODE=CHANGSHIN_INC
+PORTAL_ORGANIZATION_NAME=창신INC
+PORTAL_AI_TEAM_CODE=AI_ENABLEMENT
+PORTAL_AI_TEAM_NAME=AI 활성화팀
+```
+
+부트스트랩 계정으로 로그인한 뒤 나머지 AI 활성화팀 계정을 포털에서 등록합니다.
+최초 로그인 시 Entra 이메일·이름·Object ID가 해당 DB 계정과 동기화됩니다. 환경 변수
+변경 후에는 Web App을 재시작합니다.
