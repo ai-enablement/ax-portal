@@ -13,8 +13,8 @@ const css = await readFile(
 
 test("persists submitted intake and advances to FEA waiting", () => {
   assert.ok(page.includes("agent-portal-submitted-projects"));
-  assert.ok(page.includes('status: "타당성 평가 대기"'));
-  assert.ok(page.includes("onSubmit([...answers], requestTitle, resolvedProjectOwner, resolvedRequester)"));
+  assert.ok(page.includes('status: historical ? `${currentStage.title} 진행 중` : "타당성 평가 대기"'));
+  assert.ok(page.includes("onSubmit("));
   assert.ok(page.includes('ownerMode === "SELF"'));
   assert.ok(page.includes("요구자와 Owner는 같을 수도, 다를 수도 있습니다."));
   assert.ok(page.includes("projectOwner,"));
@@ -119,6 +119,27 @@ test("keeps the new Agent request dialog readable", () => {
   assert.ok(css.includes("font-size: 14px !important"));
 });
 
+test("imports historical projects with past dates, a current stage, and deferred documents", () => {
+  assert.ok(page.includes('registrationMode === "HISTORICAL"'));
+  assert.ok(page.includes("과거 과제 이관"));
+  assert.ok(page.includes("과거 과제 접수 날짜"));
+  assert.ok(page.includes("과거 과제 현재 진행 단계"));
+  assert.ok(page.includes("documentsDeferred: historical"));
+  assert.ok(page.includes("프로세스 진행 이력만 등록된 상태입니다."));
+  assert.ok(page.includes("해당 단계에서 문서 추가"));
+  assert.ok(!page.includes('min="2026-08-29"'));
+  assert.ok(css.includes(".historical-project-fields"));
+  assert.ok(css.includes(".deferred-document-card"));
+});
+
+test("shows no completed or current lifecycle step when there are no projects", () => {
+  assert.match(page, /const effectiveJourneyStep = !hasProjects\s*\? -1/);
+  assert.ok(page.includes('title="선택된 Agent 과제가 없습니다."'));
+  assert.ok(page.includes("const showCurrentStage = () =>"));
+  assert.ok(page.includes("scrollIntoView"));
+  assert.ok(page.includes('id="current-stage-detail"'));
+});
+
 test("limits user deletion to intake and gives admin full project controls", () => {
   assert.ok(page.includes("agent-portal-deleted-projects"));
   assert.ok(page.includes("agent-portal-project-overrides"));
@@ -129,6 +150,6 @@ test("limits user deletion to intake and gives admin full project controls", () 
   assert.ok(page.includes("Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나"));
   assert.ok(page.includes("onUpdateProject"));
   assert.ok(page.includes("deleteAnyProject"));
-  assert.ok(page.includes("teamRequirements.map(teamRequirementAsHomeProject)"));
+  assert.ok(page.includes("teamWorkloadProjects.map(teamRequirementAsHomeProject)"));
   assert.ok(css.includes("Project deletion and admin-wide project controls"));
 });

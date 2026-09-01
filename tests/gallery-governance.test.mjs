@@ -56,18 +56,36 @@ test("admin can manage published Gallery agents and uses the leader workspace", 
 });
 
 test("governance account filters exclude the general-user filter and are interactive", () => {
-  assert.match(page, /useState<"all" \| "ai" \| "admin">\("all"\)/);
+  assert.match(page, /useState<"all" \| "ai" \| "bts" \| "admin">\("all"\)/);
   assert.match(page, /setAccountFilter\("all"\)/);
   assert.match(page, /setAccountFilter\("ai"\)/);
   assert.match(page, /setAccountFilter\("admin"\)/);
+  assert.match(page, /setAccountFilter\("bts"\)/);
   assert.doesNotMatch(page, /setAccountFilter\("general_user"\)/);
+  assert.match(page, /<small>팀장 · 팀원 · BTS · admin<\/small>/);
   assert.match(page, /PORTAL_BOOTSTRAP_LEADER_EMAILS/);
+});
+
+test("BTS is a distinct assignable role without leader or admin authority", () => {
+  assert.match(page, /bts: "BTS"/);
+  assert.match(page, /<option value="bts">BTS<\/option>/);
+  assert.match(page, /BTS 수행자로 배정된 프로젝트/);
+  assert.match(page, /팀장 Gate 최종 승인과 Admin 계정·시스템 관리 권한은 부여되지 않습니다/);
+});
+
+test("team dashboard maps registered accounts and database project assignments", () => {
+  assert.match(page, /fetch\("\/api\/database\/team\/workload"/);
+  assert.match(page, /setTeamAccounts\(payload\.members \|\| \[\]\)/);
+  assert.match(page, /setTeamWorkloadProjects\(payload\.projects \|\| \[\]\)/);
+  assert.match(page, /item\.assignedUserIds\?\.includes\(account\.id\)/);
+  assert.match(page, /members=\{teamAccounts\}/);
+  assert.match(page, /requirements=\{teamWorkloadProjects\}/);
 });
 
 test("production UI starts without fixture projects or Gallery records", () => {
   assert.match(page, /const projects: ProjectSummary\[\] = \[\]/);
   assert.match(page, /const userProjects: UserProject\[\] = \[\]/);
-  assert.match(page, /const teamRequirements: TeamRequirement\[\] = \[\]/);
+  assert.match(page, /const initialTeamRequirements: TeamRequirement\[\] = \[\]/);
   assert.match(page, /const agents: GalleryAgent\[\] = \[\]/);
   assert.match(page, /const initialGalleryApplications: GalleryApplication\[\] = \[\]/);
   assert.match(page, /production-empty-v1/);

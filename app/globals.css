@@ -13620,6 +13620,44 @@ body {
   font-size: 12px;
   line-height: 1.45;
 }
+.request-registration-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 28px 14px;
+}
+.request-registration-modes > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 12px 15px;
+  border: 1px solid #d9e0e9;
+  border-radius: 10px;
+  background: #fff;
+  color: #536176;
+  text-align: left;
+}
+.request-registration-modes > button.active {
+  border-color: #2f67ac;
+  background: #edf5ff;
+  color: #173d6e;
+  box-shadow: inset 0 0 0 1px #2f67ac;
+}
+.request-registration-modes > button > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.request-registration-modes b {
+  font-size: 14px;
+}
+.request-registration-modes small {
+  color: #738097;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .chat-wizard .wizard-steps {
   padding: 0 28px 20px;
 }
@@ -13801,7 +13839,8 @@ body {
   font-weight: 800;
 }
 .wizard-form-field > input,
-.wizard-form-field > textarea {
+.wizard-form-field > textarea,
+.wizard-form-field > select {
   width: 100%;
   border: 1px solid #d5dce6;
   border-radius: 8px;
@@ -13814,6 +13853,10 @@ body {
   min-height: 44px;
   padding: 10px 12px;
 }
+.wizard-form-field > select {
+  min-height: 44px;
+  padding: 10px 12px;
+}
 .wizard-form-field > textarea {
   min-height: 90px;
   padding: 12px;
@@ -13821,9 +13864,99 @@ body {
   line-height: 1.6;
 }
 .wizard-form-field > input:focus,
-.wizard-form-field > textarea:focus {
+.wizard-form-field > textarea:focus,
+.wizard-form-field > select:focus {
   outline: 2px solid #b8d2f2;
   border-color: #2f67ac;
+}
+.historical-project-fields {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr);
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #cbd9ea;
+  border-radius: 10px;
+  background: #f2f7fd;
+}
+.historical-project-fields > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #5f6f85;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.current-stage-detail:focus {
+  outline: 2px solid #8db4e2;
+  outline-offset: 4px;
+}
+.deferred-document-card {
+  overflow: hidden;
+  border: 1px solid #d9e1eb;
+  border-radius: 10px;
+  background: #fff;
+}
+.deferred-document-card > header,
+.deferred-document-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+}
+.deferred-document-card > header {
+  border-bottom: 1px solid #e3e8ef;
+}
+.deferred-document-card > header small,
+.deferred-document-card > header p,
+.deferred-document-card > footer span {
+  color: #6f7e92;
+}
+.deferred-document-card > header h3 {
+  margin: 5px 0;
+  font-size: 19px;
+}
+.deferred-document-card > header p,
+.deferred-document-card > footer span {
+  margin: 0;
+  font-size: 13px;
+}
+.deferred-document-card > div {
+  display: flex;
+  min-height: 190px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 9px;
+  padding: 30px;
+  color: #718097;
+  text-align: center;
+}
+.deferred-document-card > div b {
+  color: #27364b;
+  font-size: 16px;
+}
+.deferred-document-card > div p {
+  max-width: 620px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.deferred-document-card > footer {
+  border-top: 1px solid #e3e8ef;
+  background: #fafbfd;
+}
+.deferred-document-card > footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #b9c8da;
+  border-radius: 7px;
+  background: #fff;
+  color: #244f83;
+  font-weight: 800;
 }
 .wizard-form-field > small {
   color: #7d899b;
@@ -13876,7 +14009,8 @@ body {
 }
 
 @media (max-width: 900px) {
-  .request-writing-modes {
+  .request-writing-modes,
+  .request-registration-modes {
     grid-template-columns: 1fr;
   }
   .chat-wizard-grid {
@@ -13888,6 +14022,9 @@ body {
   .wizard-form-field.wide,
   .wizard-form-scroll .wizard-requester-field {
     grid-column: auto;
+  }
+  .historical-project-fields {
+    grid-template-columns: 1fr;
   }
   .chat-wizard > header h2 {
     font-size: 25px !important;

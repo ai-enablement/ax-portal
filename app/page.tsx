@@ -3,7 +3,7 @@
 import "./release-documents.css";
 import "./operations-documents.css";
 import "./team-dashboard-compact.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ArrowsClockwise,
@@ -41,6 +41,7 @@ type View =
 const ACCOUNT_ROLES = {
   leader: "AI활성화팀 팀장",
   member: "AI활성화팀 팀원",
+  bts: "BTS",
   user: "일반 User",
   admin: "admin",
 } as const;
@@ -50,7 +51,7 @@ type PortalIdentity = {
   email: string;
   displayName: string;
   objectId: string;
-  appRole: "team_leader" | "team_member" | "general_user" | "admin";
+  appRole: "team_leader" | "team_member" | "bts" | "general_user" | "admin";
   accountRole: AccountRole;
   source: "entra" | "development";
   canSwitchRole: boolean;
@@ -58,6 +59,7 @@ type PortalIdentity = {
 const ACCOUNT_EMAILS: Record<AccountRole, string> = {
   [ACCOUNT_ROLES.leader]: "leader@example.invalid",
   [ACCOUNT_ROLES.member]: "member@example.invalid",
+  [ACCOUNT_ROLES.bts]: "bts@example.invalid",
   [ACCOUNT_ROLES.user]: "user@example.invalid",
   [ACCOUNT_ROLES.admin]: "admin@example.invalid",
 };
@@ -174,6 +176,7 @@ type UserProject = {
   teamOwner: string;
   dueDate: string;
   requestedDate: string;
+  receivedDate?: string;
   committedDate: string;
   scheduleState: string;
   checkpoints: string;
@@ -181,6 +184,8 @@ type UserProject = {
   intakeAnswers?: string[];
   requester?: string;
   projectOwner?: string;
+  historicalImport?: boolean;
+  documentsDeferred?: boolean;
 };
 
 const userProjects: UserProject[] = [];
@@ -508,24 +513,24 @@ type TeamRequirement = {
   stage: string;
   progress: number;
   startDay: number;
-  dueDay: number;
+  dueDay?: number;
+  dueDate?: string;
+  assignedUserIds?: string[];
   priority: "높음" | "보통";
   risk: "정상" | "확인 필요" | "지연 위험";
   nextAction: string;
   received: string;
 };
 
-const teamRequirements: TeamRequirement[] = [];
+const initialTeamRequirements: TeamRequirement[] = [];
 
-const aiTeamMembers = [
-  "최병두",
-  "정지헌",
-  "허정환",
-  "허시영",
-  "황수정",
-  "박혜빈",
-  "이재승",
-];
+type TeamAccount = {
+  id: string;
+  email: string;
+  displayName: string;
+  appRole: "team_leader" | "team_member" | "bts" | "admin";
+  jobTitle?: string;
+};
 
 function teamRequirementAsHomeProject(item: TeamRequirement): UserProject {
   const journeyStep = item.stage.includes("타당성")
@@ -588,7 +593,11 @@ function teamRequirementAsHomeProject(item: TeamRequirement): UserProject {
       item.assignee === "미배정"
         ? "AI활성화팀 배정 대기"
         : `AI활성화팀 ${item.assignee} 담당자`,
-    dueDate: `2026.08.${String(item.dueDay).padStart(2, "0")}`,
+    dueDate:
+      item.dueDate ||
+      (item.dueDay
+        ? `2026.08.${String(item.dueDay).padStart(2, "0")}`
+        : ""),
     requestedDate: "요청서 확인 필요",
     committedDate: "G2 승인 후 확정",
     scheduleState: item.risk,
@@ -670,6 +679,8 @@ export default function Home() {
     GalleryApplication[]
   >(initialGalleryApplications);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>("checking");
+  const [teamAccounts, setTeamAccounts] = useState<TeamAccount[]>([]);
+  const [teamWorkloadProjects, setTeamWorkloadProjects] = useState<TeamRequirement[]>(initialTeamRequirements);
 
   const actorEmail = identity?.canSwitchRole
     ? ACCOUNT_EMAILS[role]
@@ -780,6 +791,40 @@ export default function Home() {
     };
   }, [identityStatus, role]);
 
+  useEffect(() => {
+    if (
+      identityStatus !== "ready" ||
+      role === ACCOUNT_ROLES.user
+    ) return;
+    const controller = new AbortController();
+    let active = true;
+    async function loadTeamWorkload() {
+      try {
+        const response = await fetch("/api/database/team/workload", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("팀 인원·배정 현황을 불러오지 못했습니다.");
+        const payload = (await response.json()) as {
+          members?: TeamAccount[];
+          projects?: TeamRequirement[];
+        };
+        if (!active) return;
+        setTeamAccounts(payload.members || []);
+        setTeamWorkloadProjects(payload.projects || []);
+      } catch (error) {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
+        setTeamAccounts([]);
+        setTeamWorkloadProjects([]);
+      }
+    }
+    void loadTeamWorkload();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [identityStatus, role]);
+
   const userProjectItems = useMemo<UserProject[]>(
     () =>
       [...submittedProjects, ...userProjects, ...generalUserOwnerProjects]
@@ -793,7 +838,7 @@ export default function Home() {
   const adminProjectItems = useMemo<UserProject[]>(() => {
     const merged = [
       ...userProjectItems,
-      ...teamRequirements.map(teamRequirementAsHomeProject),
+      ...teamWorkloadProjects.map(teamRequirementAsHomeProject),
     ]
       .filter((project) => !deletedProjectNos.includes(project.no))
       .map((project) => ({
@@ -803,7 +848,7 @@ export default function Home() {
     return Array.from(
       new Map(merged.map((project) => [project.no, project])).values(),
     );
-  }, [userProjectItems, deletedProjectNos, projectOverrides]);
+  }, [userProjectItems, teamWorkloadProjects, deletedProjectNos, projectOverrides]);
 
   const deleteProject = (projectNo: string) => {
     setDeletedProjectNos((current) => {
@@ -863,7 +908,7 @@ export default function Home() {
             "hub",
             "gallery",
           ])
-        : role === ACCOUNT_ROLES.member
+          : role === ACCOUNT_ROLES.member
           ? new Set<View>([
               "home",
               "teamboard",
@@ -875,6 +920,17 @@ export default function Home() {
               "gallery",
               "governance",
             ])
+          : role === ACCOUNT_ROLES.bts
+            ? new Set<View>([
+                "home",
+                "teamboard",
+                "intake",
+                "definition",
+                "delivery",
+                "operations",
+                "hub",
+                "gallery",
+              ])
           : role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
             ? new Set<View>(nav.map((item) => item.id))
             : new Set<View>(["governance", "hub", "gallery"]);
@@ -891,6 +947,35 @@ export default function Home() {
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2400);
+  };
+
+  const assignProjectDeveloper = async (projectNo: string, userId: string) => {
+    const response = await fetch(
+      `/api/database/team/projects/${encodeURIComponent(projectNo)}/developer`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId }),
+      },
+    );
+    const payload = (await response.json()) as {
+      assignee?: TeamAccount;
+      error?: string;
+    };
+    if (!response.ok || !payload.assignee) {
+      throw new Error(payload.error || "개발 담당자 배정에 실패했습니다.");
+    }
+    setTeamWorkloadProjects((items) =>
+      items.map((item) =>
+        item.id === projectNo
+          ? {
+              ...item,
+              assignedUserIds: [payload.assignee!.id],
+              assignee: payload.assignee!.displayName,
+            }
+          : item,
+      ),
+    );
   };
 
   const saveGalleryApplications = (items: GalleryApplication[]) => {
@@ -1029,34 +1114,68 @@ export default function Home() {
     title: string,
     projectOwner: string,
     requester: string,
+    registration?: {
+      historical: boolean;
+      receivedDate: string;
+      currentJourneyStep: number;
+    },
   ) => {
     setSubmittedProjects((current) => {
-      const sequence = String(current.length + 1).padStart(3, "0");
+      const historical = Boolean(registration?.historical);
+      const journeyStep = historical
+        ? Math.max(0, Math.min(userJourney.length - 1, registration?.currentJourneyStep ?? 0))
+        : 1;
+      const receivedDate = registration?.receivedDate || new Date().toISOString().slice(0, 10);
+      const projectYear = receivedDate.slice(0, 4) || String(new Date().getFullYear());
+      const sequence = String(
+        current.filter((item) => item.no.startsWith(`${projectYear}-`)).length + 1,
+      ).padStart(3, "0");
+      const currentStage = userJourney[journeyStep];
+      const stageNumber = userJourney
+        .slice(0, journeyStep + 1)
+        .filter((item) => item.kind === "stage").length;
+      const route: View =
+        journeyStep <= 2
+          ? "intake"
+          : journeyStep <= 4
+            ? "definition"
+            : journeyStep <= 8
+              ? "delivery"
+              : "operations";
       const project: UserProject = {
-        no: `2026-${sequence}`,
+        no: `${projectYear}-${sequence}`,
         name: title,
-        stage: 1,
-        status: "타당성 평가 대기",
+        stage: Math.max(stageNumber, 1),
+        status: historical ? `${currentStage.title} 진행 중` : "타당성 평가 대기",
         tone: "blue",
-        progress: 22,
+        progress: historical
+          ? Math.round((journeyStep / (userJourney.length - 1)) * 100)
+          : 22,
         owner: projectOwner,
-        handler: "AI활성화팀 배정 대기",
-        updated: "방금",
-        nextAction: "타당성 평가 결과를 기다리고 있습니다",
+        handler: "담당자 배정 필요",
+        updated: historical ? receivedDate : "방금",
+        nextAction: historical
+          ? `${currentStage.title} 후속 작업과 누락 문서 등록`
+          : "타당성 평가 결과를 기다리고 있습니다",
         description:
-          "에이전트 요구 접수서[INT] 제출이 완료되어 AI활성화팀의 타당성 평가를 기다리고 있습니다.",
-        journeyStep: 1,
-        nextGate: "G1 착수 승인",
-        teamOwner: "AI활성화팀 배정 대기",
+          historical
+            ? "기존 과제를 현재 진행 단계 기준으로 이관했습니다. 단계별 문서는 담당자가 추후 등록합니다."
+            : "에이전트 요구 접수서[INT] 제출이 완료되어 AI활성화팀의 타당성 평가를 기다리고 있습니다.",
+        journeyStep,
+        nextGate: historical ? currentStage.title : "G1 착수 승인",
+        teamOwner: "담당자 배정 필요",
         dueDate: "FEA 작성 후 안내",
-        requestedDate: answers[4],
+        requestedDate: answers[4] || "미입력",
+        receivedDate,
         committedDate: "G2 승인 후 확정",
-        scheduleState: "타당성 평가 대기",
-        checkpoints: "3/11",
-        route: "intake" as View,
+        scheduleState: historical ? "과거 과제 이관" : "타당성 평가 대기",
+        checkpoints: historical ? `${journeyStep}/${userJourney.length - 1}` : "3/11",
+        route,
         intakeAnswers: answers,
         requester,
         projectOwner,
+        historicalImport: historical,
+        documentsDeferred: historical,
       };
       const next = [project, ...current];
       window.localStorage.setItem(
@@ -1067,7 +1186,9 @@ export default function Home() {
     });
     setView("home");
     notify(
-      role === ACCOUNT_ROLES.user
+      registration?.historical
+        ? "과거 Agent 과제를 최소 정보로 등록했습니다. 현재 단계 이전 문서는 미등록 상태로 남겨 담당자가 추후 작성할 수 있습니다."
+        : role === ACCOUNT_ROLES.user
         ? "에이전트 요구 접수서[INT]가 제출되었습니다. 신규 과제가 타당성 평가 대기로 등록되었습니다."
         : "요청자를 대신해 에이전트 요구 접수서[INT]를 등록했습니다. 신규 과제가 타당성 평가 대기로 이동했습니다.",
     );
@@ -1105,7 +1226,7 @@ export default function Home() {
                       : item.label}
                   </span>
                   {item.id === "teamboard" && role !== ACCOUNT_ROLES.user && (
-                    <em className="team-nav-count">{teamRequirements.length}</em>
+                    <em className="team-nav-count">{teamWorkloadProjects.length}</em>
                   )}
                   {item.id === "governance" && role === ACCOUNT_ROLES.admin && (
                     <em>{approvalQueue.length}</em>
@@ -1171,6 +1292,7 @@ export default function Home() {
                 >
                   <option value={ACCOUNT_ROLES.leader}>AI 활성화팀 팀장</option>
                   <option value={ACCOUNT_ROLES.member}>AI 활성화팀 팀원</option>
+                  <option value={ACCOUNT_ROLES.bts}>BTS</option>
                   <option value={ACCOUNT_ROLES.user}>일반 User</option>
                   <option value={ACCOUNT_ROLES.admin}>admin</option>
                 </select>
@@ -1189,6 +1311,8 @@ export default function Home() {
                       ? "AI 활성화팀 팀장"
                       : role === ACCOUNT_ROLES.member
                         ? "AI 활성화팀 팀원"
+                        : role === ACCOUNT_ROLES.bts
+                          ? "BTS"
                         : role === ACCOUNT_ROLES.admin
                           ? "Admin"
                           : "일반 User"}
@@ -1247,6 +1371,9 @@ export default function Home() {
           <Dashboard
             role={role}
             projectNo={workflowTarget}
+            teamAccounts={teamAccounts}
+            teamRequirementItems={teamWorkloadProjects}
+            onAssignProjectDeveloper={assignProjectDeveloper}
             onDeleteProject={deleteProject}
             setView={go}
             setRequestOpen={setRequestOpen}
@@ -1262,10 +1389,12 @@ export default function Home() {
           />
         )}
         {view === "teamboard" && role !== ACCOUNT_ROLES.user &&
-          (teamRequirements.length > 0 ? (
+          (teamAccounts.length > 0 || teamWorkloadProjects.length > 0 ? (
             <LegacyTeamWorkspaceDashboard
               setView={go}
               openWorkflow={openWorkflow}
+              members={teamAccounts}
+              requirements={teamWorkloadProjects}
             />
           ) : (
             <EmptyDataPage
@@ -1339,7 +1468,7 @@ export default function Home() {
             onDeleteApplication={deleteGalleryApplication}
           />
         )}
-        {view === "governance" && role !== ACCOUNT_ROLES.user && (
+        {view === "governance" && ([ACCOUNT_ROLES.leader, ACCOUNT_ROLES.member, ACCOUNT_ROLES.admin] as AccountRole[]).includes(role) && (
           <Governance
             role={role}
             onDetail={setDetail}
@@ -1510,6 +1639,9 @@ export default function Home() {
 function Dashboard({
   role,
   projectNo,
+  teamAccounts,
+  teamRequirementItems,
+  onAssignProjectDeveloper,
   onDeleteProject,
   setView,
   setRequestOpen,
@@ -1521,6 +1653,9 @@ function Dashboard({
 }: {
   role: string;
   projectNo?: string;
+  teamAccounts: TeamAccount[];
+  teamRequirementItems: TeamRequirement[];
+  onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
   onDeleteProject: (projectNo: string) => void;
   setView: (v: View) => void;
   setRequestOpen: (v: boolean) => void;
@@ -1531,10 +1666,10 @@ function Dashboard({
   notify: (message: string) => void;
 }) {
   const baseProjectItems =
-    role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
+    role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
       ? userProjectItems
       : userProjectItems;
-  const targetRequirement = teamRequirements.find(
+  const targetRequirement = teamRequirementItems.find(
     (project) => project.id === projectNo,
   );
   const homeProjectItems =
@@ -1547,12 +1682,15 @@ function Dashboard({
     role === ACCOUNT_ROLES.leader ||
     role === ACCOUNT_ROLES.admin ||
     role === ACCOUNT_ROLES.member ||
+    role === ACCOUNT_ROLES.bts ||
     role === ACCOUNT_ROLES.user
   )
     return (
       <UserDashboard
         role={role}
         projectNo={projectNo}
+        teamAccounts={teamAccounts}
+        onAssignProjectDeveloper={onAssignProjectDeveloper}
         onDeleteProject={onDeleteProject}
         setView={setView}
         openNewRequest={() => setRequestOpen(true)}
@@ -1784,21 +1922,25 @@ function Dashboard({
 function LegacyTeamWorkspaceDashboard({
   setView,
   openWorkflow,
+  members,
+  requirements,
 }: {
   setView: (v: View) => void;
   openWorkflow: (view: View, projectNo: string) => void;
+  members: TeamAccount[];
+  requirements: TeamRequirement[];
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("전체");
   const [assigneeFilter, setAssigneeFilter] = useState("전체");
-  const [selectedId, setSelectedId] = useState(teamRequirements[0].id);
+  const [selectedId, setSelectedId] = useState(requirements[0]?.id || "");
   const [popupItem, setPopupItem] = useState<TeamRequirement | null>(null);
   const [selectedLifecycleMarker, setSelectedLifecycleMarker] = useState("1");
 
   const filtered = useMemo(
     () =>
-      teamRequirements.filter((item) => {
+      requirements.filter((item) => {
         const matchesStatus =
           statusFilter === "전체" ||
           (statusFilter === "요구 접수" ? item.stage === "접수 검토" : false) ||
@@ -1809,26 +1951,26 @@ function LegacyTeamWorkspaceDashboard({
             ? item.risk === "지연 위험"
             : item.status === statusFilter);
         const matchesAssignee =
-          assigneeFilter === "전체" || item.assignee === assigneeFilter;
+          assigneeFilter === "전체" || item.assignedUserIds?.includes(assigneeFilter);
         return matchesStatus && matchesAssignee;
       }),
-    [statusFilter, assigneeFilter],
+    [requirements, statusFilter, assigneeFilter],
   );
 
   const selected =
     filtered.find((item) => item.id === selectedId) ||
     filtered[0] ||
-    teamRequirements.find((item) => item.id === selectedId) ||
-    teamRequirements[0];
+    requirements.find((item) => item.id === selectedId) ||
+    requirements[0];
   const counts = {
-    intake: teamRequirements.filter((item) => item.stage === "접수 검토")
+    intake: requirements.filter((item) => item.stage === "접수 검토")
       .length,
-    definition: teamRequirements.filter(
+    definition: requirements.filter(
       (item) => item.status === "신규 접수" && item.stage !== "접수 검토",
     ).length,
-    active: teamRequirements.filter((item) => item.status === "진행 중").length,
-    done: teamRequirements.filter((item) => item.status === "완료").length,
-    risk: teamRequirements.filter((item) => item.risk === "지연 위험").length,
+    active: requirements.filter((item) => item.status === "진행 중").length,
+    done: requirements.filter((item) => item.status === "완료").length,
+    risk: requirements.filter((item) => item.risk === "지연 위험").length,
   };
   const choose = (item: TeamRequirement) => setSelectedId(item.id);
   const openProject = (item: TeamRequirement) => {
@@ -2223,7 +2365,7 @@ function LegacyTeamWorkspaceDashboard({
                       <span
                         className={item.risk === "지연 위험" ? "urgent" : ""}
                       >
-                        8.{item.dueDay}
+                        {item.dueDate || "미정"}
                       </span>
                     </button>
                   ))
@@ -2238,9 +2380,11 @@ function LegacyTeamWorkspaceDashboard({
         </section>
       )}
       <TeamPortfolioAnalytics
-        onMember={(name) => {
+        members={members}
+        requirements={requirements}
+        onMember={(memberId) => {
           setStatusFilter("전체");
-          setAssigneeFilter(name);
+          setAssigneeFilter(memberId);
           revealDetails();
         }}
         onProject={openProject}
@@ -2257,18 +2401,26 @@ function LegacyTeamWorkspaceDashboard({
 }
 
 function TeamPortfolioAnalytics({
+  members: registeredMembers,
+  requirements,
   onMember,
   onProject,
 }: {
-  onMember: (name: string) => void;
+  members: TeamAccount[];
+  requirements: TeamRequirement[];
+  onMember: (memberId: string) => void;
   onProject: (item: TeamRequirement) => void;
 }) {
-  const memberNames = aiTeamMembers;
-  const members = memberNames
-    .map((name) => {
-      const items = teamRequirements.filter((item) => item.assignee === name);
+  const members = registeredMembers
+    .map((account) => {
+      const items = requirements.filter((item) =>
+        item.assignedUserIds?.includes(account.id),
+      );
       return {
-        name,
+        id: account.id,
+        name: account.displayName,
+        email: account.email,
+        appRole: account.appRole,
         total: items.length,
         intake: items.filter((item) => item.stage === "접수 검토").length,
         definition: items.filter(
@@ -2281,16 +2433,18 @@ function TeamPortfolioAnalytics({
     })
     .sort((a, b) => b.total - a.total);
   const maxAssigned = Math.max(...members.map((member) => member.total), 1);
-  const activeProjects = [...teamRequirements]
+  const activeProjects = [...requirements]
     .filter((item) => item.status !== "완료")
     .sort(
       (a, b) =>
         Number(b.assignee === "미배정") - Number(a.assignee === "미배정") ||
         Number(b.risk === "지연 위험") - Number(a.risk === "지연 위험") ||
-        a.dueDay - b.dueDay,
+        (a.dueDate || "9999-12-31").localeCompare(
+          b.dueDate || "9999-12-31",
+        ),
     )
     .slice(0, 5);
-  const attentionCount = teamRequirements.filter(
+  const attentionCount = requirements.filter(
     (item) => item.risk !== "정상" && item.status !== "완료",
   ).length;
 
@@ -2311,7 +2465,7 @@ function TeamPortfolioAnalytics({
               미배정{" "}
               <b>
                 {
-                  teamRequirements.filter((item) => item.assignee === "미배정")
+                  requirements.filter((item) => item.assignee === "미배정")
                     .length
                 }
               </b>
@@ -2341,10 +2495,21 @@ function TeamPortfolioAnalytics({
             <span>합계</span>
           </div>
           {members.map((member) => (
-            <button key={member.name} onClick={() => onMember(member.name)}>
+            <button key={member.id} onClick={() => onMember(member.id)}>
               <span className="workload-person">
                 <span className="member-avatar">{member.name.slice(0, 1)}</span>
-                <strong>{member.name}</strong>
+                <span>
+                  <strong>{member.name}</strong>
+                  <small>
+                    {member.appRole === "team_leader"
+                      ? "AI 활성화팀 팀장"
+                      : member.appRole === "team_member"
+                        ? "AI 활성화팀"
+                        : member.appRole === "bts"
+                          ? "BTS"
+                          : "admin"}
+                  </small>
+                </span>
                 {member.total >= 4 && <em>과부하</em>}
               </span>
               <span className="workload-total">
@@ -2519,7 +2684,7 @@ function TeamProjectModal({
           </div>
           <div>
             <dt>목표일</dt>
-            <dd>2026.08.{String(item.dueDay).padStart(2, "0")}</dd>
+            <dd>{item.dueDate || "미정"}</dd>
           </div>
           <div>
             <dt>우선순위</dt>
@@ -4290,6 +4455,8 @@ function GateApprovalResult({
   g2ReworkSubmitted = false,
   basisReady = true,
   homeEmbedded = false,
+  assignees = [],
+  onAssignDeveloper,
 }: {
   gate: "G1" | "G2";
   projectNo: string;
@@ -4309,12 +4476,16 @@ function GateApprovalResult({
   g2ReworkSubmitted?: boolean;
   basisReady?: boolean;
   homeEmbedded?: boolean;
+  assignees?: TeamAccount[];
+  onAssignDeveloper?: (projectNo: string, userId: string) => Promise<void>;
 }) {
   const isG1 = gate === "G1";
   const isRejectedCase = projectNo === "2026-028" && gate === "G2";
   const isReworkRound = isRejectedCase && g2ReworkSubmitted;
   const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
-  const isMember = role.includes("AI활성화팀") && role.includes("담당자");
+  const isMember =
+    (role.includes("AI활성화팀") && role.includes("담당자")) ||
+    role === ACCOUNT_ROLES.bts;
   const isRequester = role === "일반 User";
   const canActOnG2 = isRequester || isMember || isLeader;
   const isCompletedG2 = projectNo === "2026-021" && gate === "G2";
@@ -4337,6 +4508,9 @@ function GateApprovalResult({
       (["2026-031", "2026-033"].includes(projectNo)
         ? "미배정"
         : project.teamOwner.replace("AI활성화팀 ", "").replace(" 담당자", "")),
+  );
+  const selectedG1Assignee = assignees.find(
+    (account) => account.displayName === g1Assignee,
   );
   const [g1Reason, setG1Reason] = useState(initialG1Resolution?.reason || "");
   const [myG2Vote, setMyG2Vote] = useState<"PENDING" | "APPROVED" | "REWORK">(
@@ -4787,18 +4961,27 @@ function GateApprovalResult({
             </div>
             <div className="g1-decision-fields">
               <label>
-                AI활성화팀 개발 담당자
+                개발 담당자 (AI 활성화팀 · BTS)
                 <select
-                  value={g1Assignee}
+                  value={selectedG1Assignee?.id || ""}
                   disabled={
                     g1DraftDecision === "DROP" || g1DraftDecision === "PENDING"
                   }
-                  onChange={(event) => setG1Assignee(event.target.value)}
+                  onChange={(event) => {
+                    const account = assignees.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    setG1Assignee(account?.displayName || "미배정");
+                  }}
                 >
-                  <option>미배정</option>
-                  <option>허정환</option>
-                  <option>이재승</option>
-                  <option>김서연</option>
+                  <option value="">미배정</option>
+                  {assignees
+                    .filter((account) => ["team_member", "bts"].includes(account.appRole))
+                    .map((account) => (
+                      <option key={account.id} value={account.displayName}>
+                        {account.displayName} · {account.appRole === "bts" ? "BTS" : "AI 활성화팀"}
+                      </option>
+                    ))}
                 </select>
               </label>
               <label>
@@ -4817,8 +5000,24 @@ function GateApprovalResult({
                 !g1Reason.trim() ||
                 (g1DraftDecision !== "DROP" && g1Assignee === "미배정")
               }
-              onClick={() => {
+              onClick={async () => {
                 if (g1DraftDecision === "PENDING") return;
+                if (
+                  g1DraftDecision !== "DROP" &&
+                  selectedG1Assignee &&
+                  onAssignDeveloper
+                ) {
+                  try {
+                    await onAssignDeveloper(projectNo, selectedG1Assignee.id);
+                  } catch (error) {
+                    notify(
+                      error instanceof Error
+                        ? error.message
+                        : "개발 담당자 배정에 실패했습니다.",
+                    );
+                    return;
+                  }
+                }
                 setG1Decision(g1DraftDecision);
                 onG1Resolved?.(
                   g1DraftDecision,
@@ -5957,6 +6156,8 @@ function UserOperationsResult({
 function UserDashboard({
   role,
   projectNo,
+  teamAccounts,
+  onAssignProjectDeveloper,
   onDeleteProject,
   setView,
   openNewRequest,
@@ -5966,6 +6167,8 @@ function UserDashboard({
 }: {
   role: string;
   projectNo?: string;
+  teamAccounts: TeamAccount[];
+  onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
   onDeleteProject: (projectNo: string) => void;
   setView: (v: View) => void;
   openNewRequest: () => void;
@@ -5976,6 +6179,7 @@ function UserDashboard({
   const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const isAiTeam = isLeader || isAiTeamMember;
+  const isProjectContributor = isAiTeam || role === ACCOUNT_ROLES.bts;
   const [selected, setSelected] = useState(0);
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
@@ -6000,6 +6204,7 @@ function UserDashboard({
   const [pilotReleaseDocument, setPilotReleaseDocument] = useState<
     "DEP" | "UG" | null
   >(null);
+  const currentStageDetailRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState([
     {
       role: "agent",
@@ -6019,7 +6224,7 @@ function UserDashboard({
       // Keep the master-detail selection stable while the production dataset is empty.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelected(0);
-      setSelectedJourney(1);
+      setSelectedJourney(0);
       return;
     }
     const targetIndex = projectNo
@@ -6065,7 +6270,7 @@ function UserDashboard({
     hasProjects &&
     (current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted));
   const effectiveJourneyStep = !hasProjects
-    ? 1
+    ? -1
     : g2ReworkProjects[current.no] === "resubmitted"
       ? Math.max(4, current.journeyStep)
       : feaCompletedProjects.includes(current.no)
@@ -6095,7 +6300,7 @@ function UserDashboard({
     setFilter(next);
     if (projectItems.length === 0) return;
     if (next === "내 할 일") {
-      const project = isAiTeam
+      const project = isProjectContributor
         ? projectItems.find((item) => item.no === "2026-033") || projectItems[0]
         : projectItems.find((item) => item.status === "내 작성 필요") ||
           projectItems[0];
@@ -6128,27 +6333,38 @@ function UserDashboard({
     ]);
     setChatInput("");
   };
+  const showCurrentStage = () => {
+    if (!hasProjects || effectiveJourneyStep < 0) return;
+    setSelectedJourney(effectiveJourneyStep);
+    window.requestAnimationFrame(() => {
+      currentStageDetailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      currentStageDetailRef.current?.focus({ preventScroll: true });
+    });
+  };
 
   return (
     <div className="page user-home user-home-oneview">
       <section className="user-home-hero">
         <div>
           <p className="eyebrow">
-            {isAiTeam
+            {isProjectContributor
               ? isLeader
                 ? "AI ACTIVATION TEAM PROJECTS"
                 : "MY ASSIGNED AGENT PROJECTS"
               : "MY AGENT REQUESTS"}
           </p>
           <h1>
-            {isAiTeam
+            {isProjectContributor
               ? isLeader
                 ? "팀이 관리하는 Agent 과제를 한 화면에서 감독합니다."
                 : "내가 담당한 Agent 과제를 한 화면에서 관리합니다."
               : "내가 요청한 과제는 지금 어디까지 왔을까요?"}
           </h1>
           <p>
-            {isAiTeam
+            {isProjectContributor
               ? isLeader
                 ? "팀 전체 진행 이력과 지연 상태를 확인하고, 현재 단계에서 필요한 게이트 승인과 담당자 지정을 처리합니다."
                 : "개발·리뷰·운영 역할로 배정된 과제를 함께 표시하며, 배정 시점부터 프로젝트 전체 이력을 확인할 수 있습니다."
@@ -6174,12 +6390,12 @@ function UserDashboard({
               <h2>
                 {isLeader
                   ? "팀 전체 Agent 과제"
-                  : isAiTeamMember
+                  : isAiTeamMember || role === ACCOUNT_ROLES.bts
                     ? "내 담당 Agent 과제"
                     : "내 Agent 과제"}
               </h2>
               <p>
-                {isAiTeam
+                {isProjectContributor
                   ? isLeader
                     ? "신규 접수부터 운영까지 팀이 관리하는 과제입니다."
                     : "개발 담당·리뷰어·운영 담당으로 배정된 과제입니다."
@@ -6288,7 +6504,7 @@ function UserDashboard({
                   <Trash size={15} weight="bold" /> 과제 삭제
                 </button>
               )}
-              <button disabled={!hasProjects} onClick={() => setSelectedJourney(effectiveJourneyStep)}>
+              <button disabled={!hasProjects} onClick={showCurrentStage}>
                 현재 단계 보기 <ArrowRight size={13} weight="bold" />
               </button>
             </div>
@@ -6418,7 +6634,40 @@ function UserDashboard({
             <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
-          {selectedJourney === 0 ? (
+          <div
+            ref={currentStageDetailRef}
+            id="current-stage-detail"
+            className="current-stage-detail"
+            tabIndex={-1}
+          >
+          {!hasProjects ? (
+            <EmptyDataPage
+              title="선택된 Agent 과제가 없습니다."
+              description="과제를 등록하거나 왼쪽 목록에서 선택하면 현재 단계와 문서 상태가 여기에 표시됩니다."
+            />
+          ) : current.documentsDeferred && selectedJourney <= effectiveJourneyStep ? (
+            <section className="deferred-document-card">
+              <header>
+                <div>
+                  <small>{lifecycleOutputs[selectedJourney].code} · {current.no}</small>
+                  <h3>{lifecycleOutputs[selectedJourney].title}</h3>
+                  <p>과거 과제를 최소 정보로 이관해 이 단계의 문서는 아직 등록되지 않았습니다.</p>
+                </div>
+                <Pill tone="gray">문서 미등록</Pill>
+              </header>
+              <div>
+                <FileText size={30} weight="duotone" />
+                <b>프로세스 진행 이력만 등록된 상태입니다.</b>
+                <p>담당자가 준비되면 해당 단계 업무 화면에서 문서를 새로 작성하거나 기존 문서를 첨부할 수 있습니다.</p>
+              </div>
+              <footer>
+                <span>현재 단계: {userJourney[effectiveJourneyStep].title}</span>
+                <button onClick={() => setView(current.route)}>
+                  해당 단계에서 문서 추가 <ArrowRight size={14} weight="bold" />
+                </button>
+              </footer>
+            </section>
+          ) : selectedJourney === 0 ? (
             <div
               className={`intake-result-layout ${intakeComplete ? "complete" : "draft"}`}
             >
@@ -6597,6 +6846,8 @@ function UserDashboard({
               notify={notify}
               basisReady={selectedJourney !== 2 || effectiveJourneyStep >= 2}
               homeEmbedded
+              assignees={teamAccounts}
+              onAssignDeveloper={onAssignProjectDeveloper}
               initialG1Resolution={currentG1Resolution}
               onG1Resolved={(decision, assignee, reason) =>
                 setHomeG1Resolutions((items) => ({
@@ -6650,7 +6901,7 @@ function UserDashboard({
               openHub={() => setView("hub")}
               notify={notify}
               embedded
-              viewerMode={!isAiTeam}
+              viewerMode={!isProjectContributor}
               lifecycleState={selectedOutputState}
               embeddedSection={
                 selectedJourney === 5
@@ -6728,6 +6979,7 @@ function UserDashboard({
               </footer>
             </section>
           )}
+          </div>
         </article>
       </section>
       {pilotReleaseDocument && (
@@ -12795,6 +13047,8 @@ function Gallery({
       ? { name: identity?.displayName || "AI 활성화팀 팀장", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀장" }
       : role === ACCOUNT_ROLES.member
         ? { name: identity?.displayName || "AI 활성화팀 팀원", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀원" }
+        : role === ACCOUNT_ROLES.bts
+          ? { name: identity?.displayName || "BTS 담당자", department: "BTS", roleLabel: "BTS" }
         : role === ACCOUNT_ROLES.admin
           ? { name: identity?.displayName || "Portal Admin", department: "AI 활성화팀", roleLabel: "Admin" }
           : { name: identity?.displayName || "일반 User", department: "현업", roleLabel: "일반 User" };
@@ -13275,7 +13529,7 @@ function Governance({
   const [accounts, setAccounts] = useState<GovernanceUser[]>([]);
   const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
-  const [accountFilter, setAccountFilter] = useState<"all" | "ai" | "admin">("all");
+  const [accountFilter, setAccountFilter] = useState<"all" | "ai" | "bts" | "admin">("all");
   const [accountDraft, setAccountDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
   const [accountError, setAccountError] = useState("");
   const [selectedRoleAccount, setSelectedRoleAccount] = useState<GovernanceUser | null>(null);
@@ -13324,13 +13578,15 @@ function Governance({
     const matchesSearch = `${account.displayName} ${account.email}`.toLowerCase().includes(accountSearch.toLowerCase());
     const matchesRole = accountFilter === "all"
       || (accountFilter === "ai" && ["team_member", "team_leader"].includes(account.appRole))
+      || (accountFilter === "bts" && account.appRole === "bts")
       || (accountFilter === "admin" && account.appRole === "admin");
     return matchesSearch && matchesRole;
   });
-  const roleLabel = (appRole: string) => ({ general_user: "일반 User", team_member: "AI 활성화팀 팀원", team_leader: "AI 활성화팀 팀장", admin: "admin" }[appRole] || appRole);
+  const roleLabel = (appRole: string) => ({ general_user: "일반 User", team_member: "AI 활성화팀 팀원", team_leader: "AI 활성화팀 팀장", bts: "BTS", admin: "admin" }[appRole] || appRole);
   const projectPermission = (appRole: string) => ({
     team_leader: { title: "팀 전체 과제 감독", detail: "전체 이력 조회 · 담당자/리뷰어 지정 · G1/G3/G4 승인" },
     team_member: { title: "배정된 과제 수행", detail: "담당 또는 리뷰어 배정 시 전체 이력 조회" },
+    bts: { title: "배정된 과제 수행", detail: "BTS 수행자로 배정된 프로젝트와 전체 이력 조회" },
     admin: { title: "전체 시스템 관리", detail: "모든 과제 수정·삭제 및 역할 관리" },
     general_user: { title: "요청·Owner 과제", detail: "요청자 또는 Project Owner 범위" },
   }[appRole] || { title: "역할 기준 접근", detail: "등록된 역할에 따라 접근" });
@@ -13396,7 +13652,7 @@ function Governance({
         <div>
           <p>계정 역할</p>
           <strong>4</strong>
-          <small>팀장 · 팀원 · User · admin</small>
+          <small>팀장 · 팀원 · BTS · admin</small>
         </div>
         <div>
           <p>프로젝트 배정</p>
@@ -13427,7 +13683,8 @@ function Governance({
             <div className="filter-row">
               <div>
                 <button className={accountFilter === "all" ? "active" : ""} onClick={() => setAccountFilter("all")}>전체 {accounts.length}</button>
-                <button className={accountFilter === "ai" ? "active" : ""} onClick={() => setAccountFilter("ai")}>AI팀 {accounts.filter((item) => ["team_member", "team_leader"].includes(item.appRole)).length}</button>
+                <button className={accountFilter === "ai" ? "active" : ""} onClick={() => setAccountFilter("ai")}>AI 활성화팀 {accounts.filter((item) => ["team_member", "team_leader"].includes(item.appRole)).length}</button>
+                <button className={accountFilter === "bts" ? "active" : ""} onClick={() => setAccountFilter("bts")}>BTS {accounts.filter((item) => item.appRole === "bts").length}</button>
                 <button className={accountFilter === "admin" ? "active" : ""} onClick={() => setAccountFilter("admin")}>admin {accounts.filter((item) => item.appRole === "admin").length}</button>
               </div>
               <label>
@@ -13442,11 +13699,12 @@ function Governance({
             </div>
             {(isLeader || isAdmin) && (
               <div className="governance-account-form">
-                <div><b>AI 활성화팀 계정 등록</b><small>로그인 전에도 MS 계정을 미리 등록할 수 있습니다.</small></div>
+                <div><b>프로젝트 수행 계정 등록</b><small>AI 활성화팀과 BTS 계정을 로그인 전에 미리 등록할 수 있습니다.</small></div>
                 <input aria-label="등록할 사용자 이름" placeholder="이름" value={accountDraft.displayName} onChange={(event) => setAccountDraft({ ...accountDraft, displayName: event.target.value })} />
                 <input aria-label="등록할 MS 계정" type="email" placeholder="name@changshininc.com" value={accountDraft.email} onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })} />
                 <select aria-label="등록할 역할" value={accountDraft.appRole} onChange={(event) => setAccountDraft({ ...accountDraft, appRole: event.target.value })}>
                   <option value="team_member">AI 활성화팀 팀원</option>
+                  <option value="bts">BTS</option>
                   {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}
                   {isAdmin && <option value="admin">admin</option>}
                 </select>
@@ -13465,21 +13723,21 @@ function Governance({
               </div>
               {visibleAccounts.map((account) => (
                 <div
-                  className={`governance-account-row ${["team_member", "team_leader"].includes(account.appRole) ? "is-clickable" : ""}`}
+                  className={`governance-account-row ${["team_member", "team_leader", "bts"].includes(account.appRole) ? "is-clickable" : ""}`}
                   key={account.email}
-                  role={["team_member", "team_leader"].includes(account.appRole) ? "button" : undefined}
-                  tabIndex={["team_member", "team_leader"].includes(account.appRole) ? 0 : undefined}
-                  onClick={() => ["team_member", "team_leader"].includes(account.appRole) && setSelectedRoleAccount(account)}
-                  onKeyDown={(event) => { if (["Enter", " "].includes(event.key) && ["team_member", "team_leader"].includes(account.appRole)) setSelectedRoleAccount(account); }}
+                  role={["team_member", "team_leader", "bts"].includes(account.appRole) ? "button" : undefined}
+                  tabIndex={["team_member", "team_leader", "bts"].includes(account.appRole) ? 0 : undefined}
+                  onClick={() => ["team_member", "team_leader", "bts"].includes(account.appRole) && setSelectedRoleAccount(account)}
+                  onKeyDown={(event) => { if (["Enter", " "].includes(event.key) && ["team_member", "team_leader", "bts"].includes(account.appRole)) setSelectedRoleAccount(account); }}
                 >
                   <span>
                     <b>{account.displayName}</b>
                     <small>{account.email}</small>
                   </span>
                   <span>
-                    {(isAdmin || (isLeader && ["general_user", "team_member"].includes(account.appRole))) ? (
+                    {(isAdmin || (isLeader && ["general_user", "team_member", "bts"].includes(account.appRole))) ? (
                       <select value={account.appRole} onClick={(event) => event.stopPropagation()} onChange={(event) => changeAccountRole(account, event.target.value)}>
-                        <option value="general_user">일반 User</option><option value="team_member">AI 활성화팀 팀원</option>
+                        <option value="general_user">일반 User</option><option value="team_member">AI 활성화팀 팀원</option><option value="bts">BTS</option>
                         {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}{isAdmin && <option value="admin">admin</option>}
                       </select>
                     ) : <Pill tone={account.appRole === "admin" ? "violet" : "blue"}>{roleLabel(account.appRole)}</Pill>}
@@ -13661,6 +13919,13 @@ function Governance({
                 <article><b>Gate 의사결정</b><p>FEA를 근거로 G1 착수 승인하고, 지정된 승인 단계에서 최종 판단합니다.</p></article>
                 <article><b>계정 역할 관리</b><p>일반 User를 AI 활성화팀 팀원으로 등록하거나 팀원 역할을 회수할 수 있습니다.</p></article>
               </div>
+            ) : selectedRoleAccount.appRole === "bts" ? (
+              <div className="governance-role-details">
+                <article><b>프로젝트 배정</b><p>BTS 수행자로 지정된 프로젝트가 AI 활성화팀 대시보드의 담당자별 업무 분포에 반영됩니다.</p></article>
+                <article><b>전체 이력 조회</b><p>배정 시점부터 해당 프로젝트의 요구 접수, 설계·개발, 평가와 운영 이력을 조회합니다.</p></article>
+                <article><b>수행 문서 작성</b><p>프로젝트에서 부여된 개발·리뷰·운영 관계에 따라 필요한 산출물을 작성합니다.</p></article>
+                <article><b>권한 제한</b><p>팀장 Gate 최종 승인과 Admin 계정·시스템 관리 권한은 부여되지 않습니다.</p></article>
+              </div>
             ) : (
               <div className="governance-role-details">
                 <article><b>배정된 과제 수행</b><p>개발 담당자로 지정된 시점부터 내 Agent 과제에서 전체 업무를 수행합니다.</p></article>
@@ -13709,6 +13974,11 @@ function RequestWizard({
     title: string,
     projectOwner: string,
     requester: string,
+    registration?: {
+      historical: boolean;
+      receivedDate: string;
+      currentJourneyStep: number;
+    },
   ) => void;
 }) {
   const isAiTeam =
@@ -13737,15 +14007,21 @@ function RequestWizard({
   const [answers, setAnswers] = useState(["", "", "", "", ""]);
   const [submitted, setSubmitted] = useState(false);
   const [writingMode, setWritingMode] = useState<"CHAT" | "FORM">("CHAT");
+  const [registrationMode, setRegistrationMode] = useState<"NEW" | "HISTORICAL">("NEW");
+  const [receivedDate, setReceivedDate] = useState("");
+  const [historicalJourneyStep, setHistoricalJourneyStep] = useState(0);
   const [manualTitle, setManualTitle] = useState("");
   const [requesterName, setRequesterName] = useState("");
   const [requesterDepartment, setRequesterDepartment] = useState("");
   const [requesterEmail, setRequesterEmail] = useState("");
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
+  const isHistorical = isAiTeam && registrationMode === "HISTORICAL";
   const resolvedRequester = isAiTeam
-    ? requesterName.trim() && requesterDepartment.trim() && requesterEmail.trim()
-      ? `${requesterName.trim()} · ${requesterDepartment.trim()} · ${requesterEmail.trim()}`
+    ? requesterName.trim() && requesterDepartment.trim() && (isHistorical || requesterEmail.trim())
+      ? [requesterName.trim(), requesterDepartment.trim(), requesterEmail.trim()]
+          .filter(Boolean)
+          .join(" · ")
       : ""
     : `${identity?.displayName || "김현우"} · 현업 · ${identity?.email || "kim.hw@changshininc.com"}`;
   const requesterOwnerLabel = isAiTeam
@@ -13767,7 +14043,7 @@ function RequestWizard({
       items.map((item, index) => (index === targetIndex ? value : item)),
     );
   const canSubmit = Boolean(
-    allAnswersComplete &&
+    (isHistorical ? manualTitle.trim() && receivedDate : allAnswersComplete) &&
       resolvedProjectOwner &&
       resolvedRequester &&
       requestTitle.trim() &&
@@ -13776,7 +14052,17 @@ function RequestWizard({
   const submitRequest = () => {
     if (!canSubmit) return;
     setSubmitted(true);
-    onSubmit([...answers], requestTitle, resolvedProjectOwner, resolvedRequester);
+    onSubmit(
+      [...answers],
+      requestTitle,
+      resolvedProjectOwner,
+      resolvedRequester,
+      {
+        historical: isHistorical,
+        receivedDate,
+        currentJourneyStep: historicalJourneyStep,
+      },
+    );
     close();
   };
   const advance = () => {
@@ -13785,9 +14071,14 @@ function RequestWizard({
     else submitRequest();
   };
   const openChatMode = () => {
+    setRegistrationMode("NEW");
     const firstEmpty = answers.findIndex((answer) => !answer.trim());
     setStep(firstEmpty === -1 ? 5 : firstEmpty + 1);
     setWritingMode("CHAT");
+  };
+  const openHistoricalMode = () => {
+    setRegistrationMode("HISTORICAL");
+    setWritingMode("FORM");
   };
   return (
     <div className="modal-wrap">
@@ -13800,7 +14091,7 @@ function RequestWizard({
       >
         <header>
           <div>
-            <Pill tone="blue">{writingMode === "CHAT" ? "요구 접수 Agent" : "요구 접수서 직접 작성"}</Pill>
+            <Pill tone="blue">{isHistorical ? "과거 과제 이관" : writingMode === "CHAT" ? "요구 접수 Agent" : "요구 접수서 직접 작성"}</Pill>
             <h2 id="request-wizard-title">{isAiTeam ? "새 Agent 과제 등록" : "새 Agent 과제 요청"}</h2>
             <p>{isAiTeam ? "회의 내용을 바탕으로 요청자를 대신해 등록하거나, Agent와 대화하며 접수할 수 있습니다." : "Agent와 대화하거나 문서 양식에 직접 입력해 요구 접수서를 작성할 수 있습니다."}</p>
           </div>
@@ -13808,7 +14099,31 @@ function RequestWizard({
             <X size={17} />
           </button>
         </header>
-        <div className="request-writing-modes" role="tablist" aria-label="요구 접수서 작성 방식">
+        {isAiTeam && (
+          <div className="request-registration-modes" role="tablist" aria-label="Agent 과제 등록 유형">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={registrationMode === "NEW"}
+              className={registrationMode === "NEW" ? "active" : ""}
+              onClick={() => setRegistrationMode("NEW")}
+            >
+              <Plus size={20} weight="duotone" />
+              <span><b>새 과제 접수</b><small>접수서를 작성하고 타당성 평가부터 시작합니다.</small></span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={registrationMode === "HISTORICAL"}
+              className={registrationMode === "HISTORICAL" ? "active" : ""}
+              onClick={openHistoricalMode}
+            >
+              <ArrowsClockwise size={20} weight="duotone" />
+              <span><b>과거 과제 이관</b><small>최소 정보와 현재 단계만 먼저 등록합니다.</small></span>
+            </button>
+          </div>
+        )}
+        {!isHistorical && <div className="request-writing-modes" role="tablist" aria-label="요구 접수서 작성 방식">
           <button
             type="button"
             role="tab"
@@ -13829,8 +14144,8 @@ function RequestWizard({
             <FileText size={21} weight="duotone" />
             <span><b>문서 양식 직접 작성</b><small>전체 항목을 한 번에 확인하고 입력합니다.</small></span>
           </button>
-        </div>
-        {writingMode === "CHAT" && (
+        </div>}
+        {!isHistorical && writingMode === "CHAT" && (
           <div className="wizard-steps">
             {labels.map((label, index) => (
               <div className={step >= index + 1 ? "active" : ""} key={label}>
@@ -13934,7 +14249,6 @@ function RequestWizard({
                     <span>희망 완료일</span>
                     <input
                       type="date"
-                      min="2026-08-29"
                       value={answers[step - 1]}
                       onInput={(event) =>
                         updateAnswer((event.target as HTMLInputElement).value)
@@ -13996,10 +14310,10 @@ function RequestWizard({
           ) : (
             <section className="wizard-form-panel" aria-label="에이전트 요구 접수서 직접 작성">
               <header>
-                <FileText size={24} weight="duotone" />
+                {isHistorical ? <ArrowsClockwise size={24} weight="duotone" /> : <FileText size={24} weight="duotone" />}
                 <div>
-                  <strong>에이전트 요구 접수서 직접 작성</strong>
-                  <small>필수 항목을 한 화면에서 작성합니다.</small>
+                  <strong>{isHistorical ? "과거 Agent 과제 최소 등록" : "에이전트 요구 접수서 직접 작성"}</strong>
+                  <small>{isHistorical ? "문서 없이 접수일과 현재 진행 단계까지만 먼저 이관합니다." : "필수 항목을 한 화면에서 작성합니다."}</small>
                 </div>
               </header>
               <div className="wizard-form-scroll">
@@ -14011,8 +14325,36 @@ function RequestWizard({
                     placeholder={suggestedRequestTitle}
                     aria-label="요청 제목"
                   />
-                  <small>비워두면 업무 문제를 바탕으로 제목이 자동 생성됩니다.</small>
+                  <small>{isHistorical ? "과거 과제 이관 시 제목은 필수입니다." : "비워두면 업무 문제를 바탕으로 제목이 자동 생성됩니다."}</small>
                 </label>
+                {isHistorical && (
+                  <div className="historical-project-fields wide">
+                    <label className="wizard-date-input">
+                      <span>접수 날짜</span>
+                      <input
+                        type="date"
+                        value={receivedDate}
+                        onChange={(event) => setReceivedDate(event.target.value)}
+                        aria-label="과거 과제 접수 날짜"
+                      />
+                    </label>
+                    <label className="wizard-form-field">
+                      <span>현재 진행 단계</span>
+                      <select
+                        value={historicalJourneyStep}
+                        onChange={(event) => setHistoricalJourneyStep(Number(event.target.value))}
+                        aria-label="과거 과제 현재 진행 단계"
+                      >
+                        {userJourney.map((item, index) => (
+                          <option key={`${item.title}-${index}`} value={index}>
+                            {item.kind === "gate" ? `${item.code} · ` : ""}{item.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p>선택한 단계 이전 과정은 완료로 표시하고, 단계별 문서는 모두 ‘미등록’ 상태로 둡니다.</p>
+                  </div>
+                )}
                 {isAiTeam && (
                   <fieldset className="wizard-owner-field wizard-requester-field wide">
                     <legend>요구자 정보</legend>
@@ -14031,18 +14373,19 @@ function RequestWizard({
                       placeholder={examples[index]}
                       aria-label={`${label} 작성`}
                     />
+                    {isHistorical && <small>선택 입력 · 담당자가 나중에 보완할 수 있습니다.</small>}
                   </label>
                 ))}
                 <label className="wizard-date-input">
                   <span>5. 희망 완료일</span>
                   <input
                     type="date"
-                    min="2026-08-29"
                     value={answers[4]}
                     onInput={(event) => updateAnswerAt(4, (event.target as HTMLInputElement).value)}
                     onChange={(event) => updateAnswerAt(4, event.target.value)}
                     aria-label="희망 완료일"
                   />
+                  {isHistorical && <small>선택 입력 · 과거 날짜도 등록할 수 있습니다.</small>}
                 </label>
                 <fieldset className="wizard-owner-field">
                   <legend>Project Owner 지정</legend>
@@ -14061,9 +14404,9 @@ function RequestWizard({
                 </fieldset>
               </div>
               <footer className="wizard-form-actions">
-                <span>{answers.filter(Boolean).length}/5 필수 항목 작성</span>
+                <span>{isHistorical ? "제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수" : `${answers.filter(Boolean).length}/5 필수 항목 작성`}</span>
                 <button disabled={!canSubmit} onClick={submitRequest}>
-                  {isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
+                  {isHistorical ? "과거 과제 등록" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
                   <ArrowRight size={15} weight="bold" />
                 </button>
               </footer>
@@ -14080,7 +14423,9 @@ function RequestWizard({
           <div>
             <span>
               {writingMode === "FORM"
-                ? "두 방식에서 입력한 내용은 서로 유지됩니다"
+                ? isHistorical
+                  ? "문서 없이 진행 이력만 먼저 등록할 수 있습니다"
+                  : "두 방식에서 입력한 내용은 서로 유지됩니다"
                 : step === 5
                 ? "희망 완료일을 확인한 뒤 접수서를 제출하세요"
                 : "닫아도 작성 이력이 남습니다"}

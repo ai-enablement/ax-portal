@@ -34,14 +34,14 @@ test("opens dashboard projects in the matching home Agent record", () => {
   assert.ok(page.includes("projectNo={workflowTarget}"));
 });
 
-test("uses the same one-page home for leader, member, user, and admin", () => {
+test("uses the same one-page home for leader, member, BTS, user, and admin", () => {
   assert.match(
     page,
-    /role === ACCOUNT_ROLES\.leader \|\|\s*role === ACCOUNT_ROLES\.admin \|\|\s*role === ACCOUNT_ROLES\.member \|\|\s*role === ACCOUNT_ROLES\.user/,
+    /role === ACCOUNT_ROLES\.member \|\| role === ACCOUNT_ROLES\.bts \|\| role === ACCOUNT_ROLES\.leader \|\| role === ACCOUNT_ROLES\.admin/,
   );
   assert.ok(page.includes("팀 전체 Agent 과제"));
   assert.ok(page.includes("팀장 감독·승인"));
-  assert.ok(page.includes("viewerMode={!isAiTeam}"));
+  assert.ok(page.includes("viewerMode={!isProjectContributor}"));
   assert.ok(page.includes("G1 판정 확정 · FEA 업데이트"));
   assert.ok(page.includes("G3 최종 승인"));
   assert.ok(page.includes("G4 최종 승인"));
@@ -57,8 +57,8 @@ test("keeps gate approvals with the leader and system administration separate", 
   assert.ok(page.includes("등록된 Agent 과제가 없습니다"));
 });
 
-test("uses four account roles and project-scoped assignments", () => {
-  for (const role of ["leader", "member", "user", "admin"])
+test("uses five account roles and project-scoped assignments", () => {
+  for (const role of ["leader", "member", "bts", "user", "admin"])
     assert.ok(page.includes(`${role}:`));
   for (const relationship of [
     "REQUESTER",

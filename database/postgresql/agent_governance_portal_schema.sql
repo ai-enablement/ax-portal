@@ -45,7 +45,7 @@ create table if not exists users (
   email text,
   display_name text not null,
   app_role text not null default 'general_user'
-    check (app_role in ('team_leader', 'team_member', 'general_user', 'admin')),
+    check (app_role in ('team_leader', 'team_member', 'bts', 'general_user', 'admin')),
   job_title text,
   is_active boolean not null default true,
   last_login_at timestamptz,
@@ -62,9 +62,9 @@ create table if not exists user_role_history (
   id bigint generated always as identity primary key,
   user_id bigint not null references users(id) on delete cascade,
   previous_role text
-    check (previous_role is null or previous_role in ('team_leader', 'team_member', 'general_user', 'admin')),
+    check (previous_role is null or previous_role in ('team_leader', 'team_member', 'bts', 'general_user', 'admin')),
   new_role text not null
-    check (new_role in ('team_leader', 'team_member', 'general_user', 'admin')),
+    check (new_role in ('team_leader', 'team_member', 'bts', 'general_user', 'admin')),
   changed_by bigint references users(id) on delete set null,
   change_reason text,
   changed_at timestamptz not null default now()
@@ -72,7 +72,7 @@ create table if not exists user_role_history (
 
 create table if not exists role_action_permissions (
   app_role text not null
-    check (app_role in ('team_leader', 'team_member', 'general_user', 'admin')),
+    check (app_role in ('team_leader', 'team_member', 'bts', 'general_user', 'admin')),
   action_code text not null,
   action_name text not null,
   primary key (app_role, action_code)
@@ -1036,6 +1036,16 @@ insert into role_action_permissions (app_role, action_code, action_name) values
   ('team_member',  'GALLERY_RECOMMEND',       'Gallery 등록 권고'),
   ('team_member',  'GALLERY_SUBMIT',          '본인 제작 Agent Gallery 등록 신청'),
   ('team_member',  'GALLERY_PROXY_SUBMIT',    '타인 제작 Agent Gallery 대리 등록'),
+  ('bts',          'PROJECT_READ_ASSIGNED',   'BTS 배정 과제 전체 이력 조회'),
+  ('bts',          'ARD_EDIT',                '배정 과제 요구사항 정의서 작성'),
+  ('bts',          'DES_EDIT',                '배정 과제 에이전트 설계서 작성'),
+  ('bts',          'EVP_EDIT',                '배정 과제 평가 계획서 작성'),
+  ('bts',          'EVR_EDIT',                '배정 과제 평가 결과 보고서 작성'),
+  ('bts',          'DEP_EDIT',                '배정 과제 배포 체크리스트 작성'),
+  ('bts',          'UG_EDIT',                 '배정 과제 사용자 가이드 작성'),
+  ('bts',          'OPS_EDIT',                '배정 과제 운영 대장 작성'),
+  ('bts',          'CHG_EDIT',                '배정 과제 개선 이력서 작성'),
+  ('bts',          'GALLERY_SUBMIT',          '본인 제작 Agent Gallery 등록 신청'),
   ('team_leader',  'PROJECT_READ_ALL',        '팀 전체 과제 조회'),
   ('team_leader',  'FEA_EDIT',                '타당성 평가서 작성·보완'),
   ('team_leader',  'G1_DECIDE',               'G1 Go/Conditional Go/Drop 판정'),
@@ -1228,9 +1238,10 @@ select
   count(*) filter (where p.risk_level = 'blocked') as blocked_project_count,
   round(avg(p.progress_percent), 1) as average_progress_percent
 from users u
-join project_members pm on pm.user_id = u.id and pm.ended_at is null
-join projects p on p.id = pm.project_id and p.deleted_at is null
-where u.app_role in ('team_member', 'team_leader')
+left join project_members pm on pm.user_id = u.id and pm.ended_at is null
+left join projects p on p.id = pm.project_id and p.deleted_at is null
+where u.app_role in ('team_member', 'team_leader', 'bts', 'admin')
+  and u.is_active = true
 group by u.id, u.display_name;
 
 commit;

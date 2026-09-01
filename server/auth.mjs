@@ -1,6 +1,7 @@
 const UI_ROLES = {
   team_leader: "AI활성화팀 팀장",
   team_member: "AI활성화팀 팀원",
+  bts: "BTS",
   general_user: "일반 User",
   admin: "admin",
 };

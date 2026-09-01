@@ -61,13 +61,33 @@ test("governance roles are stored in PostgreSQL and enforced by the server", asy
   assert.match(api, /agent_portal\.user_role_history/);
   assert.match(api, /\/governance\/users/);
   assert.match(api, /\/governance\/role-history/);
-  assert.match(api, /Team leaders can only manage general users and team members/);
+  assert.match(api, /Team leaders can only manage general users, AI Enablement Team members, and BTS users/);
   assert.match(api, /The last active admin cannot be demoted/);
   assert.match(api, /You cannot change your own role/);
   assert.match(api, /PORTAL_BOOTSTRAP_LEADER_EMAILS/);
   assert.match(api, /bootstrap_leader/);
   assert.match(api, /set app_role = 'team_leader', team_id = \$2/);
   assert.match(api, /set app_role = 'admin', team_id = \$2/);
+});
+
+test("BTS role and team workload are persisted and served from PostgreSQL", async () => {
+  const [api, schema, migration] = await Promise.all([
+    read("server/database-api.mjs"),
+    read("database/postgresql/agent_governance_portal_schema.sql"),
+    read("database/postgresql/20260902_add_bts_role.sql"),
+  ]);
+  assert.match(api, /const teamWorkspaceRoles = new Set\(\["team_member", "team_leader", "bts", "admin"\]\)/);
+  assert.match(api, /pathname === "\/team\/workload"/);
+  assert.match(api, /assigned\.app_role in \('team_leader','team_member','bts','admin'\)/);
+  assert.match(api, /where u\.app_role in \('team_leader','team_member','bts','admin'\)/);
+  assert.match(api, /existing\.rows\[0\]\?\.app_role === "general_user"/);
+  assert.match(api, /async function assignProjectDeveloper/);
+  assert.match(api, /pathname\.endsWith\("\/developer"\)/);
+  assert.match(api, /app_role in \('team_member','bts'\)/);
+  assert.match(schema, /'team_leader', 'team_member', 'bts', 'general_user', 'admin'/);
+  assert.match(schema, /\('bts',\s+'PROJECT_READ_ASSIGNED'/);
+  assert.match(migration, /add constraint users_app_role_check/);
+  assert.match(migration, /create or replace view agent_portal\.v_member_workload/);
 });
 
 test("Azure Web App build and Hybrid Connection settings are present", async () => {

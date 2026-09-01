@@ -83,7 +83,7 @@ export async function ensurePortalUser(client, identity) {
 
   const catalog = await ensurePortalCatalog(client);
   const initialRole = bootstrapRole || "general_user";
-  const teamId = ["team_member", "team_leader", "admin"].includes(initialRole)
+  const teamId = ["team_member", "team_leader", "bts", "admin"].includes(initialRole)
     ? catalog.aiTeamId
     : null;
 
@@ -156,6 +156,7 @@ const gallerySelect = `
         when 'general_user' then '일반 User'
         when 'team_member' then 'AI 활성화팀 팀원'
         when 'team_leader' then 'AI 활성화팀 팀장'
+        when 'bts' then 'BTS'
         else 'admin'
       end as "applicant",
     to_char(gs.submitted_at at time zone 'Asia/Seoul', 'YYYY.MM.DD HH24:MI') as "submittedAt",
@@ -457,6 +458,7 @@ async function health() {
 }
 
 const governanceRoles = new Set(["team_member", "team_leader", "admin"]);
+const teamWorkspaceRoles = new Set(["team_member", "team_leader", "bts", "admin"]);
 
 async function governanceActor(client, identity) {
   const actor = await findUser(client, identity);
@@ -496,8 +498,10 @@ async function listGovernanceUsers(identity) {
             t.team_name as "teamName"
        from agent_portal.users u
        left join agent_portal.teams t on t.id = u.team_id
+      where u.app_role in ('team_leader','team_member','bts','admin')
       order by case u.app_role when 'admin' then 1 when 'team_leader' then 2
-                 when 'team_member' then 3 else 4 end, u.display_name, u.email`,
+                 when 'team_member' then 3 when 'bts' then 4 else 5 end,
+               u.display_name, u.email`,
   );
   const users = result.rows.map((user) => ({
     ...user,
@@ -511,15 +515,15 @@ async function listGovernanceUsers(identity) {
 }
 
 function allowedRoleChange(actorRole, newRole) {
-  if (actorRole === "admin") return ["general_user", "team_member", "team_leader", "admin"].includes(newRole);
-  return actorRole === "team_leader" && ["general_user", "team_member"].includes(newRole);
+  if (actorRole === "admin") return ["general_user", "team_member", "team_leader", "bts", "admin"].includes(newRole);
+  return actorRole === "team_leader" && ["general_user", "team_member", "bts"].includes(newRole);
 }
 
 async function registerGovernanceUser(body, identity) {
   const email = String(body.email || "").trim().toLowerCase();
   const displayName = String(body.displayName || "").trim();
   const newRole = String(body.appRole || "team_member");
-  if (!['team_member', 'team_leader', 'admin'].includes(newRole)) {
+  if (!['team_member', 'team_leader', 'bts', 'admin'].includes(newRole)) {
     return { status: 400, body: { error: "Only AI Enablement Team accounts can be registered here." } };
   }
   if (!email || !email.includes("@") || !displayName) {
@@ -536,12 +540,25 @@ async function registerGovernanceUser(body, identity) {
       [email],
     );
     let user;
-    if (existing.rows[0]) {
-      return { status: 409, body: { error: "This MS account is already registered. Change its role in the account list." } };
+    if (existing.rows[0]?.app_role === "general_user") {
+      user = (await client.query(
+        `update agent_portal.users
+            set app_role=$2, team_id=$3, display_name=$4, is_active=true, updated_at=now()
+          where id=$1
+          returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
+        [existing.rows[0].id, newRole, catalog.aiTeamId, displayName],
+      )).rows[0];
+      await client.query(
+        `insert into agent_portal.user_role_history (user_id, previous_role, new_role, changed_by, change_reason)
+         values ($1,'general_user',$2,$3,$4)`,
+        [user.id, newRole, actor.id, "Admin & Governance 수행 계정 등록"],
+      );
+    } else if (existing.rows[0]) {
+      return { status: 409, body: { error: "This MS account is already registered in the project roster." } };
     } else {
       user = (await client.query(
         `insert into agent_portal.users (organization_id, team_id, email, display_name, app_role, is_active)
-         values ($1,case when $4 in ('team_member','team_leader','admin') then $2 else null end,$3,$5,$4,true)
+         values ($1,case when $4 in ('team_member','team_leader','bts','admin') then $2 else null end,$3,$5,$4,true)
          returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
         [catalog.organizationId, catalog.aiTeamId, email, newRole, displayName],
       )).rows[0];
@@ -567,8 +584,8 @@ async function updateGovernanceUser(userId, body, identity) {
     )).rows[0];
     if (!target) return { status: 404, body: { error: "User not found." } };
     if (target.id === actor.id) return { status: 409, body: { error: "You cannot change your own role." } };
-    if (actor.app_role === "team_leader" && !["general_user", "team_member"].includes(target.app_role)) {
-      return { status: 403, body: { error: "Team leaders can only manage general users and team members." } };
+    if (actor.app_role === "team_leader" && !["general_user", "team_member", "bts"].includes(target.app_role)) {
+      return { status: 403, body: { error: "Team leaders can only manage general users, AI Enablement Team members, and BTS users." } };
     }
     if (target.app_role === "admin" && newRole !== "admin") {
       const count = await client.query(`select count(*)::int as count from agent_portal.users where app_role='admin' and is_active=true`);
@@ -577,7 +594,7 @@ async function updateGovernanceUser(userId, body, identity) {
     const catalog = await ensurePortalCatalog(client);
     const updated = (await client.query(
       `update agent_portal.users set app_role=$2,
-              team_id=case when $2 in ('team_member','team_leader','admin') then $3 else null end,
+              team_id=case when $2 in ('team_member','team_leader','bts','admin') then $3 else null end,
               updated_at=now() where id=$1
        returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
       [target.id, newRole, catalog.aiTeamId],
@@ -607,6 +624,141 @@ async function listRoleHistory(identity) {
   return { status: 200, body: { history: result.rows } };
 }
 
+async function listTeamWorkload(identity) {
+  const pool = getPool();
+  const actor = await findUser(pool, identity);
+  if (!actor || !actor.is_active || !teamWorkspaceRoles.has(actor.app_role)) {
+    return { status: 403, body: { error: "Team workspace permission is required." } };
+  }
+
+  const [memberResult, projectResult] = await Promise.all([
+    pool.query(
+      `select u.id::text as id, u.email, u.display_name as "displayName",
+              u.app_role as "appRole", u.job_title as "jobTitle"
+         from agent_portal.users u
+        where u.is_active = true
+          and u.app_role in ('team_leader','team_member','bts','admin')
+        order by case u.app_role when 'team_leader' then 1 when 'team_member' then 2
+                   when 'bts' then 3 else 4 end,
+                 u.display_name, u.email`,
+    ),
+    pool.query(
+      `select p.project_code as id, p.project_name as title,
+              coalesce(rt.team_name, '미지정') as "requestTeam",
+              requester.display_name as requester,
+              p.project_status as "projectStatus", p.current_stage_code as "stageCode",
+              ls.stage_name as stage, p.progress_percent as progress,
+              p.priority, p.risk_level as "riskLevel", p.next_action as "nextAction",
+              coalesce(p.committed_completion_date, p.requested_completion_date) as "dueDate",
+              p.created_at as "createdAt",
+              coalesce(
+                array_agg(distinct assigned.id::text)
+                  filter (where assigned.id is not null),
+                array[]::text[]
+              ) as "assignedUserIds",
+              coalesce(
+                string_agg(distinct assigned.display_name, ' · ')
+                  filter (where assigned.id is not null),
+                '미배정'
+              ) as assignee
+         from agent_portal.projects p
+         join agent_portal.lifecycle_stages ls on ls.stage_code = p.current_stage_code
+         join agent_portal.users requester on requester.id = p.requester_id
+         left join agent_portal.teams rt on rt.id = p.request_team_id
+         left join agent_portal.project_members pm
+           on pm.project_id = p.id and pm.ended_at is null
+          and pm.relationship in ('developer','reviewer','operator','security_reviewer','observer')
+         left join agent_portal.users assigned
+           on assigned.id = pm.user_id and assigned.is_active = true
+          and assigned.app_role in ('team_leader','team_member','bts','admin')
+        where p.deleted_at is null
+        group by p.id, rt.team_name, requester.display_name, ls.stage_name
+        order by p.updated_at desc, p.project_code desc`,
+    ),
+  ]);
+
+  const statusLabel = (status) => {
+    if (["operating", "retired"].includes(status)) return "완료";
+    if (["draft", "submitted"].includes(status)) return "신규 접수";
+    return "진행 중";
+  };
+  const riskLabel = (risk) => ({
+    normal: "정상",
+    attention: "확인 필요",
+    delayed: "지연 위험",
+    blocked: "지연 위험",
+  })[risk] || "정상";
+  const priorityLabel = (priority) => ({
+    low: "보통",
+    normal: "보통",
+    high: "높음",
+    urgent: "높음",
+  })[priority] || "보통";
+
+  const projects = projectResult.rows.map((project) => ({
+    ...project,
+    status: statusLabel(project.projectStatus),
+    risk: riskLabel(project.riskLevel),
+    priority: priorityLabel(project.priority),
+    progress: Number(project.progress || 0),
+    nextAction: project.nextAction || "다음 작업 확인 필요",
+    dueDate: project.dueDate
+      ? new Date(project.dueDate).toISOString().slice(0, 10)
+      : "",
+    received: new Date(project.createdAt).toLocaleDateString("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "Asia/Seoul",
+    }).replace(/\. /g, ".").replace(/\.$/, ""),
+  }));
+  return { status: 200, body: { members: memberResult.rows, projects } };
+}
+
+async function assignProjectDeveloper(projectCode, body, identity) {
+  const userId = Number(body.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return { status: 400, body: { error: "A valid project assignee is required." } };
+  }
+  return withTransaction(async (client) => {
+    const actor = await governanceActor(client, identity);
+    if (!actor || !["team_leader", "admin"].includes(actor.app_role)) {
+      return { status: 403, body: { error: "Team leader permission is required to assign a developer." } };
+    }
+    const project = (await client.query(
+      `select id from agent_portal.projects
+        where project_code=$1 and deleted_at is null
+        limit 1 for update`,
+      [projectCode],
+    )).rows[0];
+    if (!project) return { status: 404, body: { error: "Project not found." } };
+    const assignee = (await client.query(
+      `select id, display_name as "displayName", app_role as "appRole"
+         from agent_portal.users
+        where id=$1 and is_active=true and app_role in ('team_member','bts')
+        limit 1`,
+      [userId],
+    )).rows[0];
+    if (!assignee) {
+      return { status: 400, body: { error: "Select an active AI Enablement Team member or BTS user." } };
+    }
+    await client.query(
+      `update agent_portal.project_members
+          set ended_at=now()
+        where project_id=$1 and relationship='developer' and ended_at is null and user_id<>$2`,
+      [project.id, assignee.id],
+    );
+    await client.query(
+      `insert into agent_portal.project_members
+         (project_id, user_id, relationship, assigned_by, assigned_at, ended_at)
+       values ($1,$2,'developer',$3,now(),null)
+       on conflict (project_id,user_id,relationship)
+       do update set assigned_by=excluded.assigned_by, assigned_at=now(), ended_at=null`,
+      [project.id, assignee.id, actor.id],
+    );
+    return { status: 200, body: { projectCode, assignee } };
+  });
+}
+
 export async function handleDatabaseRequest({ method, pathname, body = {}, identity }) {
   if (method === "GET" && pathname === "/health") return health();
   if (method === "GET" && pathname === "/gallery/applications") {
@@ -633,5 +785,12 @@ export async function handleDatabaseRequest({ method, pathname, body = {}, ident
     return updateGovernanceUser(id, body, identity);
   }
   if (method === "GET" && pathname === "/governance/role-history") return listRoleHistory(identity);
+  if (method === "GET" && pathname === "/team/workload") return listTeamWorkload(identity);
+  if (method === "PUT" && pathname.startsWith("/team/projects/") && pathname.endsWith("/developer")) {
+    const parts = pathname.split("/").filter(Boolean);
+    const projectCode = decodeURIComponent(parts.at(-2) || "");
+    if (!projectCode) return { status: 400, body: { error: "Project code is required." } };
+    return assignProjectDeveloper(projectCode, body, identity);
+  }
   return { status: 404, body: { error: "Route not found." } };
 }
