@@ -1,6 +1,6 @@
 const UI_ROLES = {
-  team_leader: "AI활성화팀 최병두 팀장",
-  team_member: "AI활성화팀 허정환 담당자",
+  team_leader: "AI활성화팀 팀장",
+  team_member: "AI활성화팀 팀원",
   general_user: "일반 User",
   admin: "admin",
 };

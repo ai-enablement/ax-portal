@@ -14,7 +14,7 @@ const css = await readFile(
 test("keeps role navigation and home actions separated", () => {
   assert.ok(page.includes("role === ACCOUNT_ROLES.user"));
   assert.ok(
-    page.includes('view === "teamboard" && role.includes("AI활성화팀")'),
+    page.includes('item.id === "teamboard" && role !== ACCOUNT_ROLES.user'),
   );
   assert.ok(page.includes("신규 접수 3건 확인"));
   assert.ok(page.includes("AI 활성화팀 대시보드"));
@@ -34,10 +34,10 @@ test("opens dashboard projects in the matching home Agent record", () => {
   assert.ok(page.includes("projectNo={workflowTarget}"));
 });
 
-test("uses the same one-page home for leader and member with leader actions", () => {
+test("uses the same one-page home for leader, member, user, and admin", () => {
   assert.match(
     page,
-    /role === ACCOUNT_ROLES\.leader \|\|\s*role === ACCOUNT_ROLES\.member \|\|\s*role === ACCOUNT_ROLES\.user/,
+    /role === ACCOUNT_ROLES\.leader \|\|\s*role === ACCOUNT_ROLES\.admin \|\|\s*role === ACCOUNT_ROLES\.member \|\|\s*role === ACCOUNT_ROLES\.user/,
   );
   assert.ok(page.includes("팀 전체 Agent 과제"));
   assert.ok(page.includes("팀장 감독·승인"));
@@ -45,6 +45,7 @@ test("uses the same one-page home for leader and member with leader actions", ()
   assert.ok(page.includes("G1 판정 확정 · FEA 업데이트"));
   assert.ok(page.includes("G3 최종 승인"));
   assert.ok(page.includes("G4 최종 승인"));
+  assert.ok(page.includes('role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin'));
 });
 
 test("keeps gate approvals with the leader and system administration separate", () => {

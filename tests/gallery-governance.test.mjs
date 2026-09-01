@@ -48,6 +48,22 @@ test("AI enablement roles can open governance and submit Gallery applications", 
   assert.match(page, /조회 전용/);
 });
 
+test("admin can manage published Gallery agents and uses the leader workspace", () => {
+  assert.match(page, /adminKeepsPublished/);
+  assert.match(page, /등록된 Agent 정보가 수정되었습니다/);
+  assert.match(page, /onDeleteApplication\(a\.applicationId\)/);
+  assert.match(page, /role === ACCOUNT_ROLES\.leader \|\| role === ACCOUNT_ROLES\.admin/);
+});
+
+test("governance account filters exclude the general-user filter and are interactive", () => {
+  assert.match(page, /useState<"all" \| "ai" \| "admin">\("all"\)/);
+  assert.match(page, /setAccountFilter\("all"\)/);
+  assert.match(page, /setAccountFilter\("ai"\)/);
+  assert.match(page, /setAccountFilter\("admin"\)/);
+  assert.doesNotMatch(page, /setAccountFilter\("general_user"\)/);
+  assert.match(page, /PORTAL_BOOTSTRAP_LEADER_EMAILS/);
+});
+
 test("production UI starts without fixture projects or Gallery records", () => {
   assert.match(page, /const projects: ProjectSummary\[\] = \[\]/);
   assert.match(page, /const userProjects: UserProject\[\] = \[\]/);

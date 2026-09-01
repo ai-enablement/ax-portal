@@ -51,6 +51,9 @@ test("gallery database API uses parameterized queries and enforces role boundari
   assert.match(databaseApi, /Only the original applicant can resubmit/);
   assert.match(databaseApi, /AI Enablement Team review permission is required/);
   assert.match(databaseApi, /Only the AI Enablement Team leader can publish/);
+  assert.match(databaseApi, /actor\.app_role !== "admin"/);
+  assert.match(databaseApi, /delete from agent_portal\.gallery_entries/);
+  assert.match(databaseApi, /GALLERY_DELETE/);
 });
 
 test("governance roles are stored in PostgreSQL and enforced by the server", async () => {
@@ -61,6 +64,10 @@ test("governance roles are stored in PostgreSQL and enforced by the server", asy
   assert.match(api, /Team leaders can only manage general users and team members/);
   assert.match(api, /The last active admin cannot be demoted/);
   assert.match(api, /You cannot change your own role/);
+  assert.match(api, /PORTAL_BOOTSTRAP_LEADER_EMAILS/);
+  assert.match(api, /bootstrap_leader/);
+  assert.match(api, /set app_role = 'team_leader', team_id = \$2/);
+  assert.match(api, /set app_role = 'admin', team_id = \$2/);
 });
 
 test("Azure Web App build and Hybrid Connection settings are present", async () => {

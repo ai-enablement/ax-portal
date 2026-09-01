@@ -39,8 +39,8 @@ type View =
   | "governance";
 
 const ACCOUNT_ROLES = {
-  leader: "AI활성화팀 최병두 팀장",
-  member: "AI활성화팀 허정환 담당자",
+  leader: "AI활성화팀 팀장",
+  member: "AI활성화팀 팀원",
   user: "일반 User",
   admin: "admin",
 } as const;
@@ -56,10 +56,10 @@ type PortalIdentity = {
   canSwitchRole: boolean;
 };
 const ACCOUNT_EMAILS: Record<AccountRole, string> = {
-  [ACCOUNT_ROLES.leader]: "choi.bd@changshininc.com",
-  [ACCOUNT_ROLES.member]: "heo.jh@changshininc.com",
-  [ACCOUNT_ROLES.user]: "kim.hw@changshininc.com",
-  [ACCOUNT_ROLES.admin]: "portal.admin@changshininc.com",
+  [ACCOUNT_ROLES.leader]: "leader@example.invalid",
+  [ACCOUNT_ROLES.member]: "member@example.invalid",
+  [ACCOUNT_ROLES.user]: "user@example.invalid",
+  [ACCOUNT_ROLES.admin]: "admin@example.invalid",
 };
 type DatabaseStatus = "checking" | "connected" | "fallback";
 type ProjectRelationship =
@@ -101,7 +101,8 @@ function projectRelationshipLabel(role: string, projectNo: string) {
     SECURITY_REVIEWER: "정보보호 검토",
   };
   const assigned = getProjectRelationships(role, projectNo);
-  if (role === ACCOUNT_ROLES.leader) return "팀장 감독·승인";
+  if (role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin)
+    return "팀장 감독·승인 · 전체 관리";
   if (assigned.length === 0 && role === ACCOUNT_ROLES.user) return "요청자";
   return assigned
     .map((relationship) => labels[relationship])
@@ -689,11 +690,7 @@ export default function Home() {
         if (!active) return;
         setIdentity(authenticatedIdentity);
         setRole(authenticatedIdentity.accountRole);
-        setView(
-          authenticatedIdentity.accountRole === ACCOUNT_ROLES.admin
-            ? "governance"
-            : "home",
-        );
+        setView("home");
         setIdentityStatus("ready");
       } catch (error) {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -878,7 +875,7 @@ export default function Home() {
               "gallery",
               "governance",
             ])
-          : role === ACCOUNT_ROLES.leader
+          : role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
             ? new Set<View>(nav.map((item) => item.id))
             : new Set<View>(["governance", "hub", "gallery"]);
 
@@ -978,6 +975,17 @@ export default function Home() {
     }
   };
 
+  const deleteGalleryApplication = async (id: string) => {
+    if (!window.confirm("등록된 Agent와 검토 이력을 삭제하시겠습니까?")) return;
+    if (databaseStatus === "connected") {
+      const response = await fetch(`/api/database/gallery/applications/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const payload = await response.json();
+      if (!response.ok) return notify(payload.error || "Agent를 삭제하지 못했습니다.");
+    }
+    saveGalleryApplications(galleryApplications.filter((application) => application.id !== id));
+    notify("등록된 Agent를 삭제했습니다.");
+  };
+
   const go = (next: View) => {
     setView(next);
     setMobileNav(false);
@@ -1071,7 +1079,7 @@ export default function Home() {
         <div
           className="brand"
           onClick={() =>
-            go(role === ACCOUNT_ROLES.admin ? "governance" : "home")
+            go("home")
           }
         >
           <span className="brand-mark">AX</span>
@@ -1096,7 +1104,7 @@ export default function Home() {
                       ? "내 Agent 과제"
                       : item.label}
                   </span>
-                  {item.id === "teamboard" && role.includes("AI활성화팀") && (
+                  {item.id === "teamboard" && role !== ACCOUNT_ROLES.user && (
                     <em className="team-nav-count">{teamRequirements.length}</em>
                   )}
                   {item.id === "governance" && role === ACCOUNT_ROLES.admin && (
@@ -1157,19 +1165,13 @@ export default function Home() {
                     const nextRole = e.target.value;
                     setRole(nextRole as AccountRole);
                     go(
-                      nextRole === ACCOUNT_ROLES.admin ? "governance" : "home",
+                      "home",
                     );
                   }}
                 >
-                  <option value={ACCOUNT_ROLES.leader}>
-                    AI 활성화팀 최병두 팀장
-                  </option>
-                  <option value={ACCOUNT_ROLES.member}>
-                    AI 활성화팀 팀원 · 허정환
-                  </option>
-                  <option value={ACCOUNT_ROLES.user}>
-                    일반 User · 김현우
-                  </option>
+                  <option value={ACCOUNT_ROLES.leader}>AI 활성화팀 팀장</option>
+                  <option value={ACCOUNT_ROLES.member}>AI 활성화팀 팀원</option>
+                  <option value={ACCOUNT_ROLES.user}>일반 User</option>
                   <option value={ACCOUNT_ROLES.admin}>admin</option>
                 </select>
               </label>
@@ -1259,7 +1261,7 @@ export default function Home() {
             notify={notify}
           />
         )}
-        {view === "teamboard" && role.includes("AI활성화팀") &&
+        {view === "teamboard" && role !== ACCOUNT_ROLES.user &&
           (teamRequirements.length > 0 ? (
             <LegacyTeamWorkspaceDashboard
               setView={go}
@@ -1334,6 +1336,7 @@ export default function Home() {
             onDraftHandled={() => setGalleryDraft(null)}
             onSubmitApplication={submitGalleryApplication}
             onUpdateApplication={updateGalleryApplication}
+            onDeleteApplication={deleteGalleryApplication}
           />
         )}
         {view === "governance" && role !== ACCOUNT_ROLES.user && (
@@ -1528,7 +1531,7 @@ function Dashboard({
   notify: (message: string) => void;
 }) {
   const baseProjectItems =
-    role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.leader
+    role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
       ? userProjectItems
       : userProjectItems;
   const targetRequirement = teamRequirements.find(
@@ -1542,6 +1545,7 @@ function Dashboard({
 
   if (
     role === ACCOUNT_ROLES.leader ||
+    role === ACCOUNT_ROLES.admin ||
     role === ACCOUNT_ROLES.member ||
     role === ACCOUNT_ROLES.user
   )
@@ -1563,7 +1567,7 @@ function Dashboard({
         <div>
           <p className="eyebrow">FRIDAY, AUGUST 28</p>
           <h1>
-            안녕하세요, 최병두님.
+            안녕하세요, AI 활성화팀 팀장님.
             <br />
             <span>오늘 처리할 Agent 업무를 확인하세요.</span>
           </h1>
@@ -2606,8 +2610,8 @@ function HomeFeasibilityEditor({
   role: string;
   onComplete?: () => void;
 }) {
-  const isLeader = role === ACCOUNT_ROLES.leader;
-  const author = isLeader ? "최병두 팀장" : "허정환 담당자";
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
+  const author = isLeader ? "AI 활성화팀 팀장" : "AI 활성화팀 담당자";
   const [summary, setSummary] = useState(
     `${project.description} 현업 인터뷰를 통해 현재 업무량과 기대 결과를 확인하고 있습니다.`,
   );
@@ -2792,7 +2796,7 @@ function HomeFeasibilityEditor({
         </section>
         <section>
           <header><span>06</span><div><b>G1 착수 판정 반영</b><small>FEA 작성과 공식 승인을 분리</small></div><Pill tone="orange">판정 대기</Pill></header>
-          <div className="home-fea-g1-waiting"><ShieldCheck size={23} weight="duotone" /><div><b>공식 Go·Conditional Go·Drop은 아직 확정하지 않습니다.</b><p>이 화면에서는 FEA 근거를 작성합니다. 작성 완료 후 최병두 팀장이 G1에서 추진 여부와 개발 담당자를 확정하면 결과가 자동 반영됩니다.</p></div></div>
+          <div className="home-fea-g1-waiting"><ShieldCheck size={23} weight="duotone" /><div><b>공식 Go·Conditional Go·Drop은 아직 확정하지 않습니다.</b><p>이 화면에서는 FEA 근거를 작성합니다. 작성 완료 후 AI 활성화팀 팀장이 G1에서 추진 여부와 개발 담당자를 확정하면 결과가 자동 반영됩니다.</p></div></div>
         </section>
       </div>
 
@@ -4309,7 +4313,7 @@ function GateApprovalResult({
   const isG1 = gate === "G1";
   const isRejectedCase = projectNo === "2026-028" && gate === "G2";
   const isReworkRound = isRejectedCase && g2ReworkSubmitted;
-  const isLeader = role === "AI활성화팀 최병두 팀장";
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isMember = role.includes("AI활성화팀") && role.includes("담당자");
   const isRequester = role === "일반 User";
   const canActOnG2 = isRequester || isMember || isLeader;
@@ -4355,7 +4359,7 @@ function GateApprovalResult({
         },
         {
           role: "G1 승인자",
-          name: "최병두 팀장",
+          name: "AI 활성화팀 팀장",
           status:
             g1Decision === "PENDING"
               ? "대기"
@@ -4703,7 +4707,7 @@ function GateApprovalResult({
             <header>
               <div>
                 <b>마감 일정 변경 요청</b>
-                <p>변경은 최병두 팀장의 승인 후에만 확정됩니다.</p>
+                <p>변경은 AI 활성화팀 팀장의 승인 후에만 확정됩니다.</p>
               </div>
               <Pill tone={deadlineRequestSent ? "orange" : "gray"}>
                 {deadlineRequestSent ? "팀장 승인 대기" : "요청 작성"}
@@ -4739,7 +4743,7 @@ function GateApprovalResult({
               onClick={() => setDeadlineRequestSent(true)}
             >
               {deadlineRequestSent
-                ? "최병두 팀장 승인 대기 중"
+                ? "AI 활성화팀 팀장 승인 대기 중"
                 : "일정 변경 승인 요청"}
             </button>
           </section>
@@ -4853,7 +4857,7 @@ function GateApprovalResult({
               </b>
               <span>
                 {basisReady
-                  ? "팀원은 최종 FEA와 승인 진행 상태, 판정 후 개발 담당자 배정 결과를 조회합니다. Go / Conditional Go / Drop 결정과 개발 담당자 지정은 최병두 팀장만 수행합니다."
+                  ? "팀원은 최종 FEA와 승인 진행 상태, 판정 후 개발 담당자 배정 결과를 조회합니다. Go / Conditional Go / Drop 결정과 개발 담당자 지정은 AI 활성화팀 팀장만 수행합니다."
                   : "요구자 인터뷰를 바탕으로 대안 검토·적합성·ROI·트랙 근거를 완성해 G1에 상신합니다. G1 승인과 개발 담당자 지정 권한은 팀장에게 있습니다."}
               </span>
             </p>
@@ -5969,7 +5973,7 @@ function UserDashboard({
   notify: (message: string) => void;
   openGallerySubmission: (draft: GalleryDraft) => void;
 }) {
-  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const isAiTeam = isLeader || isAiTeamMember;
   const [selected, setSelected] = useState(0);
@@ -6411,7 +6415,7 @@ function UserDashboard({
             >
               {current.scheduleState || "\u00a0"}
             </Pill>
-            <small>마감일 변경은 최병두 팀장 승인 후 반영</small>
+            <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
           {selectedJourney === 0 ? (
@@ -6749,7 +6753,7 @@ function LifecycleRoleGuide({
   stage: LifecycleRoleStage;
   projectNo?: string;
 }) {
-  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isMember = role === ACCOUNT_ROLES.member;
   const relationships = getProjectRelationships(role, projectNo);
   const isDeveloper = relationships.includes("DEVELOPER");
@@ -7008,8 +7012,8 @@ function IntakeFeasibility({
   goDefinition: () => void;
   projectNo?: string;
 }) {
-  const isLeader = role === ACCOUNT_ROLES.leader;
-  const isAiTeam = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
+  const isAiTeam = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.admin;
   const [chatStep, setChatStep] = useState(2);
   const [chatInput, setChatInput] = useState("");
   const [selectedRequest, setSelectedRequest] = useState(
@@ -7456,7 +7460,7 @@ function IntakeFeasibility({
                   notify(
                     chatStep < 5
                       ? "필수 질문을 모두 완료한 뒤 에이전트 요구 접수서[INT]를 제출할 수 있습니다."
-                      : "에이전트 요구 접수서[INT]가 제출되어 최병두 팀장님의 검토 대기 상태가 되었습니다.",
+                      : "에이전트 요구 접수서[INT]가 제출되어 AI 활성화팀 팀장의 검토 대기 상태가 되었습니다.",
                   )
                 }
               >
@@ -7471,7 +7475,7 @@ function IntakeFeasibility({
               <div>
                 <h2>내 요구 접수 현황</h2>
                 <p>
-                  에이전트 요구 접수서[INT] 제출 이후 최병두 팀장님의 승인·거절
+                  에이전트 요구 접수서[INT] 제출 이후 AI 활성화팀 팀장의 승인·거절
                   결과를 확인합니다.
                 </p>
               </div>
@@ -7483,7 +7487,7 @@ function IntakeFeasibility({
                 <div>
                   <small>2026-028 · G1 승인</small>
                   <strong>출장 규정 문의 Agent</strong>
-                  <p>최병두 팀장 승인 · 중 트랙 · 요구 정의 가능</p>
+                  <p>AI 활성화팀 팀장 승인 · 중 트랙 · 요구 정의 가능</p>
                 </div>
                 <Pill tone="green">요구 정의로 이동</Pill>
                 <b>›</b>
@@ -7630,8 +7634,8 @@ function IntakeFeasibility({
                 </p>
               </div>
               <div>
-                <span>작성자 허정환 담당자</span>
-                <span>G1 판정 최병두 팀장</span>
+                <span>작성자 AI 활성화팀 담당자</span>
+                <span>G1 판정 AI 활성화팀 팀장</span>
                 {canEditFea && (
                   <button
                     className="secondary"
@@ -7685,7 +7689,7 @@ function IntakeFeasibility({
                       ? "대안 배제와 정량 효과가 확인되었습니다."
                       : "To-Be 처리시간 확보 후 ROI를 다시 계산해야 합니다."}
                   </p>
-                  <span>최종 결정은 최병두 팀장이 G1에서 확정</span>
+                  <span>최종 결정은 AI 활성화팀 팀장이 G1에서 확정</span>
                 </article>
               </div>
               <div className="engine-assurance">
@@ -8006,8 +8010,8 @@ function IntakeFeasibility({
                     </b>
                     <p>
                       {resolvedG1
-                        ? `${resolvedG1.reason || "FEA의 타당성·대안·효과·위험 근거를 검토해 결정했습니다."} · 승인자 최병두 팀장 · 2026.08.28`
-                        : "담당자는 인터뷰 근거와 타당성 평가 항목을 완성합니다. 최병두 팀장이 G1에서 추진 여부와 개발 담당자를 확정하면 판정·사유·승인일이 이 영역에 기록됩니다."}
+                        ? `${resolvedG1.reason || "FEA의 타당성·대안·효과·위험 근거를 검토해 결정했습니다."} · 승인자 AI 활성화팀 팀장 · 2026.08.28`
+                        : "담당자는 인터뷰 근거와 타당성 평가 항목을 완성합니다. AI 활성화팀 팀장이 G1에서 추진 여부와 개발 담당자를 확정하면 판정·사유·승인일이 이 영역에 기록됩니다."}
                     </p>
                   </div>
                 </div>
@@ -8069,7 +8073,7 @@ function RequirementDefinition({
   goDelivery: () => void;
   projectNo?: string;
 }) {
-  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const [ardStep, setArdStep] = useState(4);
   const [chatInput, setChatInput] = useState("");
@@ -8509,7 +8513,7 @@ function RequirementDefinition({
                   notify(
                     ardStep < 8
                       ? "핵심영역을 모두 정의한 뒤 에이전트 요구사항 정의서[ARD] 검토를 요청할 수 있습니다."
-                      : "에이전트 요구사항 정의서[ARD]가 제출되어 최병두 팀장님의 검토 대기 상태가 되었습니다.",
+                      : "에이전트 요구사항 정의서[ARD]가 제출되어 AI 활성화팀 팀장의 검토 대기 상태가 되었습니다.",
                   )
                 }
               >
@@ -8730,7 +8734,7 @@ function RequirementDefinition({
                   </p>
                 </div>
                 <div>
-                  <span>최종 검토자 최병두 팀장</span>
+                  <span>최종 검토자 AI 활성화팀 팀장</span>
                   <button
                     className="secondary"
                     onClick={() => notify("G2 검토 내용을 임시저장했습니다.")}
@@ -9259,7 +9263,7 @@ function DeliveryWorkplace({
     );
   }, [current.no, current.evr, current.guardrail]);
   const isPlanned = lifecycleState === "생성 전";
-  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const isGeneralUser = role === ACCOUNT_ROLES.user;
   const currentRelationships = getProjectRelationships(role, current.no);
@@ -11997,7 +12001,7 @@ function OperationsImprovement({
   notify: (s: string) => void;
   openGallerySubmission: (draft: GalleryDraft) => void;
 }) {
-  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const [activeDocument, setActiveDocument] = useState<"OPS" | "CHG">("OPS");
   const [selectedAgent, setSelectedAgent] = useState(0);
   const [selectedChange, setSelectedChange] = useState<ChangeRow | null>(null);
@@ -12764,6 +12768,7 @@ function Gallery({
   onDraftHandled,
   onSubmitApplication,
   onUpdateApplication,
+  onDeleteApplication,
 }: {
   query: string;
   setQuery: (v: string) => void;
@@ -12780,16 +12785,19 @@ function Gallery({
     id: string,
     changes: Partial<GalleryApplication>,
   ) => void;
+  onDeleteApplication: (id: string) => void;
 }) {
   const isTeam =
-    role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member;
-  const isLeader = role === ACCOUNT_ROLES.leader;
+    role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.admin;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const submitterProfile =
     role === ACCOUNT_ROLES.leader
-      ? { name: identity?.displayName || "최병두", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀장" }
+      ? { name: identity?.displayName || "AI 활성화팀 팀장", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀장" }
       : role === ACCOUNT_ROLES.member
-        ? { name: identity?.displayName || "허정환", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀원" }
-        : { name: identity?.displayName || "김현우", department: "현업", roleLabel: "일반 User" };
+        ? { name: identity?.displayName || "AI 활성화팀 팀원", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀원" }
+        : role === ACCOUNT_ROLES.admin
+          ? { name: identity?.displayName || "Portal Admin", department: "AI 활성화팀", roleLabel: "Admin" }
+          : { name: identity?.displayName || "일반 User", department: "현업", roleLabel: "일반 User" };
   const [tab, setTab] = useState<"catalog" | "applications" | "review">(
     initialDraft ? "applications" : isTeam ? "review" : "catalog",
   );
@@ -12840,6 +12848,7 @@ function Gallery({
   const publishedAgents = applications
     .filter((application) => application.status === "PUBLISHED")
     .map((application) => ({
+      applicationId: application.id,
       icon: application.artifactType === "자동화 Flow" ? "↻" : "✦",
       name: application.name,
       desc: application.description,
@@ -12849,7 +12858,10 @@ function Gallery({
       tag: application.platform,
       tone: application.platform === "Power Apps" ? "green" : "blue",
     }));
-  const catalog = [...publishedAgents, ...list].filter((agent) =>
+  const catalog = [
+    ...publishedAgents,
+    ...list.map((agent) => ({ ...agent, applicationId: "" })),
+  ].filter((agent) =>
     `${agent.name} ${agent.desc} ${agent.category}`
       .toLowerCase()
       .includes(query.toLowerCase()),
@@ -12957,14 +12969,27 @@ function Gallery({
       ],
     };
     if (editingApplicationId) {
+      const original = applications.find(
+        (application) => application.id === editingApplicationId,
+      );
+      const adminKeepsPublished =
+        role === ACCOUNT_ROLES.admin && original?.status === "PUBLISHED";
       onUpdateApplication(editingApplicationId, {
         ...submittedApplication,
         id: editingApplicationId,
-        status: "SUBMITTED",
-        reviewerNote: undefined,
-        submittedAt: "방금 · 보완 재상신",
+        status: adminKeepsPublished ? "PUBLISHED" : "SUBMITTED",
+        reviewerNote: adminKeepsPublished
+          ? original?.reviewerNote
+          : undefined,
+        submittedAt: adminKeepsPublished
+          ? "방금 · Admin 수정"
+          : "방금 · 보완 재상신",
       });
-      notify("보완 내용이 반영되어 AI 활성화팀에 재상신되었습니다.");
+      notify(
+        adminKeepsPublished
+          ? "등록된 Agent 정보가 수정되었습니다."
+          : "보완 내용이 반영되어 AI 활성화팀에 재상신되었습니다.",
+      );
     } else {
       onSubmitApplication(submittedApplication);
     }
@@ -13000,11 +13025,9 @@ function Gallery({
                   ? "DB 확인 중"
                   : "브라우저 임시 저장"}
             </span>
-            {role !== ACCOUNT_ROLES.admin && (
-              <button className="gallery-submit-button" onClick={startPersonalSubmission}>
-                <Plus size={18} weight="bold" /> {isTeam ? "Agent 올리기" : "내 Agent 올리기"}
-              </button>
-            )}
+            <button className="gallery-submit-button" onClick={startPersonalSubmission}>
+              <Plus size={18} weight="bold" /> {isTeam ? "Agent 올리기" : "내 Agent 올리기"}
+            </button>
             {isTeam && (
               <button className="gallery-review-button" onClick={() => setTab("review")}>
                 <ClipboardText size={18} weight="bold" /> 등록 검토 {applications.filter((item) => item.status !== "PUBLISHED").length}건
@@ -13053,9 +13076,7 @@ function Gallery({
 
       <nav className="gallery-tabs" aria-label="Gallery 화면 선택">
         <button className={tab === "catalog" ? "active" : ""} onClick={() => setTab("catalog")}>Agent 둘러보기</button>
-        {role !== ACCOUNT_ROLES.admin && (
-          <button className={tab === "applications" ? "active" : ""} onClick={() => setTab("applications")}>{isTeam ? "등록 신청 현황" : "내 신청 현황"}</button>
-        )}
+        <button className={tab === "applications" ? "active" : ""} onClick={() => setTab("applications")}>{isTeam ? "등록 신청 현황" : "내 신청 현황"}</button>
         {isTeam && (
           <button className={tab === "review" ? "active" : ""} onClick={() => setTab("review")}>등록 검토</button>
         )}
@@ -13082,6 +13103,26 @@ function Gallery({
                   <Pill>{a.category}</Pill><h3>{a.name}</h3><p>{a.desc}</p>
                   <div className="agent-stats"><span>★ {a.rating}</span><span>사용자 {a.users}</span><span>검토 완료</span></div>
                   <button onClick={() => notify(`${a.name} 사용 화면을 열었습니다.`)}>Agent 보기 <span>→</span></button>
+                  {role === ACCOUNT_ROLES.admin && a.applicationId && (
+                    <div className="gallery-admin-actions">
+                      <button
+                        onClick={() => {
+                          const application = applications.find(
+                            (item) => item.id === a.applicationId,
+                          );
+                          if (application) startResubmission(application);
+                        }}
+                      >
+                        <PencilSimple size={14} /> 수정
+                      </button>
+                      <button
+                        className="danger"
+                        onClick={() => onDeleteApplication(a.applicationId)}
+                      >
+                        <Trash size={14} /> 삭제
+                      </button>
+                    </div>
+                  )}
                 </div>
               </article>
             ))}
@@ -13089,7 +13130,7 @@ function Gallery({
         </>
       )}
 
-      {tab === "applications" && role !== ACCOUNT_ROLES.admin && (
+      {tab === "applications" && (
         <section className="gallery-applications-panel">
           <header><div><h2>{isTeam ? "Agent 등록 신청" : "내 Agent 등록 신청"}</h2><p>{isTeam ? "본인 제작 또는 대리 등록 신청과 검토 상태를 함께 확인합니다." : "접수부터 보완, 등록 완료까지 진행 상태를 확인합니다."}</p></div><button className="primary" onClick={startPersonalSubmission}>＋ {isTeam ? "Agent 올리기" : "내 Agent 올리기"}</button></header>
           <div className="gallery-application-list">
@@ -13107,6 +13148,7 @@ function Gallery({
                 <div><Pill tone={statusTone[application.status]}>{statusLabel[application.status]}</Pill><small>{application.submittedAt}</small></div>
                 {application.reviewerNote && <p className="application-review-note"><WarningCircle size={14} weight="fill" /> {application.reviewerNote}</p>}
                 {application.status === "CHANGES_REQUESTED" && <button className="application-resubmit" onClick={() => startResubmission(application)}>보완 후 재상신</button>}
+                {role === ACCOUNT_ROLES.admin && <div className="gallery-admin-actions"><button onClick={() => startResubmission(application)}><PencilSimple size={14} /> 수정</button><button className="danger" onClick={() => onDeleteApplication(application.id)}><Trash size={14} /> 삭제</button></div>}
               </article>
             ))}
           </div>
@@ -13147,6 +13189,8 @@ function Gallery({
               <section className="gallery-review-checklist"><h3>AI 활성화팀 검토</h3><label><input type="checkbox" defaultChecked /> 접근 링크와 사용자 권한 확인</label><label><input type="checkbox" defaultChecked={selectedApplication.source === "OPERATIONS"} /> 데이터 분류와 입력 금지 정보 확인</label><label><input type="checkbox" /> 한계 고지·오류 신고·운영 담당 확인</label></section>
               {selectedApplication.reviewerNote && <div className="gallery-review-note"><b>검토 의견</b><p>{selectedApplication.reviewerNote}</p></div>}
               <footer>
+                {role === ACCOUNT_ROLES.admin && <button onClick={() => startResubmission(selectedApplication)}><PencilSimple size={14} /> Agent 수정</button>}
+                {role === ACCOUNT_ROLES.admin && <button className="danger" onClick={() => onDeleteApplication(selectedApplication.id)}><Trash size={14} /> Agent 삭제</button>}
                 <button onClick={() => review("CHANGES_REQUESTED", "신청자에게 보완 요청을 전송했습니다.", "한계 고지와 오류 신고 경로를 보완한 뒤 재상신해 주세요.")}>보완 요청</button>
                 {!isLeader && <button className="secondary" onClick={() => review("RECOMMENDED", "팀장에게 등록 권고를 전달했습니다.", "동료 검토 완료 · 최종 등록 권고")}>검토 완료 · 등록 권고</button>}
                 {isLeader && <button className="primary" onClick={() => review("PUBLISHED", "최종 승인되어 Agent Gallery에 등록되었습니다.", "AI 활성화팀장 최종 등록 승인")}>최종 승인 · Gallery 등록</button>}
@@ -13224,13 +13268,14 @@ function Governance({
   onGateChange: (gate: string) => void;
 }) {
   const isAdmin = role === ACCOUNT_ROLES.admin;
-  const isLeader = role === ACCOUNT_ROLES.leader;
-  type GovernanceUser = { id: number; email: string; displayName: string; appRole: string; isActive: boolean; teamName?: string; lastLoginAt?: string };
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
+  type GovernanceUser = { id: number; email: string; displayName: string; appRole: string; isActive: boolean; teamName?: string; lastLoginAt?: string; roleSource?: "bootstrap_admin" | "bootstrap_leader" | "portal_database" };
   type RoleHistory = { id: number; userName: string; email: string; previousRole?: string; newRole: string; changedBy?: string; reason?: string; changedAt: string };
   const [tab, setTab] = useState("계정·역할");
   const [accounts, setAccounts] = useState<GovernanceUser[]>([]);
   const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
+  const [accountFilter, setAccountFilter] = useState<"all" | "ai" | "admin">("all");
   const [accountDraft, setAccountDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
   const [accountError, setAccountError] = useState("");
   const [selectedRoleAccount, setSelectedRoleAccount] = useState<GovernanceUser | null>(null);
@@ -13275,7 +13320,13 @@ function Governance({
     await loadAccounts();
     notify(`${account.displayName} 계정 역할을 변경했습니다.`);
   };
-  const visibleAccounts = accounts.filter((account) => `${account.displayName} ${account.email}`.toLowerCase().includes(accountSearch.toLowerCase()));
+  const visibleAccounts = accounts.filter((account) => {
+    const matchesSearch = `${account.displayName} ${account.email}`.toLowerCase().includes(accountSearch.toLowerCase());
+    const matchesRole = accountFilter === "all"
+      || (accountFilter === "ai" && ["team_member", "team_leader"].includes(account.appRole))
+      || (accountFilter === "admin" && account.appRole === "admin");
+    return matchesSearch && matchesRole;
+  });
   const roleLabel = (appRole: string) => ({ general_user: "일반 User", team_member: "AI 활성화팀 팀원", team_leader: "AI 활성화팀 팀장", admin: "admin" }[appRole] || appRole);
   const projectPermission = (appRole: string) => ({
     team_leader: { title: "팀 전체 과제 감독", detail: "전체 이력 조회 · 담당자/리뷰어 지정 · G1/G3/G4 승인" },
@@ -13375,10 +13426,9 @@ function Governance({
           <div className="admin-content">
             <div className="filter-row">
               <div>
-                <button className="active">전체 {accounts.length}</button>
-                <button>AI팀 {accounts.filter((item) => ["team_member", "team_leader"].includes(item.appRole)).length}</button>
-                <button>일반 User {accounts.filter((item) => item.appRole === "general_user").length}</button>
-                <button>admin {accounts.filter((item) => item.appRole === "admin").length}</button>
+                <button className={accountFilter === "all" ? "active" : ""} onClick={() => setAccountFilter("all")}>전체 {accounts.length}</button>
+                <button className={accountFilter === "ai" ? "active" : ""} onClick={() => setAccountFilter("ai")}>AI팀 {accounts.filter((item) => ["team_member", "team_leader"].includes(item.appRole)).length}</button>
+                <button className={accountFilter === "admin" ? "active" : ""} onClick={() => setAccountFilter("admin")}>admin {accounts.filter((item) => item.appRole === "admin").length}</button>
               </div>
               <label>
                 ⌕{" "}
@@ -13438,7 +13488,7 @@ function Governance({
                     <b>{projectPermission(account.appRole).title}</b>
                     <small>{projectPermission(account.appRole).detail}</small>
                   </span>
-                  <span><small>{account.lastLoginAt ? "Entra 로그인 연동" : "사전 등록"}</small></span>
+                  <span><small>{account.roleSource === "bootstrap_leader" ? "PORTAL_BOOTSTRAP_LEADER_EMAILS" : account.roleSource === "bootstrap_admin" ? "PORTAL_BOOTSTRAP_ADMIN_EMAILS" : account.lastLoginAt ? "Entra 로그인 · 포털 DB" : "포털 사전 등록"}</small></span>
                   <span><Pill tone={account.isActive ? "green" : "gray"}>{account.isActive ? "활성" : "비활성"}</Pill></span>
                   <span className="chev">›</span>
                 </div>
@@ -13662,7 +13712,7 @@ function RequestWizard({
   ) => void;
 }) {
   const isAiTeam =
-    role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member;
+    role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.admin;
   const labels = [
     "업무 문제",
     "업무량",
@@ -14055,7 +14105,7 @@ function ProjectDrawer({
   openWorkflow: (view: View, projectNo: string) => void;
   notify: (s: string) => void;
 }) {
-  const isLeader = role === ACCOUNT_ROLES.leader;
+  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isTeamMember = role === ACCOUNT_ROLES.member;
   const relationships = getProjectRelationships(role, p.no);
   const isReviewer = relationships.includes("REVIEWER");

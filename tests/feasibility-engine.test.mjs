@@ -9,7 +9,7 @@ test("keeps deterministic feasibility rules separate from the human G1 decision"
   assert.ok(page.includes("function judgeFeasibilityTrack"));
   assert.ok(page.includes("결정적 규칙이 계산하고, LLM은 결과를 바꾸지 않습니다."));
   assert.ok(page.includes("엔진 권고 · 참고용"));
-  assert.ok(page.includes("최종 결정은 최병두 팀장이 G1에서 확정"));
+  assert.ok(page.includes("최종 결정은 AI 활성화팀 팀장이 G1에서 확정"));
 });
 
 test("refuses ROI estimation until all quantitative inputs are available", () => {

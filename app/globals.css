@@ -1511,6 +1511,11 @@ button {
   border-color: #295f9b;
   color: #295f9b;
 }
+.gallery-admin-actions { display: flex; justify-content: flex-end; gap: 8px; grid-column: 1 / -1; }
+.gallery-admin-actions button,
+.gallery-review-detail > footer .danger { display: inline-flex; align-items: center; gap: 5px; }
+.gallery-admin-actions .danger,
+.gallery-review-detail > footer .danger { border-color: #f1b7b2; color: #b42318; background: #fff7f6; }
 .gallery-modal-backdrop {
   position: fixed;
   inset: 0;

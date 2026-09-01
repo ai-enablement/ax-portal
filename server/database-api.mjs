@@ -231,7 +231,7 @@ async function createGalleryApplication(body, identity) {
   assertSubmission(body);
   return withTransaction(async (client) => {
     const actor = await findUser(client, identity);
-    if (!actor || !["general_user", "team_member", "team_leader"].includes(actor.app_role)) {
+    if (!actor || !["general_user", "team_member", "team_leader", "admin"].includes(actor.app_role)) {
       return { status: 403, body: { error: "An active portal User or AI Enablement Team member is required." } };
     }
     let projectId = null;
@@ -247,7 +247,7 @@ async function createGalleryApplication(body, identity) {
                where pm.project_id = p.id and pm.user_id = $2
                  and pm.relationship in ('owner', 'requester') and pm.ended_at is null
             ))`,
-        [body.projectNo, actor.id, ["team_member", "team_leader"].includes(actor.app_role)],
+        [body.projectNo, actor.id, ["team_member", "team_leader", "admin"].includes(actor.app_role)],
       );
       if (!project.rows[0]) {
         return { status: 409, body: { error: "The project is not eligible for Gallery submission." } };
@@ -299,7 +299,7 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
     if (!actor) return { status: 403, body: { error: "Active portal user not found." } };
 
     if (databaseStatus === "submitted") {
-      if (actor.app_role !== "general_user" || actor.id !== existing.rows[0].submitted_by) {
+      if (actor.app_role !== "admin" && (actor.app_role !== "general_user" || actor.id !== existing.rows[0].submitted_by)) {
         return { status: 403, body: { error: "Only the original applicant can resubmit." } };
       }
       await client.query(
@@ -333,11 +333,41 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
         ],
       );
     } else {
-      if (!["team_member", "team_leader"].includes(actor.app_role)) {
+      if (!["team_member", "team_leader", "admin"].includes(actor.app_role)) {
         return { status: 403, body: { error: "AI Enablement Team review permission is required." } };
       }
-      if (databaseStatus === "published" && actor.app_role !== "team_leader") {
+      if (databaseStatus === "published" && !["team_leader", "admin"].includes(actor.app_role)) {
         return { status: 403, body: { error: "Only the AI Enablement Team leader can publish." } };
+      }
+      if (actor.app_role === "admin") {
+        await client.query(
+          `update agent_portal.gallery_submissions
+              set agent_name = coalesce(nullif($2, ''), agent_name),
+                  summary = coalesce(nullif($3, ''), summary),
+                  platform = coalesce($4, platform),
+                  artifact_kind = coalesce($5, artifact_kind),
+                  category = coalesce(nullif($6, ''), category),
+                  access_url = coalesce(nullif($7, ''), access_url),
+                  target_users = coalesce(nullif($8, ''), target_users),
+                  data_classification = coalesce($9, data_classification),
+                  support_owner = coalesce(nullif($10, ''), support_owner),
+                  evidence = coalesce($11::jsonb, evidence),
+                  updated_at = now()
+            where submission_number = $1`,
+          [
+            submissionNumber,
+            body.name || "",
+            body.description || "",
+            body.platform ? normalizePlatform(body.platform) : null,
+            body.artifactType ? normalizeArtifact(body.artifactType) : null,
+            body.category || "",
+            body.accessUrl || "",
+            body.targetUsers || "",
+            body.dataClass ? normalizeDataClass(body.dataClass) : null,
+            body.supportOwner || "",
+            Array.isArray(body.evidence) ? JSON.stringify(body.evidence) : null,
+          ],
+        );
       }
       const decision = {
         changes_requested: "changes_requested",
@@ -355,7 +385,7 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
           [
             existing.rows[0].id,
             actor.id,
-            actor.app_role,
+            actor.app_role === "admin" ? "team_leader" : actor.app_role,
             decision,
             Boolean(body.checks?.access),
             Boolean(body.checks?.dataPolicy),
@@ -394,6 +424,28 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
   });
 }
 
+async function deleteGalleryApplication(submissionNumber, identity) {
+  return withTransaction(async (client) => {
+    const actor = await findUser(client, identity);
+    if (!actor || actor.app_role !== "admin") {
+      return { status: 403, body: { error: "Admin permission is required." } };
+    }
+    const existing = (await client.query(
+      `select id, agent_name from agent_portal.gallery_submissions
+        where submission_number=$1 for update`, [submissionNumber],
+    )).rows[0];
+    if (!existing) return { status: 404, body: { error: "Submission not found." } };
+    await client.query(`delete from agent_portal.gallery_entries where gallery_submission_id=$1`, [existing.id]);
+    await client.query(`delete from agent_portal.gallery_submissions where id=$1`, [existing.id]);
+    await client.query(
+      `insert into agent_portal.audit_logs (actor_user_id, action_code, entity_type, entity_id, before_data)
+       values ($1,'GALLERY_DELETE','gallery_submission',$2,$3::jsonb)`,
+      [actor.id, submissionNumber, JSON.stringify({ name: existing.agent_name })],
+    );
+    return { status: 200, body: { deleted: true, id: submissionNumber } };
+  });
+}
+
 async function health() {
   const result = await getPool().query(
     `select current_database() as database,
@@ -416,6 +468,28 @@ async function listGovernanceUsers(identity) {
   const pool = getPool();
   const actor = await governanceActor(pool, identity);
   if (!actor) return { status: 403, body: { error: "AI Enablement Team permission is required." } };
+  const bootstrapLeaders = new Set(String(process.env.PORTAL_BOOTSTRAP_LEADER_EMAILS || process.env.PORTAL_TEAM_LEADER_EMAILS || "").toLowerCase().split(/[;,\s]+/).filter(Boolean));
+  const bootstrapAdmins = new Set(String(process.env.PORTAL_BOOTSTRAP_ADMIN_EMAILS || process.env.PORTAL_ADMIN_EMAILS || "").toLowerCase().split(/[;,\s]+/).filter(Boolean));
+  const catalog = await ensurePortalCatalog(pool);
+  if (bootstrapLeaders.size) {
+    await pool.query(
+      `update agent_portal.users
+          set app_role = 'team_leader', team_id = $2, is_active = true,
+              updated_at = now()
+        where lower(email) = any($1::text[])
+          and lower(email) <> all($3::text[])`,
+      [[...bootstrapLeaders], catalog.aiTeamId, [...bootstrapAdmins]],
+    );
+  }
+  if (bootstrapAdmins.size) {
+    await pool.query(
+      `update agent_portal.users
+          set app_role = 'admin', team_id = $2, is_active = true,
+              updated_at = now()
+        where lower(email) = any($1::text[])`,
+      [[...bootstrapAdmins], catalog.aiTeamId],
+    );
+  }
   const result = await pool.query(
     `select u.id, u.email, u.display_name as "displayName", u.app_role as "appRole",
             u.is_active as "isActive", u.last_login_at as "lastLoginAt",
@@ -425,7 +499,15 @@ async function listGovernanceUsers(identity) {
       order by case u.app_role when 'admin' then 1 when 'team_leader' then 2
                  when 'team_member' then 3 else 4 end, u.display_name, u.email`,
   );
-  return { status: 200, body: { users: result.rows, actorRole: actor.app_role } };
+  const users = result.rows.map((user) => ({
+    ...user,
+    roleSource: bootstrapAdmins.has(user.email.toLowerCase())
+      ? "bootstrap_admin"
+      : bootstrapLeaders.has(user.email.toLowerCase())
+        ? "bootstrap_leader"
+        : "portal_database",
+  }));
+  return { status: 200, body: { users, actorRole: actor.app_role } };
 }
 
 function allowedRoleChange(actorRole, newRole) {
@@ -537,6 +619,11 @@ export async function handleDatabaseRequest({ method, pathname, body = {}, ident
     const id = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "");
     if (!id) throw new Error("Submission number is required.");
     return updateGalleryApplication(id, body, identity);
+  }
+  if (method === "DELETE" && pathname.startsWith("/gallery/applications/")) {
+    const id = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "");
+    if (!id) return { status: 400, body: { error: "Submission number is required." } };
+    return deleteGalleryApplication(id, identity);
   }
   if (method === "GET" && pathname === "/governance/users") return listGovernanceUsers(identity);
   if (method === "POST" && pathname === "/governance/users") return registerGovernanceUser(body, identity);
