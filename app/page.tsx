@@ -174,6 +174,29 @@ type UserProject = {
 
 const userProjects: UserProject[] = [];
 
+const emptyProject: UserProject = {
+  no: "",
+  name: "",
+  stage: 0,
+  status: "",
+  tone: "gray",
+  progress: 0,
+  owner: "",
+  handler: "",
+  updated: "",
+  nextAction: "",
+  description: "",
+  journeyStep: 1,
+  nextGate: "",
+  teamOwner: "",
+  dueDate: "",
+  requestedDate: "",
+  committedDate: "",
+  scheduleState: "",
+  checkpoints: "",
+  route: "intake",
+};
+
 const userJourney = [
   {
     title: "요구 접수",
@@ -945,6 +968,7 @@ export default function Home() {
     answers: string[],
     title: string,
     projectOwner: string,
+    requester: string,
   ) => {
     setSubmittedProjects((current) => {
       const sequence = String(current.length + 1).padStart(3, "0");
@@ -971,7 +995,7 @@ export default function Home() {
         checkpoints: "3/11",
         route: "intake" as View,
         intakeAnswers: answers,
-        requester: "김현우 · 개발1팀",
+        requester,
         projectOwner,
       };
       const next = [project, ...current];
@@ -983,7 +1007,9 @@ export default function Home() {
     });
     setView("home");
     notify(
-      "에이전트 요구 접수서[INT]가 제출되었습니다. 신규 과제가 타당성 평가 대기로 등록되었습니다.",
+      role === ACCOUNT_ROLES.user
+        ? "에이전트 요구 접수서[INT]가 제출되었습니다. 신규 과제가 타당성 평가 대기로 등록되었습니다."
+        : "요청자를 대신해 에이전트 요구 접수서[INT]를 등록했습니다. 신규 과제가 타당성 평가 대기로 이동했습니다.",
     );
   };
 
@@ -1257,6 +1283,7 @@ export default function Home() {
 
       {requestOpen && (
         <RequestWizard
+          role={role}
           step={requestStep}
           setStep={setRequestStep}
           close={() => {
@@ -2831,7 +2858,7 @@ function FeasibilityResult({
         <header>
           <div>
             <small>
-              {projectNo}-FEA · {waitingForFea ? "작성 대기" : "생성 전"}
+              {projectNo ? `${projectNo}-FEA` : "FEA"} · {waitingForFea ? "작성 대기" : "생성 전"}
             </small>
             <h3>타당성 평가서[FEA]</h3>
             <p>
@@ -5918,7 +5945,7 @@ function UserDashboard({
       // Keep the master-detail selection stable while the production dataset is empty.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelected(0);
-      setSelectedJourney(0);
+      setSelectedJourney(1);
       return;
     }
     const targetIndex = projectNo
@@ -5933,26 +5960,8 @@ function UserDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAiTeam, role, projectNo, projectItems.length]);
 
-  if (projectItems.length === 0) {
-    return (
-      <EmptyDataPage
-        title={isAiTeam ? "현재 배정된 Agent 과제가 없습니다." : "등록된 Agent 과제가 없습니다."}
-        description={
-          isAiTeam
-            ? "새 과제가 접수되거나 담당·리뷰 역할이 배정되면 이 화면에서 전체 이력을 확인할 수 있습니다."
-            : "첫 Agent 과제를 요청하면 접수부터 운영까지 진행 상태가 이 화면에 표시됩니다."
-        }
-        action={
-          !isAiTeam ? (
-            <button className="primary" onClick={openNewRequest}>
-              <Plus size={17} weight="bold" /> 새 Agent 과제 요청
-            </button>
-          ) : undefined
-        }
-      />
-    );
-  }
-  const current = projectItems[selected] || projectItems[0];
+  const hasProjects = projectItems.length > 0;
+  const current = projectItems[selected] || projectItems[0] || emptyProject;
   const canDeleteCurrent =
     role === ACCOUNT_ROLES.user && current.journeyStep === 0;
   const deleteCurrentProject = () => {
@@ -5967,7 +5976,9 @@ function UserDashboard({
     notify(`${current.name} 과제가 삭제되었습니다.`);
   };
   const currentG1Resolution = homeG1Resolutions[current.no] || null;
-  const g1Status = currentG1Resolution
+  const g1Status = !hasProjects
+    ? ""
+    : currentG1Resolution
     ? currentG1Resolution.decision === "CONDITIONAL"
       ? "Conditional Go"
       : currentG1Resolution.decision === "DROP"
@@ -5977,9 +5988,11 @@ function UserDashboard({
       ? "판정 대기"
       : "Go";
   const intakeComplete =
-    current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted);
-  const effectiveJourneyStep =
-    g2ReworkProjects[current.no] === "resubmitted"
+    hasProjects &&
+    (current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted));
+  const effectiveJourneyStep = !hasProjects
+    ? 1
+    : g2ReworkProjects[current.no] === "resubmitted"
       ? Math.max(4, current.journeyStep)
       : feaCompletedProjects.includes(current.no)
         ? Math.max(2, current.journeyStep)
@@ -5987,8 +6000,9 @@ function UserDashboard({
           ? 1
           : current.journeyStep;
   const selectedOutput = lifecycleOutputs[selectedJourney];
-  const selectedOutputState =
-    selectedJourney < effectiveJourneyStep
+  const selectedOutputState = !hasProjects
+    ? "생성 전"
+    : selectedJourney < effectiveJourneyStep
       ? "완료"
       : selectedJourney === effectiveJourneyStep
         ? userJourney[selectedJourney].kind === "gate"
@@ -6005,6 +6019,7 @@ function UserDashboard({
   );
   const applyFilter = (next: string) => {
     setFilter(next);
+    if (projectItems.length === 0) return;
     if (next === "내 할 일") {
       const project = isAiTeam
         ? projectItems.find((item) => item.no === "2026-033") || projectItems[0]
@@ -6066,18 +6081,16 @@ function UserDashboard({
               : "요청자 또는 프로젝트 Owner로 연결된 과제를 한 화면에서 확인할 수 있습니다."}
           </p>
         </div>
-        {!isAiTeam && (
-          <button className="new-request-cta" onClick={openNewRequest}>
-            <span>
-              <Plus size={19} weight="bold" />
-            </span>
-            <div>
-              <strong>새 Agent 과제 요청</strong>
-              <small>요구 접수 Agent와 대화로 시작</small>
-            </div>
-            <ArrowRight size={18} weight="bold" />
-          </button>
-        )}
+        <button className="new-request-cta" onClick={openNewRequest}>
+          <span>
+            <Plus size={19} weight="bold" />
+          </span>
+          <div>
+            <strong>{isAiTeam ? "새 Agent 과제 등록" : "새 Agent 과제 요청"}</strong>
+            <small>{isAiTeam ? "요청자를 대신해 접수서 작성" : "요구 접수 Agent와 대화로 시작"}</small>
+          </div>
+          <ArrowRight size={18} weight="bold" />
+        </button>
       </section>
 
       <section className="user-home-grid oneview-grid">
@@ -6112,6 +6125,17 @@ function UserDashboard({
             </div>
           </header>
           <div className="project-stack">
+            {!hasProjects && (
+              <div className="project-stack-empty">
+                <ClipboardText size={30} weight="duotone" />
+                <b>등록된 Agent 과제가 없습니다.</b>
+                <span>
+                  {isAiTeam
+                    ? "새 과제를 등록하거나 과제가 배정되면 여기에 표시됩니다."
+                    : "새 Agent 과제를 요청하면 진행 상태가 여기에 표시됩니다."}
+                </span>
+              </div>
+            )}
             {visible.map((project) => {
               const index = projectItems.findIndex(
                 (item) => item.no === project.no,
@@ -6166,22 +6190,20 @@ function UserDashboard({
         <article className="panel selected-project-status oneview-status">
           <header>
             <div>
-              <Pill tone={current.tone}>
-                {g2ReworkProjects[current.no] === "editing"
-                  ? "ARD 보완 중"
-                  : g2ReworkProjects[current.no] === "resubmitted"
-                    ? "G2 재승인 대기"
-                    : intakeComplete
-                      ? current.status.replace("내 작성 필요", "작성 완료")
-                      : "작성 중"}
-              </Pill>
+              {hasProjects && (
+                <Pill tone={current.tone}>
+                  {g2ReworkProjects[current.no] === "editing"
+                    ? "ARD 보완 중"
+                    : g2ReworkProjects[current.no] === "resubmitted"
+                      ? "G2 재승인 대기"
+                      : intakeComplete
+                        ? current.status.replace("내 작성 필요", "작성 완료")
+                        : "작성 중"}
+                </Pill>
+              )}
               <small>{current.no}</small>
-              <h2>{current.name}</h2>
-              <p>
-                {intakeComplete
-                  ? "작성된 신청 결과와 생애주기 진행 상태입니다."
-                  : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다."}
-              </p>
+              <h2>{current.name || "\u00a0"}</h2>
+              <p>{hasProjects ? (intakeComplete ? "작성된 신청 결과와 생애주기 진행 상태입니다." : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다.") : "\u00a0"}</p>
             </div>
             <div className="project-header-actions">
               {canDeleteCurrent && (
@@ -6192,7 +6214,7 @@ function UserDashboard({
                   <Trash size={15} weight="bold" /> 과제 삭제
                 </button>
               )}
-              <button onClick={() => setSelectedJourney(effectiveJourneyStep)}>
+              <button disabled={!hasProjects} onClick={() => setSelectedJourney(effectiveJourneyStep)}>
                 현재 단계 보기 <ArrowRight size={13} weight="bold" />
               </button>
             </div>
@@ -6308,14 +6330,16 @@ function UserDashboard({
             </div>
             <Pill
               tone={
-                current.scheduleState.includes("지연")
+                !hasProjects
+                  ? "gray"
+                  : current.scheduleState.includes("지연")
                   ? "red"
                   : current.scheduleState.includes("협의")
                     ? "gray"
                     : "green"
               }
             >
-              {current.scheduleState}
+              {current.scheduleState || "\u00a0"}
             </Pill>
             <small>마감일 변경은 최병두 팀장 승인 후 반영</small>
           </section>
@@ -6343,7 +6367,7 @@ function UserDashboard({
                     <dl>
                       <div>
                         <dt>요구자</dt>
-                        <dd>{current.requester || `${current.owner} · 요청 부서`}</dd>
+                        <dd>{current.requester || (current.owner ? `${current.owner} · 요청 부서` : "")}</dd>
                       </div>
                       <div>
                         <dt>Project Owner</dt>
@@ -6351,7 +6375,7 @@ function UserDashboard({
                       </div>
                       <div>
                         <dt>접수일</dt>
-                        <dd>2026.08.25</dd>
+                        <dd>{hasProjects ? current.updated : ""}</dd>
                       </div>
                       <div>
                         <dt>접수 유형</dt>
@@ -6362,8 +6386,7 @@ function UserDashboard({
                   <section>
                     <b>2. 해결하려는 업무 문제</b>
                     <p>
-                      {current.intakeAnswers?.[0] ||
-                        "개발 BOM 변경 시 관련 부품, 품질 문서와 변경 영향 범위를 담당자가 수작업으로 확인하고 있습니다."}
+                      {current.intakeAnswers?.[0] || ""}
                     </p>
                   </section>
                   <section>
@@ -6371,9 +6394,7 @@ function UserDashboard({
                     <p>
                       {current.intakeAnswers
                         ? `${current.intakeAnswers[1]} 사용 자료: ${current.intakeAnswers[2]}`
-                        : intakeComplete
-                          ? "SAP BOM과 Excel 변경 목록을 비교하고 품질 문서를 수기로 대조합니다. 월 20건, 건당 평균 45분이 소요됩니다."
-                          : "SAP BOM과 Excel 변경 목록을 비교하고 품질 문서를 수기로 대조합니다."}
+                        : ""}
                     </p>
                     {!intakeComplete && (
                       <span className="missing-answer">
@@ -6384,19 +6405,12 @@ function UserDashboard({
                   <section>
                     <b>4. 기대 결과</b>
                     <p>
-                      {current.intakeAnswers?.[3] ||
-                        (intakeComplete
-                          ? "변경 부품과 영향 문서를 자동으로 식별해 검토 시간을 건당 10분 이내로 줄이고 싶습니다."
-                          : "Agent가 변경 영향 범위를 먼저 정리해주면 좋겠습니다.")}
+                      {current.intakeAnswers?.[3] || ""}
                     </p>
                   </section>
                   <section>
                     <b>5. 위험 및 고려사항</b>
-                    <p>
-                      {intakeComplete
-                        ? "누락된 변경 영향으로 품질 승인과 양산 일정이 지연될 수 있어 최종 확인은 담당자가 수행합니다."
-                        : "답변을 이어가면 위험과 통제 항목이 자동 정리됩니다."}
-                    </p>
+                    <p />
                   </section>
                   <section>
                     <b>6. 접수 처리</b>
@@ -6489,7 +6503,7 @@ function UserDashboard({
             <FeasibilityResult
               projectNo={current.no}
               state={selectedOutputState}
-              editable={isAiTeam}
+              editable={hasProjects && isAiTeam}
               role={role}
               projectItem={current}
               onComplete={() =>
@@ -13460,16 +13474,25 @@ function suggestRequestTitle(problem: string) {
 }
 
 function RequestWizard({
+  role,
   step,
   setStep,
   close,
   onSubmit,
 }: {
+  role: AccountRole;
   step: number;
   setStep: (n: number) => void;
   close: () => void;
-  onSubmit: (answers: string[], title: string, projectOwner: string) => void;
+  onSubmit: (
+    answers: string[],
+    title: string,
+    projectOwner: string,
+    requester: string,
+  ) => void;
 }) {
+  const isAiTeam =
+    role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member;
   const labels = [
     "업무 문제",
     "업무량",
@@ -13493,10 +13516,23 @@ function RequestWizard({
   ];
   const [answers, setAnswers] = useState(["", "", "", "", ""]);
   const [submitted, setSubmitted] = useState(false);
+  const [requesterName, setRequesterName] = useState("");
+  const [requesterDepartment, setRequesterDepartment] = useState("");
+  const [requesterEmail, setRequesterEmail] = useState("");
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
+  const resolvedRequester = isAiTeam
+    ? requesterName.trim() && requesterDepartment.trim() && requesterEmail.trim()
+      ? `${requesterName.trim()} · ${requesterDepartment.trim()} · ${requesterEmail.trim()}`
+      : ""
+    : "김현우 · 개발1팀 · kim.hw@changshininc.com";
+  const requesterOwnerLabel = isAiTeam
+    ? requesterName.trim() && requesterDepartment.trim()
+      ? `${requesterName.trim()} · ${requesterDepartment.trim()}`
+      : ""
+    : "김현우 · 개발1팀";
   const resolvedProjectOwner =
-    ownerMode === "SELF" ? "김현우 · 개발1팀" : projectOwner.trim();
+    ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
   const requestTitle = suggestRequestTitle(answers[0]);
   const updateAnswer = (value: string) =>
     setAnswers((items) =>
@@ -13507,8 +13543,8 @@ function RequestWizard({
     if (step < 5) setStep(step + 1);
     else {
       setSubmitted(true);
-      if (!resolvedProjectOwner) return;
-      onSubmit([...answers], requestTitle, resolvedProjectOwner);
+      if (!resolvedProjectOwner || !resolvedRequester) return;
+      onSubmit([...answers], requestTitle, resolvedProjectOwner, resolvedRequester);
       close();
     }
   };
@@ -13524,8 +13560,8 @@ function RequestWizard({
         <header>
           <div>
             <Pill tone="blue">요구 접수 Agent</Pill>
-            <h2 id="request-wizard-title">새 Agent 과제 요청</h2>
-            <p>Agent와 대화하면 왼쪽의 요구 접수서가 실시간으로 작성됩니다.</p>
+            <h2 id="request-wizard-title">{isAiTeam ? "새 Agent 과제 등록" : "새 Agent 과제 요청"}</h2>
+            <p>{isAiTeam ? "회의 내용을 바탕으로 요청자를 대신해 요구 접수서를 작성합니다." : "Agent와 대화하면 왼쪽의 요구 접수서가 실시간으로 작성됩니다."}</p>
           </div>
           <button aria-label="요청 창 닫기" onClick={close}>
             <X size={17} />
@@ -13557,7 +13593,8 @@ function RequestWizard({
             </div>
             <div className="filled">
               <b>요구자 / Project Owner</b>
-              <p>요구자 · 김현우 · 개발1팀</p>
+              <p>요구자 · {resolvedRequester || "오른쪽에서 요청자를 입력해 주세요."}</p>
+              {isAiTeam && <p>접수 등록자 · {role}</p>}
               <p>
                 Owner · {resolvedProjectOwner || "오른쪽에서 지정해 주세요."}
               </p>
@@ -13618,6 +13655,15 @@ function RequestWizard({
             <div className="wizard-chat-input">
               {step === 5 ? (
                 <div className="wizard-final-fields">
+                  {isAiTeam && (
+                    <fieldset className="wizard-owner-field wizard-requester-field">
+                      <legend>요구자 정보</legend>
+                      <p>회의를 요청했거나 업무 문제를 제기한 실제 요구자를 입력합니다.</p>
+                      <input value={requesterName} onChange={(event) => setRequesterName(event.target.value)} placeholder="요구자 이름" aria-label="요구자 이름" />
+                      <input value={requesterDepartment} onChange={(event) => setRequesterDepartment(event.target.value)} placeholder="소속 부서" aria-label="요구자 소속 부서" />
+                      <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" />
+                    </fieldset>
+                  )}
                   <label className="wizard-date-input">
                     <span>희망 완료일</span>
                     <input
@@ -13640,7 +13686,7 @@ function RequestWizard({
                         checked={ownerMode === "SELF"}
                         onChange={() => setOwnerMode("SELF")}
                       />
-                      요구자와 동일 · 김현우
+                      요구자와 동일{requesterOwnerLabel ? ` · ${requesterOwnerLabel}` : ""}
                     </label>
                     <label>
                       <input
@@ -13671,12 +13717,12 @@ function RequestWizard({
               <button
                 disabled={
                   !answers[step - 1].trim() ||
-                  !resolvedProjectOwner ||
+                  (step === 5 && (!resolvedRequester || !resolvedProjectOwner)) ||
                   submitted
                 }
                 onClick={advance}
               >
-                {step === 5 ? "접수서 제출" : "답변 저장"}
+                {step === 5 ? (isAiTeam ? "Agent 과제 등록" : "접수서 제출") : "답변 저장"}
                 <ArrowRight size={15} weight="bold" />
               </button>
             </div>

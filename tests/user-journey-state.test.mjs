@@ -14,10 +14,28 @@ const css = await readFile(
 test("persists submitted intake and advances to FEA waiting", () => {
   assert.ok(page.includes("agent-portal-submitted-projects"));
   assert.ok(page.includes('status: "타당성 평가 대기"'));
-  assert.ok(page.includes("onSubmit([...answers], requestTitle, resolvedProjectOwner)"));
+  assert.ok(page.includes("onSubmit([...answers], requestTitle, resolvedProjectOwner, resolvedRequester)"));
   assert.ok(page.includes('ownerMode === "SELF"'));
   assert.ok(page.includes("요구자와 Owner는 같을 수도, 다를 수도 있습니다."));
   assert.ok(page.includes("projectOwner,"));
+});
+
+test("lets AI team register an intake on behalf of the requester", () => {
+  assert.ok(page.includes('isAiTeam ? "새 Agent 과제 등록" : "새 Agent 과제 요청"'));
+  assert.ok(page.includes("요청자를 대신해 접수서 작성"));
+  assert.ok(page.includes("요구자 정보"));
+  assert.ok(page.includes("요구자 MS 계정 이메일"));
+  assert.ok(page.includes("step === 5 && (!resolvedRequester || !resolvedProjectOwner)"));
+  assert.ok(page.includes("접수 등록자"));
+  assert.ok(page.includes("resolvedRequester"));
+});
+
+test("keeps the one-page project frame visible when values are empty", () => {
+  assert.ok(page.includes("const emptyProject: UserProject"));
+  assert.ok(page.includes("project-stack-empty"));
+  assert.ok(page.includes("const hasProjects = projectItems.length > 0"));
+  assert.ok(page.includes('selectedOutputState = !hasProjects'));
+  assert.ok(css.includes(".project-stack-empty"));
 });
 
 test("lets AI team roles write FEA and locks G1 until complete", () => {

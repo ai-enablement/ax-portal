@@ -6891,6 +6891,26 @@ body {
   background: #fff;
   text-align: left;
 }
+.project-stack-empty {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 28px;
+  color: #7b8798;
+  text-align: center;
+}
+.project-stack-empty b {
+  color: #253247;
+  font-size: 14px;
+}
+.project-stack-empty span {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.65;
+}
 .project-stack > button:last-child {
   border-bottom: 0;
 }
@@ -11329,9 +11349,18 @@ body {
   padding: 7px 9px;
   font: inherit;
 }
+.wizard-requester-field {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.wizard-requester-field > input {
+  grid-column: auto;
+}
 
 @media (max-width: 900px) {
   .wizard-final-fields { grid-template-columns: 1fr; }
+  .wizard-requester-field { grid-template-columns: 1fr; }
+  .wizard-requester-field > input { grid-column: 1 / -1; }
   .project-schedule-strip {
     align-items: flex-start;
     flex-wrap: wrap;

@@ -29,7 +29,7 @@ test("shows inherited guardrail and verification readiness", () => {
 
 test("embeds a writable FEA workspace in AI team home screens", () => {
   assert.ok(page.includes("function HomeFeasibilityEditor"));
-  assert.ok(page.includes('editable={isAiTeam}'));
+  assert.ok(page.includes('editable={hasProjects && isAiTeam}'));
   assert.ok(page.includes("isLeader || isAiTeamMember"));
   assert.ok(page.includes("팀장 타당성 평가 작성"));
   assert.ok(page.includes("FEA 작성 완료 · G1 요청"));
