@@ -154,6 +154,30 @@ test("opens deferred documents in the selected project and restores intake value
   assert.ok(!page.includes('onClick={() => setView(current.route)}>\n                  해당 단계에서 문서 추가'));
 });
 
+test("starts historical FEA as a real draft and lets contributors complete intake", () => {
+  assert.ok(page.includes("forceDraft={current.documentsDeferred && deferredDocumentOpened}"));
+  assert.ok(page.includes("editable && (!ready || forceDraft)"));
+  assert.ok(page.includes("blankStart={forceDraft}"));
+  assert.ok(page.includes("function HistoricalIntakeEditor"));
+  assert.ok(page.includes("요구 접수서 보완 작성"));
+  assert.ok(page.includes("intakeAnswers: answers"));
+  assert.ok(page.includes("onUpdateProject(current.no"));
+  assert.ok(css.includes(".historical-intake-editor-grid"));
+});
+
+test("makes every historical stage writable without fixtures and enforces assignee ownership", () => {
+  assert.ok(page.includes("function HistoricalStageDocumentEditor"));
+  assert.ok(page.includes("historicalDocuments?: Record"));
+  assert.ok(page.includes("assignedDeveloperIds.length > 0"));
+  assert.ok(page.includes("isAssignedHistoricalDeveloper"));
+  assert.ok(page.includes("role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member"));
+  assert.ok(page.includes("지정 담당자만 작성 가능"));
+  assert.ok(page.includes("historicalDocuments: {"));
+  assert.ok(page.includes('status: "draft" | "complete"'));
+  assert.ok(css.includes(".historical-stage-editor-grid"));
+  assert.ok(css.includes(".historical-stage-permission"));
+});
+
 test("shows no completed or current lifecycle step when there are no projects", () => {
   assert.match(page, /const effectiveJourneyStep = !hasProjects\s*\? -1/);
   assert.ok(page.includes('title="선택된 Agent 과제가 없습니다."'));

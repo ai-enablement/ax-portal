@@ -17,6 +17,7 @@ import {
   Info,
   FileText,
   List,
+  Lock,
   Plus,
   ShieldCheck,
   Target,
@@ -186,6 +187,15 @@ type UserProject = {
   projectOwner?: string;
   developerIds?: string[];
   developerNames?: string[];
+  historicalDocuments?: Record<
+    string,
+    {
+      values: string[];
+      status: "draft" | "complete";
+      decision?: string;
+      updatedAt: string;
+    }
+  >;
   historicalImport?: boolean;
   documentsDeferred?: boolean;
 };
@@ -1386,11 +1396,13 @@ export default function Home() {
         {view === "home" && (
           <Dashboard
             role={role}
+            identity={identity}
             projectNo={workflowTarget}
             teamAccounts={teamAccounts}
             teamRequirementItems={teamWorkloadProjects}
             onAssignProjectDeveloper={assignProjectDeveloper}
             onDeleteProject={deleteProject}
+            onUpdateProject={updateProject}
             setView={go}
             setRequestOpen={setRequestOpen}
             setDetail={setDetail}
@@ -1655,11 +1667,13 @@ export default function Home() {
 
 function Dashboard({
   role,
+  identity,
   projectNo,
   teamAccounts,
   teamRequirementItems,
   onAssignProjectDeveloper,
   onDeleteProject,
+  onUpdateProject,
   setView,
   setRequestOpen,
   setDetail,
@@ -1669,11 +1683,13 @@ function Dashboard({
   notify,
 }: {
   role: string;
+  identity: PortalIdentity | null;
   projectNo?: string;
   teamAccounts: TeamAccount[];
   teamRequirementItems: TeamRequirement[];
   onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
   onDeleteProject: (projectNo: string) => void;
+  onUpdateProject: (projectNo: string, changes: Partial<UserProject>) => void;
   setView: (v: View) => void;
   setRequestOpen: (v: boolean) => void;
   setDetail: (p: (typeof projects)[0]) => void;
@@ -1705,10 +1721,12 @@ function Dashboard({
     return (
       <UserDashboard
         role={role}
+        identity={identity}
         projectNo={projectNo}
         teamAccounts={teamAccounts}
         onAssignProjectDeveloper={onAssignProjectDeveloper}
         onDeleteProject={onDeleteProject}
+        onUpdateProject={onUpdateProject}
         setView={setView}
         openNewRequest={() => setRequestOpen(true)}
         projectItems={homeProjectItems}
@@ -2786,17 +2804,26 @@ const travelFeasibility = {
 function HomeFeasibilityEditor({
   project,
   role,
+  blankStart = false,
   onComplete,
 }: {
   project: UserProject;
   role: string;
+  blankStart?: boolean;
   onComplete?: () => void;
 }) {
   const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const author = isLeader ? "AI 활성화팀 팀장" : "AI 활성화팀 담당자";
-  const [summary, setSummary] = useState(
-    `${project.description} 현업 인터뷰를 통해 현재 업무량과 기대 결과를 확인하고 있습니다.`,
-  );
+  const [summary, setSummary] = useState(() => {
+    if (blankStart) {
+      return (project.intakeAnswers || [])
+        .slice(0, 4)
+        .map((answer) => answer.trim())
+        .filter(Boolean)
+        .join("\n");
+    }
+    return `${project.description} 현업 인터뷰를 통해 현재 업무량과 기대 결과를 확인하고 있습니다.`;
+  });
   const [alternatives, setAlternatives] = useState(["", "", "", ""]);
   const [conclusion, setConclusion] = useState("");
   const [fitGrades, setFitGrades] = useState(["미평가", "미평가", "미평가", "미평가", "미평가"]);
@@ -2998,6 +3025,7 @@ function FeasibilityResult({
   editable = false,
   role = ACCOUNT_ROLES.user,
   projectItem,
+  forceDraft = false,
   onComplete,
 }: {
   projectNo: string;
@@ -3005,6 +3033,7 @@ function FeasibilityResult({
   editable?: boolean;
   role?: string;
   projectItem?: UserProject;
+  forceDraft?: boolean;
   onComplete?: () => void;
 }) {
   const [activeSection, setActiveSection] = useState(0);
@@ -3100,11 +3129,12 @@ function FeasibilityResult({
   ];
   const waitingForFea = state === "진행 중";
   const ready = state === "완료";
-  if (editable && !ready)
+  if (editable && (!ready || forceDraft))
     return (
       <HomeFeasibilityEditor
         project={project}
         role={role}
+        blankStart={forceDraft}
         onComplete={onComplete}
       />
     );
@@ -6170,12 +6200,168 @@ function UserOperationsResult({
   );
 }
 
+function HistoricalIntakeEditor({
+  project,
+  onSave,
+  onCancel,
+}: {
+  project: UserProject;
+  onSave: (answers: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [answers, setAnswers] = useState(() =>
+    Array.from({ length: 5 }, (_, index) => project.intakeAnswers?.[index] || ""),
+  );
+  const fields = [
+    ["해결하려는 업무 문제", "기존에 파악된 문제와 추가로 확인한 내용을 입력하세요."],
+    ["현재 처리 방식과 업무량", "발생 건수, 처리 시간, 담당 인원 등을 입력하세요."],
+    ["사용 자료 · 데이터", "업무에 사용하는 시스템, 문서와 데이터 출처를 입력하세요."],
+    ["기대 결과", "목표 처리 방식, 시간 절감과 품질 목표를 입력하세요."],
+  ];
+  const updateAnswer = (index: number, value: string) =>
+    setAnswers((items) =>
+      items.map((item, itemIndex) => (itemIndex === index ? value : item)),
+    );
+  return (
+    <section className="historical-intake-editor" aria-label="과거 과제 요구 접수서 보완 작성">
+      <header>
+        <div>
+          <small>INT · {project.no} · 보완 작성</small>
+          <h3>에이전트 요구 접수서</h3>
+          <p>이관할 때 입력한 내용을 불러왔습니다. 확인된 항목부터 보완해 저장할 수 있습니다.</p>
+        </div>
+        <Pill tone="orange">보완 중</Pill>
+      </header>
+      <div className="historical-intake-editor-grid">
+        {fields.map(([label, placeholder], index) => (
+          <label key={label}>
+            <span>{index + 1}. {label}</span>
+            <textarea
+              value={answers[index]}
+              onChange={(event) => updateAnswer(index, event.target.value)}
+              placeholder={placeholder}
+            />
+          </label>
+        ))}
+        <label>
+          <span>5. 희망 완료일</span>
+          <input
+            type="date"
+            value={answers[4]}
+            onChange={(event) => updateAnswer(4, event.target.value)}
+          />
+        </label>
+      </div>
+      <footer>
+        <span>{answers.filter((answer) => answer.trim()).length}/5 항목 입력</span>
+        <button className="secondary" onClick={onCancel}>취소</button>
+        <button className="primary" onClick={() => onSave(answers)}>보완 내용 저장</button>
+      </footer>
+    </section>
+  );
+}
+
+type HistoricalDocumentRecord = NonNullable<UserProject["historicalDocuments"]>[string];
+
+function HistoricalStageDocumentEditor({
+  project,
+  journeyIndex,
+  canEdit,
+  record,
+  onSave,
+}: {
+  project: UserProject;
+  journeyIndex: number;
+  canEdit: boolean;
+  record?: HistoricalDocumentRecord;
+  onSave: (record: HistoricalDocumentRecord) => void;
+}) {
+  const output = lifecycleOutputs[journeyIndex];
+  const isGate = userJourney[journeyIndex].kind === "gate";
+  const [values, setValues] = useState(() =>
+    output.sections.map((_, index) => record?.values[index] || ""),
+  );
+  const [decision, setDecision] = useState(record?.decision || "PENDING");
+  const [savedStatus, setSavedStatus] = useState(record?.status || "draft");
+  const updateValue = (index: number, value: string) =>
+    setValues((items) =>
+      items.map((item, itemIndex) => (itemIndex === index ? value : item)),
+    );
+  const save = (status: "draft" | "complete") => {
+    const nextRecord: HistoricalDocumentRecord = {
+      values,
+      status,
+      decision: isGate ? decision : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    onSave(nextRecord);
+    setSavedStatus(status);
+  };
+  const completedFields = values.filter((value) => value.trim()).length;
+  return (
+    <section className="historical-stage-editor" aria-label={`${output.title} 작성`}>
+      <header>
+        <div>
+          <small>{output.code} · {project.no} · 과거 과제 이관 작성본</small>
+          <h3>{output.title}</h3>
+          <p>{output.summary}</p>
+        </div>
+        <Pill tone={savedStatus === "complete" ? "green" : canEdit ? "orange" : "gray"}>
+          {savedStatus === "complete" ? "작성 완료" : canEdit ? "작성 중" : "조회 전용"}
+        </Pill>
+      </header>
+      {!canEdit && (
+        <div className="historical-stage-permission">
+          <Lock size={17} weight="fill" />
+          <span>이 과제의 지정 개발 담당자만 작성할 수 있습니다.</span>
+        </div>
+      )}
+      {isGate && (
+        <label className="historical-stage-decision">
+          <span>Gate 판정</span>
+          <select value={decision} onChange={(event) => setDecision(event.target.value)} disabled={!canEdit}>
+            <option value="PENDING">판정 대기</option>
+            <option value="APPROVED">승인</option>
+            <option value="CONDITIONAL">조건부 승인</option>
+            <option value="REJECTED">반려</option>
+          </select>
+        </label>
+      )}
+      <div className="historical-stage-editor-grid">
+        {output.sections.map(([label, guide], index) => (
+          <label key={label}>
+            <span>{String(index + 1).padStart(2, "0")} · {label}</span>
+            <small>{guide}</small>
+            <textarea
+              value={values[index]}
+              onChange={(event) => updateValue(index, event.target.value)}
+              placeholder={`${label} 내용을 입력하세요.`}
+              disabled={!canEdit}
+            />
+          </label>
+        ))}
+      </div>
+      <footer>
+        <span>{completedFields}/{output.sections.length} 항목 입력</span>
+        {canEdit && (
+          <>
+            <button className="secondary" onClick={() => save("draft")}>임시 저장</button>
+            <button className="primary" onClick={() => save("complete")}>작성 완료</button>
+          </>
+        )}
+      </footer>
+    </section>
+  );
+}
+
 function UserDashboard({
   role,
+  identity,
   projectNo,
   teamAccounts,
   onAssignProjectDeveloper,
   onDeleteProject,
+  onUpdateProject,
   setView,
   openNewRequest,
   projectItems,
@@ -6183,10 +6369,12 @@ function UserDashboard({
   openGallerySubmission,
 }: {
   role: string;
+  identity: PortalIdentity | null;
   projectNo?: string;
   teamAccounts: TeamAccount[];
   onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
   onDeleteProject: (projectNo: string) => void;
+  onUpdateProject: (projectNo: string, changes: Partial<UserProject>) => void;
   setView: (v: View) => void;
   openNewRequest: () => void;
   projectItems: UserProject[];
@@ -6202,6 +6390,7 @@ function UserDashboard({
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [draftCompleted, setDraftCompleted] = useState(false);
+  const [historicalIntakeEditing, setHistoricalIntakeEditing] = useState(false);
   const [feaCompletedProjects, setFeaCompletedProjects] = useState<string[]>(
     [],
   );
@@ -6259,6 +6448,18 @@ function UserDashboard({
 
   const hasProjects = projectItems.length > 0;
   const current = projectItems[selected] || projectItems[0] || emptyProject;
+  const assignedDeveloperIds = current.developerIds || [];
+  const signedInTeamAccount = teamAccounts.find(
+    (account) => account.email.toLowerCase() === identity?.email?.toLowerCase(),
+  );
+  const isAssignedHistoricalDeveloper = Boolean(
+    signedInTeamAccount && assignedDeveloperIds.includes(signedInTeamAccount.id),
+  );
+  const canAuthorHistoricalDocument =
+    role === ACCOUNT_ROLES.admin ||
+    (assignedDeveloperIds.length > 0
+      ? isAssignedHistoricalDeveloper
+      : role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member);
   const canDeleteCurrent =
     role === ACCOUNT_ROLES.user && current.journeyStep === 0;
   const deleteCurrentProject = () => {
@@ -6300,6 +6501,11 @@ function UserDashboard({
   const selectedOutput = lifecycleOutputs[selectedJourney];
   const deferredDocumentKey = `${current.no}:${selectedJourney}`;
   const deferredDocumentOpened = openedDeferredDocuments.includes(deferredDocumentKey);
+  const deferredDocumentRecord = current.historicalDocuments?.[String(selectedJourney)];
+  const canEditSelectedHistoricalDocument =
+    userJourney[selectedJourney]?.kind === "gate"
+      ? role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
+      : canAuthorHistoricalDocument;
   const selectedOutputState = !hasProjects
     ? "생성 전"
     : selectedJourney < effectiveJourneyStep
@@ -6341,6 +6547,7 @@ function UserDashboard({
   const selectProject = (index: number) => {
     setSelected(index);
     setSelectedJourney(projectItems[index].journeyStep);
+    setHistoricalIntakeEditing(false);
   };
   const sendDraftAnswer = () => {
     if (!chatInput.trim()) return;
@@ -6366,6 +6573,10 @@ function UserDashboard({
     });
   };
   const openDeferredDocumentEditor = () => {
+    if (!canEditSelectedHistoricalDocument) {
+      notify("지정된 개발 담당자만 이 단계 문서를 작성할 수 있습니다.");
+      return;
+    }
     setOpenedDeferredDocuments((items) =>
       items.includes(deferredDocumentKey) ? items : [...items, deferredDocumentKey],
     );
@@ -6679,7 +6890,8 @@ function UserDashboard({
           ) : current.documentsDeferred &&
             selectedJourney !== 0 &&
             selectedJourney <= effectiveJourneyStep &&
-            !deferredDocumentOpened ? (
+            !deferredDocumentOpened &&
+            !deferredDocumentRecord ? (
             <section className="deferred-document-card">
               <header>
                 <div>
@@ -6696,11 +6908,50 @@ function UserDashboard({
               </div>
               <footer>
                 <span>현재 단계: {userJourney[effectiveJourneyStep].title}</span>
-                <button onClick={openDeferredDocumentEditor}>
-                  해당 단계에서 문서 추가 <ArrowRight size={14} weight="bold" />
+                <button
+                  onClick={openDeferredDocumentEditor}
+                  disabled={!canEditSelectedHistoricalDocument}
+                >
+                  {canEditSelectedHistoricalDocument
+                    ? "해당 단계에서 문서 추가"
+                    : "지정 담당자만 작성 가능"}
+                  <ArrowRight size={14} weight="bold" />
                 </button>
               </footer>
             </section>
+          ) : current.historicalImport &&
+            selectedJourney >= 2 &&
+            (deferredDocumentOpened || deferredDocumentRecord) ? (
+            <HistoricalStageDocumentEditor
+              key={deferredDocumentKey}
+              project={current}
+              journeyIndex={selectedJourney}
+              canEdit={canEditSelectedHistoricalDocument}
+              record={deferredDocumentRecord}
+              onSave={(record) => {
+                onUpdateProject(current.no, {
+                  historicalDocuments: {
+                    ...(current.historicalDocuments || {}),
+                    [String(selectedJourney)]: record,
+                  },
+                });
+                notify(`${selectedOutput.title} ${record.status === "complete" ? "작성을 완료" : "초안을 저장"}했습니다.`);
+              }}
+            />
+          ) : selectedJourney === 0 && current.historicalImport && historicalIntakeEditing ? (
+            <HistoricalIntakeEditor
+              key={current.no}
+              project={current}
+              onCancel={() => setHistoricalIntakeEditing(false)}
+              onSave={(answers) => {
+                onUpdateProject(current.no, {
+                  intakeAnswers: answers,
+                  requestedDate: answers[4] || "미입력",
+                });
+                setHistoricalIntakeEditing(false);
+                notify("에이전트 요구 접수서 보완 내용을 저장했습니다.");
+              }}
+            />
           ) : selectedJourney === 0 ? (
             <div
               className={`intake-result-layout ${intakeComplete ? "complete" : "draft"}`}
@@ -6810,6 +7061,14 @@ function UserDashboard({
                     </button>
                   </footer>
                 )}
+                {current.historicalImport && canAuthorHistoricalDocument && (
+                  <footer>
+                    <span>이관 당시 입력한 내용을 유지한 채 보완할 수 있습니다.</span>
+                    <button onClick={() => setHistoricalIntakeEditing(true)}>
+                      요구 접수서 보완 작성 <ArrowRight size={14} weight="bold" />
+                    </button>
+                  </footer>
+                )}
               </section>
 
               {!intakeComplete && !current.historicalImport && (
@@ -6871,9 +7130,14 @@ function UserDashboard({
             <FeasibilityResult
               projectNo={current.no}
               state={selectedOutputState}
-              editable={hasProjects && isAiTeam}
+              editable={
+                current.historicalImport
+                  ? canAuthorHistoricalDocument
+                  : hasProjects && isAiTeam
+              }
               role={role}
               projectItem={current}
+              forceDraft={current.documentsDeferred && deferredDocumentOpened}
               onComplete={() =>
                 setFeaCompletedProjects((items) =>
                   items.includes(current.no) ? items : [...items, current.no],
