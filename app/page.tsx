@@ -63,27 +63,7 @@ type ProjectRelationship =
 const projectAssignments: Record<
   string,
   Partial<Record<AccountRole, ProjectRelationship[]>>
-> = {
-  "2026-033": { [ACCOUNT_ROLES.member]: ["DEVELOPER"] },
-  "2026-031": { [ACCOUNT_ROLES.user]: ["REQUESTER"] },
-  "2026-028": {
-    [ACCOUNT_ROLES.member]: ["DEVELOPER"],
-    [ACCOUNT_ROLES.user]: ["REQUESTER", "OWNER"],
-  },
-  "2026-026": { [ACCOUNT_ROLES.user]: ["OWNER"] },
-  "2026-024": { [ACCOUNT_ROLES.user]: ["OWNER"] },
-  "2026-021": {
-    [ACCOUNT_ROLES.member]: ["DEVELOPER"],
-    [ACCOUNT_ROLES.user]: ["REQUESTER"],
-  },
-  "2026-018": { [ACCOUNT_ROLES.member]: ["REVIEWER"] },
-  "2026-014": {
-    [ACCOUNT_ROLES.member]: ["REVIEWER"],
-    [ACCOUNT_ROLES.user]: ["REQUESTER", "OWNER"],
-  },
-  "2026-011": { [ACCOUNT_ROLES.member]: ["OPERATOR"] },
-  "2026-006": { [ACCOUNT_ROLES.user]: ["OWNER"] },
-};
+> = {};
 
 function getProjectRelationships(role: string, projectNo?: string) {
   if (!projectNo) return [] as ProjectRelationship[];
@@ -149,159 +129,50 @@ const navGroups = [
 ];
 const nav = navGroups.flatMap((group) => group.items);
 
-const projects = [
-  {
-    no: "2026-018",
-    name: "해외 출장기안 지원 Agent",
-    dept: "경영지원팀",
-    step: "G3 승인 대기",
-    status: "검토 필요",
-    tone: "amber",
-    track: "중",
-    autonomy: "L0",
-    progress: 76,
-    due: "D-2",
-    owner: "최병두",
-    hub: "진행 중",
-  },
-  {
-    no: "2026-021",
-    name: "생산 품질 이슈 분석 Agent",
-    dept: "품질혁신팀",
-    step: "평가 중",
-    status: "진행 중",
-    tone: "blue",
-    track: "상",
-    autonomy: "L1",
-    progress: 68,
-    due: "8.18",
-    owner: "허정환",
-    hub: "진행 중",
-  },
-  {
-    no: "2026-024",
-    name: "구매계약 검토 Agent",
-    dept: "구매팀",
-    step: "G2 승인 대기",
-    status: "서명 대기",
-    tone: "violet",
-    track: "상",
-    autonomy: "L0",
-    progress: 34,
-    due: "D-4",
-    owner: "이재승",
-    hub: "부서 검토",
-  },
-  {
-    no: "2026-026",
-    name: "SAP 사용자 가이드 Agent",
-    dept: "IT혁신팀",
-    step: "요구 정의 중",
-    status: "진행 중",
-    tone: "cyan",
-    track: "중",
-    autonomy: "L0",
-    progress: 24,
-    due: "8.27",
-    owner: "최병두",
-    hub: "미생성",
-  },
-];
+type ProjectSummary = {
+  no: string;
+  name: string;
+  dept: string;
+  step: string;
+  status: string;
+  tone: string;
+  track: string;
+  autonomy: string;
+  progress: number;
+  due: string;
+  owner: string;
+  hub: string;
+};
 
-const userProjects = [
-  {
-    no: "2026-031",
-    name: "개발 BOM 변경 영향 분석 Agent",
-    stage: 1,
-    status: "내 작성 필요",
-    tone: "orange",
-    progress: 18,
-    owner: "김현우",
-    handler: "요구 접수 Agent",
-    updated: "오늘 10:24",
-    nextAction: "요구 접수 Agent와 대화 이어가기",
-    description:
-      "에이전트 요구 접수서[INT] 필수 질문 5개 중 2개에 답변했습니다.",
-    journeyStep: 0,
-    nextGate: "G1 착수 승인",
-    teamOwner: "AI활성화팀 김지훈 매니저",
-    dueDate: "8월 18일",
-    requestedDate: "2026.10.30",
-    committedDate: "G2 승인 후 확정",
-    scheduleState: "일정 협의 전",
-    checkpoints: "2/11",
-    route: "intake" as View,
-  },
-  {
-    no: "2026-028",
-    name: "출장 규정 문의 Agent",
-    stage: 2,
-    status: "내 작성 필요",
-    tone: "violet",
-    progress: 38,
-    owner: "김현우",
-    handler: "AI활성화팀 허정환 담당자",
-    updated: "어제 16:40",
-    nextAction: "G2 반려 사유를 반영해 ARD 보완하기",
-    description:
-      "G2 검토의 반려 사유를 반영해 범위와 평가 기준을 보완하는 중입니다.",
-    journeyStep: 3,
-    nextGate: "G2 개발 착수",
-    teamOwner: "AI활성화팀 허정환 담당자",
-    dueDate: "8월 22일",
-    requestedDate: "2026.09.30",
-    committedDate: "2026.09.25",
-    scheduleState: "보완으로 3일 지연 위험",
-    checkpoints: "5/13",
-    route: "definition" as View,
-  },
-  {
-    no: "2026-021",
-    name: "생산 품질 이슈 분석 Agent",
-    stage: 3,
-    status: "AI활성화팀 진행 중",
-    tone: "blue",
-    progress: 68,
-    owner: "박서연",
-    handler: "AI활성화팀 허정환 담당자",
-    updated: "8.11 14:18",
-    nextAction: "평가 결과를 기다리고 있습니다",
-    description:
-      "개발과 평가가 진행 중입니다. 사용자 확인이 필요해지면 알림을 드립니다.",
-    journeyStep: 5,
-    nextGate: "G3 배포 승인",
-    teamOwner: "AI활성화팀 허정환 담당자",
-    dueDate: "8월 29일",
-    requestedDate: "2026.09.15",
-    committedDate: "2026.09.12",
-    scheduleState: "일정대로 진행",
-    checkpoints: "11/16",
-    route: "delivery" as View,
-  },
-  {
-    no: "2026-014",
-    name: "샘플 발송 현황 알림 Agent",
-    stage: 4,
-    status: "파일럿 사용 중",
-    tone: "green",
-    progress: 88,
-    owner: "이민지",
-    handler: "프로젝트 Owner · AI활성화팀",
-    updated: "8.10 09:05",
-    nextAction: "8월 21일 파일럿 의견 제출",
-    description:
-      "배포가 완료되었고 확산 승인 전 2주 파일럿을 진행하고 있습니다.",
-    journeyStep: 7,
-    nextGate: "G4 확산 승인",
-    teamOwner: "AI활성화팀 이민지 담당자",
-    dueDate: "8월 21일",
-    requestedDate: "2026.08.30",
-    committedDate: "2026.08.28",
-    scheduleState: "완료 · 일정 준수",
-    checkpoints: "14/16",
-    route: "delivery" as View,
-  },
-];
+const projects: ProjectSummary[] = [];
+
+type UserProject = {
+  no: string;
+  name: string;
+  stage: number;
+  status: string;
+  tone: string;
+  progress: number;
+  owner: string;
+  handler: string;
+  updated: string;
+  nextAction: string;
+  description: string;
+  journeyStep: number;
+  nextGate: string;
+  teamOwner: string;
+  dueDate: string;
+  requestedDate: string;
+  committedDate: string;
+  scheduleState: string;
+  checkpoints: string;
+  route: View;
+  intakeAnswers?: string[];
+  requester?: string;
+  projectOwner?: string;
+};
+
+const userProjects: UserProject[] = [];
 
 const userJourney = [
   {
@@ -376,155 +247,9 @@ const userJourney = [
   },
 ];
 
-type UserProject = (typeof userProjects)[number] & {
-  intakeAnswers?: string[];
-  requester?: string;
-  projectOwner?: string;
-};
+const memberAdditionalProjects: UserProject[] = [];
 
-const memberAdditionalProjects: UserProject[] = [
-  {
-    no: "2026-033",
-    name: "원부자재 인증서 확인 Agent",
-    stage: 1,
-    status: "내 작성 필요",
-    tone: "orange",
-    progress: 12,
-    owner: "김지은",
-    handler: "AI활성화팀 허정환 담당자",
-    updated: "어제 16:42",
-    nextAction: "대안 비교와 기대효과를 작성하고 FEA를 완료하세요",
-    description:
-      "현업 인터뷰를 마쳤으며 타당성 평가서[FEA]의 대안 비교와 기대효과 보완이 필요합니다.",
-    journeyStep: 1,
-    nextGate: "G1 착수 승인",
-    teamOwner: "AI활성화팀 허정환 담당자",
-    dueDate: "2026.08.18",
-    requestedDate: "2026.09.10",
-    committedDate: "G2 승인 후 확정",
-    scheduleState: "13일 지연 · 오늘 조치 필요",
-    checkpoints: "3/11",
-    route: "intake" as View,
-  },
-  {
-    no: "2026-011",
-    name: "QMS 품질 가이드",
-    stage: 6,
-    status: "AI활성화팀 진행 중",
-    tone: "green",
-    progress: 100,
-    owner: "윤지호",
-    handler: "AI활성화팀 허정환 담당자",
-    updated: "8.28 09:20",
-    nextAction: "9월 지식 최신성 점검을 준비하세요",
-    description:
-      "운영 전환이 완료되어 월간 OPS 점검과 지식 최신성 확인을 관리합니다.",
-    journeyStep: 9,
-    nextGate: "정기 재평가",
-    teamOwner: "AI활성화팀 허정환 담당자",
-    dueDate: "2026.09.05",
-    requestedDate: "2026.07.31",
-    committedDate: "2026.08.07",
-    scheduleState: "운영 정상",
-    checkpoints: "16/16",
-    route: "operations" as View,
-  },
-  {
-    no: "2026-018",
-    name: "해외 출장기안 지원 Agent",
-    stage: 4,
-    status: "리뷰 요청",
-    tone: "violet",
-    progress: 91,
-    owner: "김도윤",
-    handler: "AI활성화팀 이재승 개발 담당",
-    updated: "오늘 09:40",
-    nextAction: "EVR·DEP 근거를 검토하고 G3 리뷰 의견을 남기세요",
-    description:
-      "동료 리뷰어로 배정되어 요구 접수부터 현재 G3까지의 전체 이력을 조회할 수 있습니다.",
-    journeyStep: 6,
-    nextGate: "G3 배포 승인",
-    teamOwner: "AI활성화팀 이재승 개발 담당 · 리뷰어 허정환",
-    dueDate: "2026.09.02",
-    requestedDate: "2026.09.05",
-    committedDate: "2026.09.02",
-    scheduleState: "리뷰 D-2",
-    checkpoints: "13/16",
-    route: "delivery" as View,
-  },
-];
-
-const generalUserOwnerProjects: UserProject[] = [
-  {
-    no: "2026-006",
-    name: "구매요청 자동화 Flow",
-    stage: 6,
-    status: "운영 중",
-    tone: "green",
-    progress: 100,
-    owner: "김현우",
-    handler: "AI활성화팀 이재승 운영 담당",
-    updated: "8.29 14:20",
-    nextAction: "운영 성과를 확인하고 Agent Gallery 등록을 신청하세요",
-    description:
-      "G4 확산 승인과 운영 인수인계가 완료되어 Gallery 등록 심사를 신청할 수 있습니다.",
-    journeyStep: 9,
-    nextGate: "정기 재평가",
-    teamOwner: "AI활성화팀 이재승 운영 담당",
-    dueDate: "2026.08.28",
-    requestedDate: "2026.08.31",
-    committedDate: "2026.08.28",
-    scheduleState: "운영 정상",
-    checkpoints: "16/16",
-    route: "operations" as View,
-  },
-  {
-    no: "2026-024",
-    name: "구매계약 검토 Agent",
-    stage: 2,
-    status: "Owner 검토 필요",
-    tone: "orange",
-    progress: 34,
-    owner: "김민지",
-    handler: "AI활성화팀 이재승 개발 담당",
-    updated: "오늘 11:05",
-    nextAction: "ARD의 업무 범위와 운영 책임을 확인하세요",
-    description:
-      "프로젝트 Owner로 배정되어 요구 접수 이후 전체 이력과 현재 요구 정의 내용을 조회할 수 있습니다.",
-    journeyStep: 3,
-    nextGate: "G2 개발 착수",
-    teamOwner: "AI활성화팀 이재승 개발 담당",
-    dueDate: "2026.09.25",
-    requestedDate: "2026.09.30",
-    committedDate: "2026.09.25",
-    scheduleState: "일정대로 진행",
-    checkpoints: "5/13",
-    route: "definition" as View,
-  },
-  {
-    no: "2026-026",
-    name: "SAP 사용자 가이드 Agent",
-    stage: 2,
-    status: "Owner 검토 필요",
-    tone: "cyan",
-    progress: 24,
-    owner: "박수현",
-    handler: "AI활성화팀 김서연 개발 담당",
-    updated: "어제 17:30",
-    nextAction: "ARD 보완 내용과 운영 책임자를 확인하세요",
-    description:
-      "프로젝트 Owner로서 범위·성공 기준·지식 갱신 책임을 조회합니다.",
-    journeyStep: 3,
-    nextGate: "G2 개발 착수",
-    teamOwner: "AI활성화팀 김서연 개발 담당",
-    dueDate: "2026.10.02",
-    requestedDate: "2026.10.10",
-    committedDate: "2026.10.02",
-    scheduleState: "보완 진행 중",
-    checkpoints: "4/13",
-    route: "definition" as View,
-  },
-];
+const generalUserOwnerProjects: UserProject[] = [];
 
 const lifecycleOutputs = [
   {
@@ -646,48 +371,18 @@ const lifecycleOutputs = [
   },
 ];
 
-const agents = [
-  {
-    icon: "↗",
-    name: "출장 규정 도우미",
-    desc: "출장 규정 검색부터 비용 한도 계산까지 지원합니다.",
-    category: "경영지원",
-    users: "1.2k",
-    rating: "4.8",
-    tag: "전사 공개",
-    tone: "orange",
-  },
-  {
-    icon: "◎",
-    name: "QMS 품질 가이드",
-    desc: "품질 매뉴얼과 과거 이슈를 바탕으로 점검 항목을 안내합니다.",
-    category: "품질",
-    users: "486",
-    rating: "4.6",
-    tag: "승인 필요",
-    tone: "blue",
-  },
-  {
-    icon: "文",
-    name: "Outlook 번역 Agent",
-    desc: "메일의 맥락을 유지하며 한·영·베 번역 초안을 만듭니다.",
-    category: "생산성",
-    users: "892",
-    rating: "4.7",
-    tag: "즉시 사용",
-    tone: "purple",
-  },
-  {
-    icon: "▤",
-    name: "SAP 전환 가이드",
-    desc: "S/4HANA 용어와 전환 매뉴얼을 쉽고 빠르게 찾아줍니다.",
-    category: "IT",
-    users: "338",
-    rating: "4.5",
-    tag: "지정 사용자",
-    tone: "green",
-  },
-];
+type GalleryAgent = {
+  icon: string;
+  name: string;
+  desc: string;
+  category: string;
+  users: string;
+  rating: string;
+  tag: string;
+  tone: string;
+};
+
+const agents: GalleryAgent[] = [];
 
 type GallerySource = "OPERATIONS" | "PERSONAL";
 type GalleryReviewStatus =
@@ -731,58 +426,21 @@ type GalleryApplication = {
   reviewerNote?: string;
 };
 
-const initialGalleryApplications: GalleryApplication[] = [
-  {
-    id: "GAL-2026-014",
-    source: "OPERATIONS",
-    projectNo: "2026-014",
-    name: "샘플 발송 현황 알림 Agent",
-    description: "샘플 발송 상태를 모니터링하고 담당자에게 지연 위험을 알립니다.",
-    platform: "Power Automate",
-    artifactType: "자동화 Flow",
-    category: "생산성",
-    accessUrl: "https://make.powerautomate.com/",
-    targetUsers: "샘플 운영 담당자",
-    dataClass: "사내",
-    supportOwner: "샘플운영팀 이민지",
-    applicant: "김현우 · Project Owner",
-    submittedAt: "2026.08.29 10:15",
-    status: "IN_REVIEW",
-    evidence: ["G4 확산 승인 완료", "DEP 9/9 충족", "UG 작성 완료", "OPS 운영 담당 지정"],
-  },
-  {
-    id: "GAL-2026-015",
-    source: "PERSONAL",
-    name: "회의 준비 Copilot",
-    description: "회의 안건과 참석자 정보를 바탕으로 사전 브리핑 초안을 만듭니다.",
-    platform: "Copilot Studio",
-    artifactType: "Agent",
-    category: "생산성",
-    accessUrl: "https://copilotstudio.microsoft.com/",
-    targetUsers: "기획팀",
-    dataClass: "사내",
-    supportOwner: "기획팀 박서연",
-    applicant: "김현우 · 일반 User",
-    submittedAt: "2026.08.28 16:40",
-    status: "CHANGES_REQUESTED",
-    evidence: ["사용 화면 링크", "사용자 가이드 초안", "데이터 처리 확인서"],
-    reviewerNote: "Out of Scope와 오류 신고 채널을 사용자 가이드에 보완해 주세요.",
-  },
-];
+const initialGalleryApplications: GalleryApplication[] = [];
 
 const gates = [
   { code: "G1", label: "착수 승인", count: 0, meta: "팀장 승인", tone: "blue" },
   {
     code: "G2",
     label: "개발 착수",
-    count: 2,
+    count: 0,
     meta: "3자 서명",
     tone: "violet",
   },
   {
     code: "G3",
     label: "배포 승인",
-    count: 1,
+    count: 0,
     meta: "평가 근거 필수",
     tone: "orange",
   },
@@ -795,32 +453,16 @@ const gates = [
   },
 ];
 
-const approvalQueue = [
-  {
-    project: projects[0],
-    gate: "G3",
-    condition: "EVR·DEP 9/9 충족",
-    progress: 100,
-    approvers: "리뷰어·정보보호·팀장",
-    requested: "8.27",
-  },
-  {
-    project: projects[2],
-    gate: "G2",
-    condition: "3자 중 2명 서명",
-    progress: 67,
-    approvers: "요구자·개발 담당·팀장",
-    requested: "8.26",
-  },
-  {
-    project: projects[3],
-    gate: "G2",
-    condition: "ARD 보완 후 재상신",
-    progress: 82,
-    approvers: "요구자·개발 담당·팀장",
-    requested: "8.25",
-  },
-] as const;
+type ApprovalQueueItem = {
+  project: ProjectSummary;
+  gate: string;
+  condition: string;
+  progress: number;
+  approvers: string;
+  requested: string;
+};
+
+const approvalQueue: ApprovalQueueItem[] = [];
 
 type TeamRequirement = {
   id: string;
@@ -839,200 +481,7 @@ type TeamRequirement = {
   received: string;
 };
 
-const teamRequirements: TeamRequirement[] = [
-  {
-    id: "2026-034",
-    title: "생산계획 변경 영향 분석 Agent",
-    requestTeam: "생산관리팀",
-    requester: "정수민",
-    assignee: "미배정",
-    status: "신규 접수",
-    stage: "접수 검토",
-    progress: 6,
-    startDay: 12,
-    dueDay: 15,
-    priority: "높음",
-    risk: "확인 필요",
-    nextAction: "PIC 배정 · FEA 인터뷰 예약",
-    received: "오늘 09:18",
-  },
-  {
-    id: "2026-033",
-    title: "원부자재 인증서 확인 Agent",
-    requestTeam: "구매팀",
-    requester: "김지은",
-    assignee: "허정환",
-    status: "신규 접수",
-    stage: "타당성 평가",
-    progress: 12,
-    startDay: 11,
-    dueDay: 18,
-    priority: "보통",
-    risk: "지연 위험",
-    nextAction: "대안 비교와 기대효과 확인",
-    received: "어제 16:42",
-  },
-  {
-    id: "2026-032",
-    title: "개발 BOM 변경 영향 분석 Agent",
-    requestTeam: "개발1팀",
-    requester: "김현우",
-    assignee: "정지헌",
-    status: "신규 접수",
-    stage: "접수 보완",
-    progress: 18,
-    startDay: 10,
-    dueDay: 18,
-    priority: "높음",
-    risk: "지연 위험",
-    nextAction: "필수 질문 2건 답변 요청",
-    received: "8.10 10:24",
-  },
-  {
-    id: "2026-028",
-    title: "출장 규정 문의 Agent",
-    requestTeam: "경영지원팀",
-    requester: "김현우",
-    assignee: "허정환",
-    status: "진행 중",
-    stage: "요구 정의",
-    progress: 38,
-    startDay: 3,
-    dueDay: 22,
-    priority: "보통",
-    risk: "정상",
-    nextAction: "ARD 성공 기준 합의",
-    received: "8.03",
-  },
-  {
-    id: "2026-026",
-    title: "SAP 사용자 가이드 Agent",
-    requestTeam: "IT혁신팀",
-    requester: "최준호",
-    assignee: "허시영",
-    status: "진행 중",
-    stage: "G2 준비",
-    progress: 44,
-    startDay: 1,
-    dueDay: 20,
-    priority: "높음",
-    risk: "확인 필요",
-    nextAction: "평가셋과 Out of Scope 보완",
-    received: "8.01",
-  },
-  {
-    id: "2026-024",
-    title: "구매계약 검토 Agent",
-    requestTeam: "구매팀",
-    requester: "박지수",
-    assignee: "이재승",
-    status: "진행 중",
-    stage: "G2 서명",
-    progress: 52,
-    startDay: 1,
-    dueDay: 17,
-    priority: "높음",
-    risk: "지연 위험",
-    nextAction: "개발 담당자 서명 재알림",
-    received: "7.28",
-  },
-  {
-    id: "2026-021",
-    title: "생산 품질 이슈 분석 Agent",
-    requestTeam: "품질혁신팀",
-    requester: "박서연",
-    assignee: "허정환",
-    status: "진행 중",
-    stage: "평가 진행",
-    progress: 68,
-    startDay: 1,
-    dueDay: 29,
-    priority: "높음",
-    risk: "정상",
-    nextAction: "실패 사례 12건 회귀 평가",
-    received: "7.24",
-  },
-  {
-    id: "2026-018",
-    title: "해외 출장기안 지원 Agent",
-    requestTeam: "경영지원팀",
-    requester: "오세훈",
-    assignee: "최병두",
-    status: "진행 중",
-    stage: "G3 승인",
-    progress: 76,
-    startDay: 1,
-    dueDay: 16,
-    priority: "높음",
-    risk: "확인 필요",
-    nextAction: "EVR 근거와 금칙 위반 확인",
-    received: "7.18",
-  },
-  {
-    id: "2026-014",
-    title: "샘플 발송 현황 알림 Agent",
-    requestTeam: "영업지원팀",
-    requester: "이민지",
-    assignee: "이민지",
-    status: "진행 중",
-    stage: "파일럿",
-    progress: 88,
-    startDay: 5,
-    dueDay: 21,
-    priority: "보통",
-    risk: "정상",
-    nextAction: "파일럿 의견 취합 · G4 준비",
-    received: "7.10",
-  },
-  {
-    id: "2026-011",
-    title: "QMS 품질 가이드",
-    requestTeam: "품질혁신팀",
-    requester: "윤지호",
-    assignee: "허정환",
-    status: "완료",
-    stage: "운영 전환",
-    progress: 100,
-    startDay: 1,
-    dueDay: 7,
-    priority: "보통",
-    risk: "정상",
-    nextAction: "9월 지식 최신성 점검",
-    received: "6.21",
-  },
-  {
-    id: "2026-008",
-    title: "Outlook 번역 Agent",
-    requestTeam: "글로벌사업팀",
-    requester: "레티투",
-    assignee: "황수정",
-    status: "완료",
-    stage: "운영",
-    progress: 100,
-    startDay: 1,
-    dueDay: 5,
-    priority: "보통",
-    risk: "정상",
-    nextAction: "월간 사용량 확인",
-    received: "6.12",
-  },
-  {
-    id: "2026-005",
-    title: "회의록 Action Item Agent",
-    requestTeam: "전략기획팀",
-    requester: "이서진",
-    assignee: "이재승",
-    status: "완료",
-    stage: "운영",
-    progress: 100,
-    startDay: 1,
-    dueDay: 3,
-    priority: "보통",
-    risk: "정상",
-    nextAction: "분기 재평가 예정",
-    received: "5.28",
-  },
-];
+const teamRequirements: TeamRequirement[] = [];
 
 const aiTeamMembers = [
   "최병두",
@@ -1134,6 +583,27 @@ function Progress({ value }: { value: number }) {
   );
 }
 
+function EmptyDataPage({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="page empty-data-page">
+      <section className="panel approval-empty-state">
+        <ClipboardText size={32} weight="duotone" />
+        <b>{title}</b>
+        <span>{description}</span>
+        {action}
+      </section>
+    </div>
+  );
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("home");
   const [role, setRole] = useState<AccountRole>(ACCOUNT_ROLES.user);
@@ -1165,6 +635,16 @@ export default function Home() {
 
   useEffect(() => {
     try {
+      const cleanDataVersion = "production-empty-v1";
+      if (window.localStorage.getItem("agent-portal-data-version") !== cleanDataVersion) {
+        [
+          "agent-portal-submitted-projects",
+          "agent-portal-deleted-projects",
+          "agent-portal-project-overrides",
+          "agent-portal-gallery-applications",
+        ].forEach((key) => window.localStorage.removeItem(key));
+        window.localStorage.setItem("agent-portal-data-version", cleanDataVersion);
+      }
       const saved = window.localStorage.getItem(
         "agent-portal-submitted-projects",
       );
@@ -1435,78 +915,13 @@ export default function Home() {
     go(next);
   };
 
-  const notifications =
-    role === ACCOUNT_ROLES.leader
-      ? [
-          {
-            projectNo: "2026-033",
-            title: "FEA 작성·G1 판정 준비",
-            body: "타당성 근거를 확인하고 완료 후 추진 여부와 개발 담당자를 확정하세요.",
-            view: "intake" as View,
-            tone: "danger",
-          },
-          {
-            projectNo: "2026-028",
-            title: "G2 보완 현황 확인",
-            body: "ARD 보완 내용과 3자 재승인 준비 상태를 확인하세요.",
-            view: "definition" as View,
-            tone: "warning",
-          },
-          {
-            projectNo: "2026-018",
-            title: "G3 최종 승인 대기",
-            body: "동료 리뷰와 정보보호 확인을 검토한 뒤 배포 여부를 결정하세요.",
-            view: "delivery" as View,
-            tone: "warning",
-          },
-        ]
-      : role === ACCOUNT_ROLES.member
-        ? [
-        {
-          projectNo: "2026-033",
-          title: "FEA 보완 · 13일 지연",
-          body: "대안 비교와 기대효과를 오늘 완료해야 합니다.",
-          view: "intake" as View,
-          tone: "danger",
-        },
-        {
-          projectNo: "2026-028",
-          title: "G2 보완 요청",
-          body: "ARD의 범위와 평가 기준을 보완한 뒤 재상신하세요.",
-          view: "definition" as View,
-          tone: "warning",
-        },
-        {
-          projectNo: "2026-021",
-          title: "회귀 평가 필요",
-          body: "EVR 실패 사례 12건의 원인과 조치를 확인하세요.",
-          view: "delivery" as View,
-          tone: "info",
-        },
-        {
-          projectNo: "2026-018",
-          title: "G3 동료 리뷰 배정",
-          body: "EVR·DEP와 프로젝트 전체 이력을 확인하고 독립 리뷰를 기록하세요.",
-          view: "delivery" as View,
-          tone: "warning",
-        },
-        {
-          projectNo: "2026-011",
-          title: "운영 점검 예정",
-          body: "9월 지식 최신성 점검이 5일 남았습니다.",
-          view: "operations" as View,
-          tone: "neutral",
-        },
-          ]
-        : [
-            {
-              projectNo: "2026-028",
-              title: "G2 보완 상태가 업데이트되었습니다",
-              body: "ARD 보완 내용과 승인 현황을 확인하세요.",
-              view: "definition" as View,
-              tone: "warning",
-            },
-          ];
+  const notifications: {
+    projectNo: string;
+    title: string;
+    body: string;
+    view: View;
+    tone: string;
+  }[] = [];
 
   const openHub = (project?: (typeof projects)[0]) => {
     setHubProject(project || null);
@@ -1532,7 +947,7 @@ export default function Home() {
     projectOwner: string,
   ) => {
     setSubmittedProjects((current) => {
-      const sequence = String(32 + current.length).padStart(3, "0");
+      const sequence = String(current.length + 1).padStart(3, "0");
       const project: UserProject = {
         no: `2026-${sequence}`,
         name: title,
@@ -1604,7 +1019,7 @@ export default function Home() {
                       : item.label}
                   </span>
                   {item.id === "teamboard" && role.includes("AI활성화팀") && (
-                    <em className="team-nav-count">3</em>
+                    <em className="team-nav-count">{teamRequirements.length}</em>
                   )}
                   {item.id === "governance" && role === ACCOUNT_ROLES.admin && (
                     <em>{approvalQueue.length}</em>
@@ -1750,12 +1165,18 @@ export default function Home() {
             notify={notify}
           />
         )}
-        {view === "teamboard" && role.includes("AI활성화팀") && (
-          <LegacyTeamWorkspaceDashboard
-            setView={go}
-            openWorkflow={openWorkflow}
-          />
-        )}
+        {view === "teamboard" && role.includes("AI활성화팀") &&
+          (teamRequirements.length > 0 ? (
+            <LegacyTeamWorkspaceDashboard
+              setView={go}
+              openWorkflow={openWorkflow}
+            />
+          ) : (
+            <EmptyDataPage
+              title="등록된 Agent 과제가 없습니다."
+              description="새 Agent 과제가 접수되면 담당자별 진행 현황과 지연 위험이 여기에 표시됩니다."
+            />
+          ))}
         {view === "intake" && (
           <IntakeFeasibility
             role={role}
@@ -1780,13 +1201,19 @@ export default function Home() {
             projectNo={workflowTarget}
           />
         )}
-        {view === "operations" && (
-          <OperationsImprovement
-            role={role}
-            notify={notify}
-            openGallerySubmission={openGallerySubmission}
-          />
-        )}
+        {view === "operations" &&
+          (adminProjectItems.some((project) => project.journeyStep >= 9) ? (
+            <OperationsImprovement
+              role={role}
+              notify={notify}
+              openGallerySubmission={openGallerySubmission}
+            />
+          ) : (
+            <EmptyDataPage
+              title="운영 중인 Agent가 없습니다."
+              description="G4 확산 승인을 통과한 Agent의 운영 대장과 개선 이력이 여기에 표시됩니다."
+            />
+          ))}
         {view === "hub" && (
           <ProjectsHub
             selected={hubProject}
@@ -2005,14 +1432,7 @@ function Dashboard({
 }) {
   const baseProjectItems =
     role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.leader
-      ? [
-          memberAdditionalProjects[0],
-          ...userProjectItems.filter((project) =>
-            ["2026-028", "2026-021", "2026-014"].includes(project.no),
-          ),
-          memberAdditionalProjects[2],
-          memberAdditionalProjects[1],
-        ]
+      ? userProjectItems
       : userProjectItems;
   const targetRequirement = teamRequirements.find(
     (project) => project.id === projectNo,
@@ -3094,24 +2514,17 @@ function HomeFeasibilityEditor({
   const [summary, setSummary] = useState(
     `${project.description} 현업 인터뷰를 통해 현재 업무량과 기대 결과를 확인하고 있습니다.`,
   );
-  const [alternatives, setAlternatives] = useState([
-    "규정 정비만으로 분산 자료의 수집·대조 업무를 해소하기 어렵습니다.",
-    "기존 시스템은 원문 판독과 조건별 비교·근거 추적을 지원하지 않습니다.",
-    "비정형 문서와 변경 규칙이 많아 매크로를 안정적으로 유지하기 어렵습니다.",
-    "단순 챗은 승인 데이터 접근·버전 통제·감사 추적을 보장할 수 없습니다.",
-  ]);
-  const [conclusion, setConclusion] = useState(
-    "네 가지 저비용 대안만으로는 근거가 포함된 일관된 결과를 만들기 어려워, 읽기 전용 연동과 사람의 최종 확인을 포함한 Agent 개발이 타당합니다.",
-  );
-  const [fitGrades, setFitGrades] = useState(["상", "중", "중", "상", "상"]);
-  const [countPerMonth, setCountPerMonth] = useState("60");
-  const [asIsMinutes, setAsIsMinutes] = useState("18");
-  const [people, setPeople] = useState("1");
+  const [alternatives, setAlternatives] = useState(["", "", "", ""]);
+  const [conclusion, setConclusion] = useState("");
+  const [fitGrades, setFitGrades] = useState(["미평가", "미평가", "미평가", "미평가", "미평가"]);
+  const [countPerMonth, setCountPerMonth] = useState("");
+  const [asIsMinutes, setAsIsMinutes] = useState("");
+  const [people, setPeople] = useState("");
   const [toBeMinutes, setToBeMinutes] = useState("");
   const [writeExec, setWriteExec] = useState(false);
-  const [sensitive, setSensitive] = useState(true);
+  const [sensitive, setSensitive] = useState(false);
   const [scope, setScope] = useState("COMPANY");
-  const [damageFinancial, setDamageFinancial] = useState(true);
+  const [damageFinancial, setDamageFinancial] = useState(false);
   const [autonomy, setAutonomy] = useState("L0");
   const [saveState, setSaveState] = useState("자동 저장됨");
   const [completionMessage, setCompletionMessage] = useState("");
@@ -3204,14 +2617,14 @@ function HomeFeasibilityEditor({
           </article>
           <article>
             <small>Agent 유형 판정</small>
-            <strong>혼합형</strong>
-            <p>규칙 대조 + 비정형 문서 해석</p>
+            <strong>미확정</strong>
+            <p>인터뷰와 위험 항목 입력 후 확정</p>
             <span>표준체계 0.4절</span>
           </article>
           <article>
             <small>자율성 정합성</small>
-            <strong>{autonomy} · 정합</strong>
-            <p>정보 제공·초안 작성 후 사람 검토</p>
+            <strong>{autonomy} · 초안</strong>
+            <p>요구 정의 단계에서 근거와 함께 확정</p>
             <span>자율성-트랙 기준표</span>
           </article>
           <article className="recommendation">
@@ -3231,7 +2644,7 @@ function HomeFeasibilityEditor({
 
       <div className="home-fea-form-grid">
         <section>
-          <header><span>01</span><div><b>요구 요약</b><small>접수서 핵심 내용을 3줄로 요약</small></div><Pill tone="green">완료</Pill></header>
+          <header><span>01</span><div><b>요구 요약</b><small>접수서 핵심 내용을 3줄로 요약</small></div><Pill tone="orange">작성 중</Pill></header>
           <textarea value={summary} onChange={(event) => setSummary(event.target.value)} />
         </section>
         <section>
@@ -3239,7 +2652,7 @@ function HomeFeasibilityEditor({
           <div className="home-fea-alternatives">
             {alternativeLabels.map((label, index) => (
               <label key={label}>
-                <input type="checkbox" checked readOnly />
+                <input type="checkbox" checked={Boolean(alternatives[index].trim())} readOnly />
                 <span><b>{label}</b><input value={alternatives[index]} onChange={(event) => updateAlternative(index, event.target.value)} /></span>
               </label>
             ))}
@@ -3247,10 +2660,10 @@ function HomeFeasibilityEditor({
           <label className="home-fea-conclusion"><span>에이전트 개발이 타당한 이유</span><textarea value={conclusion} onChange={(event) => setConclusion(event.target.value)} /></label>
         </section>
         <section>
-          <header><span>03</span><div><b>에이전트 적합성 진단</b><small>5개 기준을 상·중·하로 판단</small></div><Pill tone="green">적합</Pill></header>
+          <header><span>03</span><div><b>에이전트 적합성 진단</b><small>5개 기준을 상·중·하로 판단</small></div><Pill tone="orange">미평가</Pill></header>
           <div className="home-fea-fit">
             {fitLabels.map((label, index) => (
-              <label key={label}><span>{label}</span><select value={fitGrades[index]} onChange={(event) => setFitGrades((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}><option>상</option><option>중</option><option>하</option></select><input defaultValue={`${label} 판단 근거를 인터뷰 내용으로 기록`} /></label>
+              <label key={label}><span>{label}</span><select value={fitGrades[index]} onChange={(event) => setFitGrades((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}><option>미평가</option><option>상</option><option>중</option><option>하</option></select><input placeholder="인터뷰를 바탕으로 판단 근거 입력" /></label>
             ))}
           </div>
         </section>
@@ -6501,26 +5914,44 @@ function UserDashboard({
     },
   ]);
   useEffect(() => {
+    if (projectItems.length === 0) {
+      // Keep the master-detail selection stable while the production dataset is empty.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelected(0);
+      setSelectedJourney(0);
+      return;
+    }
     const targetIndex = projectNo
       ? projectItems.findIndex((project) => project.no === projectNo)
       : -1;
-    const nextIndex =
-      targetIndex >= 0
-        ? targetIndex
-        : isAiTeam
-          ? Math.max(
-              0,
-              projectItems.findIndex((project) => project.no === "2026-033"),
-            )
-          : 0;
+    const nextIndex = targetIndex >= 0 ? targetIndex : 0;
     // Synchronize an externally selected project with the local master-detail view.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(nextIndex);
     setSelectedJourney(projectItems[nextIndex].journeyStep);
     // projectItems is rebuilt by the role filter; its length and projectNo are
     // the stable synchronization inputs for this master-detail selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAiTeam, role, projectNo, projectItems.length]);
+
+  if (projectItems.length === 0) {
+    return (
+      <EmptyDataPage
+        title={isAiTeam ? "현재 배정된 Agent 과제가 없습니다." : "등록된 Agent 과제가 없습니다."}
+        description={
+          isAiTeam
+            ? "새 과제가 접수되거나 담당·리뷰 역할이 배정되면 이 화면에서 전체 이력을 확인할 수 있습니다."
+            : "첫 Agent 과제를 요청하면 접수부터 운영까지 진행 상태가 이 화면에 표시됩니다."
+        }
+        action={
+          !isAiTeam ? (
+            <button className="primary" onClick={openNewRequest}>
+              <Plus size={17} weight="bold" /> 새 Agent 과제 요청
+            </button>
+          ) : undefined
+        }
+      />
+    );
+  }
   const current = projectItems[selected] || projectItems[0];
   const canDeleteCurrent =
     role === ACCOUNT_ROLES.user && current.journeyStep === 0;
@@ -6564,11 +5995,7 @@ function UserDashboard({
           ? "승인 대기"
           : "진행 중"
         : "생성 전";
-  const assignedProjects = isLeader
-    ? projectItems
-    : isAiTeamMember
-      ? projectItems.filter((project) => hasProjectRelationship(role, project.no))
-      : projectItems;
+  const assignedProjects = projectItems;
   const visible = assignedProjects.filter(
     (project) =>
       filter === "전체" ||
@@ -13485,7 +12912,7 @@ function Gallery({
                 ? "PostgreSQL 연결"
                 : databaseStatus === "checking"
                   ? "DB 확인 중"
-                  : "목업 데이터"}
+                  : "브라우저 임시 저장"}
             </span>
             {role !== ACCOUNT_ROLES.admin && (
               <button className="gallery-submit-button" onClick={startPersonalSubmission}>
@@ -13555,6 +12982,13 @@ function Gallery({
             <select><option>추천순</option><option>사용자순</option><option>평점순</option></select>
           </div>
           <section className="agent-grid">
+            {catalog.length === 0 && (
+              <div className="gallery-empty-state">
+                <FileText size={29} weight="duotone" />
+                <b>등록된 Agent가 없습니다.</b>
+                <span>검토와 최종 승인을 마친 Agent가 여기에 공개됩니다.</span>
+              </div>
+            )}
             {catalog.map((a) => (
               <article className="agent-card" key={a.name}>
                 <div className={`agent-art ${a.tone}`}><span>{a.icon}</span><Pill tone="white">{a.tag}</Pill></div>
@@ -13573,6 +13007,13 @@ function Gallery({
         <section className="gallery-applications-panel">
           <header><div><h2>{isTeam ? "Agent 등록 신청" : "내 Agent 등록 신청"}</h2><p>{isTeam ? "본인 제작 또는 대리 등록 신청과 검토 상태를 함께 확인합니다." : "접수부터 보완, 등록 완료까지 진행 상태를 확인합니다."}</p></div><button className="primary" onClick={startPersonalSubmission}>＋ {isTeam ? "Agent 올리기" : "내 Agent 올리기"}</button></header>
           <div className="gallery-application-list">
+            {applications.length === 0 && (
+              <div className="gallery-empty-state">
+                <ClipboardText size={28} weight="duotone" />
+                <b>등록 신청 내역이 없습니다.</b>
+                <span>Agent 올리기를 눌러 첫 등록 신청을 시작할 수 있습니다.</span>
+              </div>
+            )}
             {applications.map((application) => (
               <article key={application.id}>
                 <div className="application-source"><Pill tone={application.source === "OPERATIONS" ? "green" : "blue"}>{application.source === "OPERATIONS" ? "운영 승인 경로" : "개인 제작 경로"}</Pill><small>{application.id}</small></div>
@@ -13590,6 +13031,12 @@ function Gallery({
         <section className="gallery-review-workspace">
           <aside className="gallery-review-queue">
             <header><h2>등록 검토 큐</h2><Pill tone="orange">{applications.filter((item) => item.status !== "PUBLISHED").length}건</Pill></header>
+            {applications.length === 0 && (
+              <div className="gallery-empty-state compact">
+                <CheckCircle size={25} weight="duotone" />
+                <b>검토 대기 신청이 없습니다.</b>
+              </div>
+            )}
             {applications.map((application) => (
               <button key={application.id} className={selectedApplication?.id === application.id ? "active" : ""} onClick={() => setSelectedApplicationId(application.id)}>
                 <span><Pill tone={application.source === "OPERATIONS" ? "green" : "blue"}>{application.source === "OPERATIONS" ? "운영" : "개인"}</Pill><small>{application.id}</small></span>
@@ -13701,12 +13148,7 @@ function Governance({
     dueDate: "",
     nextAction: "",
   });
-  const accounts = [
-    ["최병두", "choi.bd@changshininc.com", "AI 활성화팀 팀장", "전 과제 감독·게이트 승인", "Entra 그룹", "활성"],
-    ["허정환", "heo.jh@changshininc.com", "AI 활성화팀 팀원", "개발 3 · 리뷰 2 · 운영 1", "Entra 그룹", "활성"],
-    ["김현우", "kim.hw@changshininc.com", "일반 User", "요청자 4 · Owner 3", "기본 역할", "활성"],
-    ["Portal Admin", "portal.admin@changshininc.com", "admin", "계정·정책·감사 관리", "보안 그룹", "활성"],
-  ];
+  const accounts: string[][] = [];
   void onDetail;
   void selectedGate;
   void onGateChange;
@@ -13763,8 +13205,8 @@ function Governance({
       <section className="governance-summary">
         <div>
           <p>등록 MS 계정</p>
-          <strong>128</strong>
-          <small>활성 125 · 잠금 3</small>
+          <strong>{accounts.length}</strong>
+          <small>DB 계정 연동 후 표시</small>
         </div>
         <div>
           <p>계정 역할</p>
@@ -13773,13 +13215,13 @@ function Governance({
         </div>
         <div>
           <p>프로젝트 배정</p>
-          <strong>186</strong>
-          <small>요청·Owner·개발·리뷰·운영</small>
+          <strong>{adminProjects.length}</strong>
+          <small>등록된 Agent 과제 기준</small>
         </div>
         <div>
           <p>권한 검토 필요</p>
-          <strong>3</strong>
-          <small>퇴직·조직이동·장기 미사용</small>
+          <strong>0</strong>
+          <small>검토 대상 없음</small>
         </div>
       </section>
       <section className="panel admin-panel">
@@ -13799,10 +13241,10 @@ function Governance({
           <div className="admin-content">
             <div className="filter-row">
               <div>
-                <button className="active">전체 128</button>
-                <button>AI팀 9</button>
-                <button>일반 User 115</button>
-                <button>admin 4</button>
+                <button className="active">전체 {accounts.length}</button>
+                <button>AI팀 0</button>
+                <button>일반 User 0</button>
+                <button>admin 0</button>
               </div>
               <label>
                 ⌕{" "}

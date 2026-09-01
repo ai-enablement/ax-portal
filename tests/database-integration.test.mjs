@@ -75,6 +75,6 @@ test("Gallery prefers PostgreSQL and clearly exposes fallback state", async () =
   assert.match(page, /fetch\("\/api\/database\/health"/);
   assert.match(page, /\/api\/database\/gallery\/applications/);
   assert.match(page, /PostgreSQL 연결/);
-  assert.match(page, /목업 데이터/);
+  assert.match(page, /브라우저 임시 저장/);
   assert.match(page, /setDatabaseStatus\("fallback"\)/);
 });

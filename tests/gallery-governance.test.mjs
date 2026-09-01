@@ -48,6 +48,16 @@ test("AI enablement roles can open governance and submit Gallery applications", 
   assert.match(page, /조회 전용/);
 });
 
+test("production UI starts without fixture projects or Gallery records", () => {
+  assert.match(page, /const projects: ProjectSummary\[\] = \[\]/);
+  assert.match(page, /const userProjects: UserProject\[\] = \[\]/);
+  assert.match(page, /const teamRequirements: TeamRequirement\[\] = \[\]/);
+  assert.match(page, /const agents: GalleryAgent\[\] = \[\]/);
+  assert.match(page, /const initialGalleryApplications: GalleryApplication\[\] = \[\]/);
+  assert.match(page, /production-empty-v1/);
+  assert.match(page, /등록된 Agent 과제가 없습니다/);
+});
+
 test("operations route exposes a gallery submission action after G4", () => {
   assert.match(page, /G4 최종 승인 · 운영 인수인계 완료/);
   assert.match(page, /Agent Gallery 등록 신청/);

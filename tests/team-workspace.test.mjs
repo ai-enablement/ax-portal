@@ -48,12 +48,12 @@ test("uses the same one-page home for leader and member with leader actions", ()
 });
 
 test("keeps gate approvals with the leader and system administration separate", () => {
-  assert.ok(page.includes("const approvalQueue"));
-  assert.ok(page.includes('gate: "G3"'));
-  assert.ok(page.includes('gate: "G2"'));
+  assert.ok(page.includes("const approvalQueue: ApprovalQueueItem[] = []"));
+  assert.ok(page.includes('code: "G3"'));
+  assert.ok(page.includes('code: "G2"'));
   assert.ok(page.includes('role === ACCOUNT_ROLES.admin'));
   assert.ok(page.includes("MS 계정 역할, 프로젝트 권한 정책과 변경 감사 이력"));
-  assert.ok(page.includes("G1 0 · G2 2 · G3 1 · G4 0"));
+  assert.ok(page.includes("등록된 Agent 과제가 없습니다"));
 });
 
 test("uses four account roles and project-scoped assignments", () => {
@@ -67,8 +67,8 @@ test("uses four account roles and project-scoped assignments", () => {
     "OPERATOR",
   ])
     assert.ok(page.includes(`\"${relationship}\"`));
-  assert.ok(page.includes('"2026-018": { [ACCOUNT_ROLES.member]: ["REVIEWER"] }'));
-  assert.ok(page.includes("hasProjectRelationship(role, project.no)"));
+  assert.ok(page.includes("> = {};"));
+  assert.ok(page.includes("getProjectRelationships"));
 });
 
 test("keeps the standard lifecycle order and role ownership", () => {
