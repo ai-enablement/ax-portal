@@ -52,11 +52,12 @@ test("gallery database API uses parameterized queries and enforces role boundari
 });
 
 test("Azure Web App build and Hybrid Connection settings are present", async () => {
-  const [packageJson, nextConfig, azureSettings, azureGuide] = await Promise.all([
+  const [packageJson, nextConfig, azureSettings, azureGuide, workflow] = await Promise.all([
     read("package.json"),
     read("next.config.ts"),
     read("azure/app-settings.example.json"),
     read("azure/README.md"),
+    read(".github/workflows/main_ax-portal.yml"),
   ]);
 
   assert.match(packageJson, /"build": "next build"/);
@@ -67,6 +68,11 @@ test("Azure Web App build and Hybrid Connection settings are present", async () 
   assert.match(azureSettings, /"PGSSLMODE"/);
   assert.match(azureGuide, /Hybrid Connection/);
   assert.match(azureGuide, /localhost.*127\.0\.0\.1/);
+  assert.match(workflow, /\.next\/standalone/);
+  assert.match(workflow, /include-hidden-files: true/);
+  assert.match(workflow, /rm -f deployment\/\.env/);
+  assert.match(workflow, /start:'node server\.js'/);
+  assert.match(workflow, /package: deployment/);
 });
 
 test("Gallery prefers PostgreSQL and clearly exposes fallback state", async () => {
