@@ -132,6 +132,17 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(css.includes(".deferred-document-card"));
 });
 
+test("assigns multiple registered developers while importing a historical project", () => {
+  assert.ok(page.includes("teamAccounts={teamAccounts}"));
+  assert.ok(page.includes("historicalDeveloperIds"));
+  assert.ok(page.includes("개발 담당자 지정"));
+  assert.ok(page.includes('type="checkbox"'));
+  assert.ok(page.includes("developerIds: historicalDeveloperIds"));
+  assert.ok(page.includes("developerNames"));
+  assert.ok(page.includes('account.appRole === "team_member" || account.appRole === "bts"'));
+  assert.ok(css.includes(".historical-developer-list"));
+});
+
 test("shows no completed or current lifecycle step when there are no projects", () => {
   assert.match(page, /const effectiveJourneyStep = !hasProjects\s*\? -1/);
   assert.ok(page.includes('title="선택된 Agent 과제가 없습니다."'));

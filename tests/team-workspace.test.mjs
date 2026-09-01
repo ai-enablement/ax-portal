@@ -10,6 +10,10 @@ const css = await readFile(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
+const compactCss = await readFile(
+  new URL("../app/team-dashboard-compact.css", import.meta.url),
+  "utf8",
+);
 
 test("keeps role navigation and home actions separated", () => {
   assert.ok(page.includes("role === ACCOUNT_ROLES.user"));
@@ -185,4 +189,12 @@ test("preserves the full-width readable visual baseline", () => {
   );
   assert.ok(css.includes("Global legibility scale"));
   assert.ok(css.includes("font-size: 35px !important"));
+});
+
+test("keeps workload names, totals, and table labels legible without overlap", () => {
+  assert.match(compactCss, /minmax\(190px, 1\.25fr\)/);
+  assert.match(compactCss, /minmax\(130px, 0\.8fr\)/);
+  assert.match(compactCss, /\.workload-person strong\s*\{[^}]*font-size: 14px !important/s);
+  assert.match(compactCss, /\.workload-head\s*\{[^}]*font-size: 11px !important/s);
+  assert.match(compactCss, /@media \(max-width: 1400px\)/);
 });

@@ -184,6 +184,8 @@ type UserProject = {
   intakeAnswers?: string[];
   requester?: string;
   projectOwner?: string;
+  developerIds?: string[];
+  developerNames?: string[];
   historicalImport?: boolean;
   documentsDeferred?: boolean;
 };
@@ -1118,6 +1120,7 @@ export default function Home() {
       historical: boolean;
       receivedDate: string;
       currentJourneyStep: number;
+      developerIds: string[];
     },
   ) => {
     setSubmittedProjects((current) => {
@@ -1131,6 +1134,17 @@ export default function Home() {
         current.filter((item) => item.no.startsWith(`${projectYear}-`)).length + 1,
       ).padStart(3, "0");
       const currentStage = userJourney[journeyStep];
+      const assignedDevelopers = historical
+        ? teamAccounts.filter((account) =>
+            (registration?.developerIds ?? []).includes(account.id),
+          )
+        : [];
+      const developerNames = assignedDevelopers.map(
+        (account) => account.displayName || account.email,
+      );
+      const developerLabel = developerNames.length
+        ? developerNames.join(" · ")
+        : "담당자 배정 필요";
       const stageNumber = userJourney
         .slice(0, journeyStep + 1)
         .filter((item) => item.kind === "stage").length;
@@ -1152,7 +1166,7 @@ export default function Home() {
           ? Math.round((journeyStep / (userJourney.length - 1)) * 100)
           : 22,
         owner: projectOwner,
-        handler: "담당자 배정 필요",
+        handler: developerLabel,
         updated: historical ? receivedDate : "방금",
         nextAction: historical
           ? `${currentStage.title} 후속 작업과 누락 문서 등록`
@@ -1163,7 +1177,7 @@ export default function Home() {
             : "에이전트 요구 접수서[INT] 제출이 완료되어 AI활성화팀의 타당성 평가를 기다리고 있습니다.",
         journeyStep,
         nextGate: historical ? currentStage.title : "G1 착수 승인",
-        teamOwner: "담당자 배정 필요",
+        teamOwner: developerLabel,
         dueDate: "FEA 작성 후 안내",
         requestedDate: answers[4] || "미입력",
         receivedDate,
@@ -1174,6 +1188,8 @@ export default function Home() {
         intakeAnswers: answers,
         requester,
         projectOwner,
+        developerIds: assignedDevelopers.map((account) => account.id),
+        developerNames,
         historicalImport: historical,
         documentsDeferred: historical,
       };
@@ -1486,6 +1502,7 @@ export default function Home() {
         <RequestWizard
           role={role}
           identity={identity}
+          teamAccounts={teamAccounts}
           step={requestStep}
           setStep={setRequestStep}
           close={() => {
@@ -13959,6 +13976,7 @@ function suggestRequestTitle(problem: string) {
 function RequestWizard({
   role,
   identity,
+  teamAccounts,
   step,
   setStep,
   close,
@@ -13966,6 +13984,7 @@ function RequestWizard({
 }: {
   role: AccountRole;
   identity: PortalIdentity | null;
+  teamAccounts: TeamAccount[];
   step: number;
   setStep: (n: number) => void;
   close: () => void;
@@ -13978,6 +13997,7 @@ function RequestWizard({
       historical: boolean;
       receivedDate: string;
       currentJourneyStep: number;
+      developerIds: string[];
     },
   ) => void;
 }) {
@@ -14010,6 +14030,7 @@ function RequestWizard({
   const [registrationMode, setRegistrationMode] = useState<"NEW" | "HISTORICAL">("NEW");
   const [receivedDate, setReceivedDate] = useState("");
   const [historicalJourneyStep, setHistoricalJourneyStep] = useState(0);
+  const [historicalDeveloperIds, setHistoricalDeveloperIds] = useState<string[]>([]);
   const [manualTitle, setManualTitle] = useState("");
   const [requesterName, setRequesterName] = useState("");
   const [requesterDepartment, setRequesterDepartment] = useState("");
@@ -14017,6 +14038,19 @@ function RequestWizard({
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
   const isHistorical = isAiTeam && registrationMode === "HISTORICAL";
+  const eligibleDevelopers = teamAccounts.filter(
+    (account) => account.appRole === "team_member" || account.appRole === "bts",
+  );
+  const selectedDevelopers = eligibleDevelopers.filter((account) =>
+    historicalDeveloperIds.includes(account.id),
+  );
+  const toggleHistoricalDeveloper = (accountId: string) => {
+    setHistoricalDeveloperIds((current) =>
+      current.includes(accountId)
+        ? current.filter((id) => id !== accountId)
+        : [...current, accountId],
+    );
+  };
   const resolvedRequester = isAiTeam
     ? requesterName.trim() && requesterDepartment.trim() && (isHistorical || requesterEmail.trim())
       ? [requesterName.trim(), requesterDepartment.trim(), requesterEmail.trim()]
@@ -14061,6 +14095,7 @@ function RequestWizard({
         historical: isHistorical,
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
+        developerIds: historicalDeveloperIds,
       },
     );
     close();
@@ -14178,6 +14213,13 @@ function RequestWizard({
               <p>
                 Owner · {resolvedProjectOwner || "오른쪽에서 지정해 주세요."}
               </p>
+              {isHistorical && (
+                <p>
+                  개발 담당 · {selectedDevelopers.length
+                    ? selectedDevelopers.map((account) => account.displayName || account.email).join(" · ")
+                    : "미지정"}
+                </p>
+              )}
             </div>
             {labels.map((label, index) => (
               <div
@@ -14364,6 +14406,37 @@ function RequestWizard({
                     <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" />
                   </fieldset>
                 )}
+                {isHistorical && (
+                  <fieldset className="historical-developer-field wide">
+                    <legend>
+                      개발 담당자 지정
+                      <span>{historicalDeveloperIds.length}명 선택</span>
+                    </legend>
+                    <p>AI 활성화팀 팀원과 BTS 중 여러 명을 선택할 수 있습니다. 담당자를 정하지 않고 먼저 이관해도 됩니다.</p>
+                    {eligibleDevelopers.length ? (
+                      <div className="historical-developer-list">
+                        {eligibleDevelopers.map((account) => (
+                          <label
+                            className={historicalDeveloperIds.includes(account.id) ? "selected" : ""}
+                            key={account.id}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={historicalDeveloperIds.includes(account.id)}
+                              onChange={() => toggleHistoricalDeveloper(account.id)}
+                            />
+                            <span>
+                              <b>{account.displayName || account.email}</b>
+                              <small>{account.email} · {account.appRole === "bts" ? "BTS" : "AI 활성화팀 팀원"}</small>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="historical-developer-empty">등록된 AI 활성화팀 팀원 또는 BTS 계정이 없습니다.</div>
+                    )}
+                  </fieldset>
+                )}
                 {labels.slice(0, 4).map((label, index) => (
                   <label className="wizard-form-field wide" key={label}>
                     <span>{index + 1}. {label}</span>
@@ -14404,7 +14477,7 @@ function RequestWizard({
                 </fieldset>
               </div>
               <footer className="wizard-form-actions">
-                <span>{isHistorical ? "제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수" : `${answers.filter(Boolean).length}/5 필수 항목 작성`}</span>
+                <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `${answers.filter(Boolean).length}/5 필수 항목 작성`}</span>
                 <button disabled={!canSubmit} onClick={submitRequest}>
                   {isHistorical ? "과거 과제 등록" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
                   <ArrowRight size={15} weight="bold" />
