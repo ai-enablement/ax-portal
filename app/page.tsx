@@ -10,6 +10,7 @@ import {
   Bell,
   CalendarBlank,
   ChartBar,
+  ChatsCircle,
   Check,
   CheckCircle,
   ClipboardText,
@@ -13516,6 +13517,8 @@ function RequestWizard({
   ];
   const [answers, setAnswers] = useState(["", "", "", "", ""]);
   const [submitted, setSubmitted] = useState(false);
+  const [writingMode, setWritingMode] = useState<"CHAT" | "FORM">("CHAT");
+  const [manualTitle, setManualTitle] = useState("");
   const [requesterName, setRequesterName] = useState("");
   const [requesterDepartment, setRequesterDepartment] = useState("");
   const [requesterEmail, setRequesterEmail] = useState("");
@@ -13533,20 +13536,39 @@ function RequestWizard({
     : "김현우 · 개발1팀";
   const resolvedProjectOwner =
     ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
-  const requestTitle = suggestRequestTitle(answers[0]);
+  const suggestedRequestTitle = suggestRequestTitle(answers[0]);
+  const requestTitle = manualTitle.trim() || suggestedRequestTitle;
+  const allAnswersComplete = answers.every((answer) => answer.trim());
   const updateAnswer = (value: string) =>
     setAnswers((items) =>
       items.map((item, index) => (index === step - 1 ? value : item)),
     );
+  const updateAnswerAt = (targetIndex: number, value: string) =>
+    setAnswers((items) =>
+      items.map((item, index) => (index === targetIndex ? value : item)),
+    );
+  const canSubmit = Boolean(
+    allAnswersComplete &&
+      resolvedProjectOwner &&
+      resolvedRequester &&
+      requestTitle.trim() &&
+      !submitted,
+  );
+  const submitRequest = () => {
+    if (!canSubmit) return;
+    setSubmitted(true);
+    onSubmit([...answers], requestTitle, resolvedProjectOwner, resolvedRequester);
+    close();
+  };
   const advance = () => {
     if (!answers[step - 1].trim() || submitted) return;
     if (step < 5) setStep(step + 1);
-    else {
-      setSubmitted(true);
-      if (!resolvedProjectOwner || !resolvedRequester) return;
-      onSubmit([...answers], requestTitle, resolvedProjectOwner, resolvedRequester);
-      close();
-    }
+    else submitRequest();
+  };
+  const openChatMode = () => {
+    const firstEmpty = answers.findIndex((answer) => !answer.trim());
+    setStep(firstEmpty === -1 ? 5 : firstEmpty + 1);
+    setWritingMode("CHAT");
   };
   return (
     <div className="modal-wrap">
@@ -13559,28 +13581,52 @@ function RequestWizard({
       >
         <header>
           <div>
-            <Pill tone="blue">요구 접수 Agent</Pill>
+            <Pill tone="blue">{writingMode === "CHAT" ? "요구 접수 Agent" : "요구 접수서 직접 작성"}</Pill>
             <h2 id="request-wizard-title">{isAiTeam ? "새 Agent 과제 등록" : "새 Agent 과제 요청"}</h2>
-            <p>{isAiTeam ? "회의 내용을 바탕으로 요청자를 대신해 요구 접수서를 작성합니다." : "Agent와 대화하면 왼쪽의 요구 접수서가 실시간으로 작성됩니다."}</p>
+            <p>{isAiTeam ? "회의 내용을 바탕으로 요청자를 대신해 등록하거나, Agent와 대화하며 접수할 수 있습니다." : "Agent와 대화하거나 문서 양식에 직접 입력해 요구 접수서를 작성할 수 있습니다."}</p>
           </div>
           <button aria-label="요청 창 닫기" onClick={close}>
             <X size={17} />
           </button>
         </header>
-        <div className="wizard-steps">
-          {labels.map((label, index) => (
-            <div className={step >= index + 1 ? "active" : ""} key={label}>
-              <span>
-                {step > index + 1 ? (
-                  <Check size={13} weight="bold" />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <small>{label}</small>
-            </div>
-          ))}
+        <div className="request-writing-modes" role="tablist" aria-label="요구 접수서 작성 방식">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={writingMode === "CHAT"}
+            className={writingMode === "CHAT" ? "active" : ""}
+            onClick={openChatMode}
+          >
+            <ChatsCircle size={21} weight="duotone" />
+            <span><b>Agent와 대화하며 작성</b><small>질문에 답하면 접수서가 자동으로 정리됩니다.</small></span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={writingMode === "FORM"}
+            className={writingMode === "FORM" ? "active" : ""}
+            onClick={() => setWritingMode("FORM")}
+          >
+            <FileText size={21} weight="duotone" />
+            <span><b>문서 양식 직접 작성</b><small>전체 항목을 한 번에 확인하고 입력합니다.</small></span>
+          </button>
         </div>
+        {writingMode === "CHAT" && (
+          <div className="wizard-steps">
+            {labels.map((label, index) => (
+              <div className={step >= index + 1 ? "active" : ""} key={label}>
+                <span>
+                  {step > index + 1 ? (
+                    <Check size={13} weight="bold" />
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                <small>{label}</small>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="chat-wizard-grid">
           <section className="wizard-document-preview">
             <header>
@@ -13605,7 +13651,7 @@ function RequestWizard({
                 className={
                   answers[index]
                     ? "filled"
-                    : index === step - 1
+                    : writingMode === "CHAT" && index === step - 1
                       ? "editing"
                       : ""
                 }
@@ -13622,10 +13668,11 @@ function RequestWizard({
               </div>
             ))}
             <footer>
-              <span>자동 저장됨</span>
+              <span>{writingMode === "CHAT" ? "대화 내용 자동 반영" : "입력 내용 자동 반영"}</span>
               <b>{answers.filter(Boolean).length}/5 항목 작성</b>
             </footer>
           </section>
+          {writingMode === "CHAT" ? (
           <section className="wizard-chat-panel">
             <header>
               <span className="brand-mark">AX</span>
@@ -13727,17 +13774,95 @@ function RequestWizard({
               </button>
             </div>
           </section>
+          ) : (
+            <section className="wizard-form-panel" aria-label="에이전트 요구 접수서 직접 작성">
+              <header>
+                <FileText size={24} weight="duotone" />
+                <div>
+                  <strong>에이전트 요구 접수서 직접 작성</strong>
+                  <small>필수 항목을 한 화면에서 작성합니다.</small>
+                </div>
+              </header>
+              <div className="wizard-form-scroll">
+                <label className="wizard-form-field wide">
+                  <span>요청 제목</span>
+                  <input
+                    value={manualTitle}
+                    onChange={(event) => setManualTitle(event.target.value)}
+                    placeholder={suggestedRequestTitle}
+                    aria-label="요청 제목"
+                  />
+                  <small>비워두면 업무 문제를 바탕으로 제목이 자동 생성됩니다.</small>
+                </label>
+                {isAiTeam && (
+                  <fieldset className="wizard-owner-field wizard-requester-field wide">
+                    <legend>요구자 정보</legend>
+                    <p>회의를 요청했거나 업무 문제를 제기한 실제 요구자를 입력합니다.</p>
+                    <input value={requesterName} onChange={(event) => setRequesterName(event.target.value)} placeholder="요구자 이름" aria-label="요구자 이름" />
+                    <input value={requesterDepartment} onChange={(event) => setRequesterDepartment(event.target.value)} placeholder="소속 부서" aria-label="요구자 소속 부서" />
+                    <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" />
+                  </fieldset>
+                )}
+                {labels.slice(0, 4).map((label, index) => (
+                  <label className="wizard-form-field wide" key={label}>
+                    <span>{index + 1}. {label}</span>
+                    <textarea
+                      value={answers[index]}
+                      onChange={(event) => updateAnswerAt(index, event.target.value)}
+                      placeholder={examples[index]}
+                      aria-label={`${label} 작성`}
+                    />
+                  </label>
+                ))}
+                <label className="wizard-date-input">
+                  <span>5. 희망 완료일</span>
+                  <input
+                    type="date"
+                    min="2026-08-29"
+                    value={answers[4]}
+                    onInput={(event) => updateAnswerAt(4, (event.target as HTMLInputElement).value)}
+                    onChange={(event) => updateAnswerAt(4, event.target.value)}
+                    aria-label="희망 완료일"
+                  />
+                </label>
+                <fieldset className="wizard-owner-field">
+                  <legend>Project Owner 지정</legend>
+                  <p>요구자와 Owner는 같을 수도, 다를 수도 있습니다.</p>
+                  <label>
+                    <input type="radio" name="form-project-owner-mode" checked={ownerMode === "SELF"} onChange={() => setOwnerMode("SELF")} />
+                    요구자와 동일{requesterOwnerLabel ? ` · ${requesterOwnerLabel}` : ""}
+                  </label>
+                  <label>
+                    <input type="radio" name="form-project-owner-mode" checked={ownerMode === "OTHER"} onChange={() => setOwnerMode("OTHER")} />
+                    다른 Owner 지정
+                  </label>
+                  {ownerMode === "OTHER" && (
+                    <input value={projectOwner} onChange={(event) => setProjectOwner(event.target.value)} placeholder="예: 박서연 · 품질혁신팀장" aria-label="Project Owner 이름과 소속" />
+                  )}
+                </fieldset>
+              </div>
+              <footer className="wizard-form-actions">
+                <span>{answers.filter(Boolean).length}/5 필수 항목 작성</span>
+                <button disabled={!canSubmit} onClick={submitRequest}>
+                  {isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
+                  <ArrowRight size={15} weight="bold" />
+                </button>
+              </footer>
+            </section>
+          )}
         </div>
         <footer>
           <button
             className="ghost"
-            onClick={step === 1 ? close : () => setStep(step - 1)}
+            onClick={writingMode === "FORM" || step === 1 ? close : () => setStep(step - 1)}
           >
-            {step === 1 ? "나중에 이어서 하기" : "← 이전 질문"}
+            {writingMode === "FORM" || step === 1 ? "나중에 이어서 하기" : "← 이전 질문"}
           </button>
           <div>
             <span>
-              {step === 5
+              {writingMode === "FORM"
+                ? "두 방식에서 입력한 내용은 서로 유지됩니다"
+                : step === 5
                 ? "희망 완료일을 확인한 뒤 접수서를 제출하세요"
                 : "닫아도 작성 이력이 남습니다"}
             </span>

@@ -30,6 +30,19 @@ test("lets AI team register an intake on behalf of the requester", () => {
   assert.ok(page.includes("resolvedRequester"));
 });
 
+test("supports both chat and direct document intake with shared values", () => {
+  assert.ok(page.includes('useState<"CHAT" | "FORM">("CHAT")'));
+  assert.ok(page.includes("Agent와 대화하며 작성"));
+  assert.ok(page.includes("문서 양식 직접 작성"));
+  assert.ok(page.includes('aria-label="에이전트 요구 접수서 직접 작성"'));
+  assert.ok(page.includes("updateAnswerAt"));
+  assert.ok(page.includes("두 방식에서 입력한 내용은 서로 유지됩니다"));
+  assert.ok(page.includes("submitRequest"));
+  assert.ok(css.includes(".request-writing-modes"));
+  assert.ok(css.includes(".wizard-form-panel"));
+  assert.ok(css.includes(".wizard-form-scroll"));
+});
+
 test("keeps the one-page project frame visible when values are empty", () => {
   assert.ok(page.includes("const emptyProject: UserProject"));
   assert.ok(page.includes("project-stack-empty"));

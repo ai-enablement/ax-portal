@@ -13467,6 +13467,51 @@ body {
   width: 38px;
   height: 38px;
 }
+.request-writing-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 28px 20px;
+}
+.request-writing-modes > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 70px;
+  padding: 13px 15px;
+  border: 1px solid #d9e0e9;
+  border-radius: 10px;
+  background: #fff;
+  color: #536176;
+  text-align: left;
+}
+.request-writing-modes > button:hover {
+  border-color: #93afd0;
+  background: #f7faff;
+}
+.request-writing-modes > button.active {
+  border-color: #2f67ac;
+  background: #edf5ff;
+  color: #173d6e;
+  box-shadow: inset 0 0 0 1px #2f67ac;
+}
+.request-writing-modes > button > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.request-writing-modes b {
+  display: block;
+  font-size: 14px;
+}
+.request-writing-modes small {
+  display: block;
+  color: #738097;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .chat-wizard .wizard-steps {
   padding: 0 28px 20px;
 }
@@ -13592,6 +13637,124 @@ body {
   min-height: 42px;
   font-size: 14px !important;
 }
+.wizard-form-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 560px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #dde3eb;
+  border-radius: 8px;
+  background: #fff;
+}
+.wizard-form-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 17px 18px;
+  border-bottom: 1px solid #e1e6ed;
+  color: #173d6e;
+}
+.wizard-form-panel > header div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wizard-form-panel > header strong {
+  color: #1f2b3d;
+  font-size: 16px;
+}
+.wizard-form-panel > header small {
+  color: #78859a;
+  font-size: 12px;
+}
+.wizard-form-scroll {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(260px, 1.2fr);
+  gap: 14px;
+  max-height: 520px;
+  padding: 18px;
+  overflow-y: auto;
+  background: #fbfcfe;
+}
+.wizard-form-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.wizard-form-field.wide,
+.wizard-form-scroll .wizard-requester-field {
+  grid-column: 1 / -1;
+}
+.wizard-form-field > span {
+  color: #253247;
+  font-size: 14px;
+  font-weight: 800;
+}
+.wizard-form-field > input,
+.wizard-form-field > textarea {
+  width: 100%;
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  background: #fff;
+  color: #273246;
+  font: inherit;
+  font-size: 14px;
+}
+.wizard-form-field > input {
+  min-height: 44px;
+  padding: 10px 12px;
+}
+.wizard-form-field > textarea {
+  min-height: 90px;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.wizard-form-field > input:focus,
+.wizard-form-field > textarea:focus {
+  outline: 2px solid #b8d2f2;
+  border-color: #2f67ac;
+}
+.wizard-form-field > small {
+  color: #7d899b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.wizard-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding: 14px 18px;
+  border-top: 1px solid #e1e6ed;
+  background: #fff;
+}
+.wizard-form-actions span {
+  color: #68758a;
+  font-size: 12px;
+  font-weight: 750;
+}
+.wizard-form-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 7px;
+  background: #173d6e;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+.wizard-form-actions button:disabled {
+  cursor: not-allowed;
+  background: #aab4c3;
+}
 .chat-wizard > footer {
   padding: 17px 28px;
 }
@@ -13605,8 +13768,18 @@ body {
 }
 
 @media (max-width: 900px) {
+  .request-writing-modes {
+    grid-template-columns: 1fr;
+  }
   .chat-wizard-grid {
     grid-template-columns: 1fr;
+  }
+  .wizard-form-scroll {
+    grid-template-columns: 1fr;
+  }
+  .wizard-form-field.wide,
+  .wizard-form-scroll .wizard-requester-field {
+    grid-column: auto;
   }
   .chat-wizard > header h2 {
     font-size: 25px !important;
@@ -13741,6 +13914,10 @@ body {
     max-width: 100vw;
   }
   .wizard-steps {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+  .request-writing-modes {
     padding-right: 14px;
     padding-left: 14px;
   }
