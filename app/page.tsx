@@ -7008,13 +7008,6 @@ function UserDashboard({
                   <div>
                     <p>
                       <small>{project.no}</small>
-                      <Pill tone={project.tone}>
-                        {g2ReworkProjects[project.no] === "editing"
-                          ? "ARD 보완 중"
-                          : g2ReworkProjects[project.no] === "resubmitted"
-                            ? "G2 재승인 대기"
-                            : project.status}
-                      </Pill>
                       <Pill
                         tone={
                           getProjectRelationships(role, project.no).includes(
@@ -7028,10 +7021,6 @@ function UserDashboard({
                       </Pill>
                     </p>
                     <strong>{project.name}</strong>
-                    <small>
-                      {userJourney[project.journeyStep].title} ·{" "}
-                      {project.updated} 업데이트
-                    </small>
                   </div>
                   <span className="project-stage-label">
                     <b>{project.stage}단계</b>
@@ -7059,7 +7048,6 @@ function UserDashboard({
               )}
               <small>{current.no}{hasProjects ? ` · ${current.category}` : ""}</small>
               <h2>{current.name || "\u00a0"}</h2>
-              <p>{hasProjects ? (intakeComplete ? "작성된 신청 결과와 생애주기 진행 상태입니다." : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다.") : "\u00a0"}</p>
             </div>
             <div className="project-header-actions">
               {canDeleteCurrent && (
@@ -7109,19 +7097,6 @@ function UserDashboard({
                   </span>
                   <div>
                     <b>{stage.title}</b>
-                    <small>
-                      {rejectedGate
-                        ? "반려·보완"
-                        : index < effectiveJourneyStep
-                          ? current.historicalImport && index < historicalBaselineStep
-                            ? "이관 완료"
-                            : "완료"
-                          : index === effectiveJourneyStep
-                            ? "현재 단계"
-                            : stage.kind === "gate"
-                              ? "선행 단계 필요"
-                              : "예정"}
-                    </small>
                   </div>
                 </button>
               );

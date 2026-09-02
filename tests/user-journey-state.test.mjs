@@ -60,6 +60,13 @@ test("keeps the one-page project frame visible when values are empty", () => {
   assert.ok(css.includes(".project-stack-empty"));
 });
 
+test("removes redundant mockup status copy from the one-page project overview", () => {
+  assert.ok(!page.includes("작성된 신청 결과와 생애주기 진행 상태입니다."));
+  assert.ok(!page.includes("project.updated} 업데이트"));
+  assert.ok(!page.includes("g2ReworkProjects[project.no]"));
+  assert.ok(!page.includes("index < historicalBaselineStep"));
+});
+
 test("lets AI team roles write FEA and locks G1 until complete", () => {
   assert.ok(page.includes('className="fea-grid"'));
   assert.ok(page.includes("disabled={!canEditFea}"));
