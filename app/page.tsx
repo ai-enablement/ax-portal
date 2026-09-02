@@ -4533,7 +4533,8 @@ function GateApprovalResult({
   const isG1 = gate === "G1";
   const isRejectedCase = projectNo === "2026-028" && gate === "G2";
   const isReworkRound = isRejectedCase && g2ReworkSubmitted;
-  const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
+  const isAdmin = role === ACCOUNT_ROLES.admin;
+  const isLeader = role === ACCOUNT_ROLES.leader || isAdmin;
   const isMember =
     (role.includes("AI활성화팀") && role.includes("담당자")) ||
     role === ACCOUNT_ROLES.bts;
@@ -4584,7 +4585,7 @@ function GateApprovalResult({
         },
         {
           role: "G1 승인자",
-          name: "AI 활성화팀 팀장",
+          name: "Admin",
           status:
             g1Decision === "PENDING"
               ? "대기"
@@ -4746,7 +4747,7 @@ function GateApprovalResult({
   const showLeaderDecisionOnly =
     homeEmbedded &&
     isG1 &&
-    isLeader &&
+    isAdmin &&
     basisReady &&
     g1Decision === "PENDING";
   return (
@@ -4973,11 +4974,11 @@ function GateApprovalResult({
             </button>
           </section>
         )}
-        {isG1 && isLeader && basisReady && g1Decision === "PENDING" && (
+        {isG1 && isAdmin && basisReady && g1Decision === "PENDING" && (
           <section className="g1-leader-decision">
             <header>
               <div>
-                <Pill tone="violet">팀장 액션</Pill>
+                <Pill tone="violet">Admin 액션</Pill>
                 <h4>추진 여부와 개발 담당자 지정</h4>
                 <p>FEA의 판정 영역에도 동일한 결과가 자동 업데이트됩니다.</p>
               </div>
@@ -5084,31 +5085,31 @@ function GateApprovalResult({
             </button>
           </section>
         )}
-        {isG1 && isLeader && !basisReady && (
+        {isG1 && isAdmin && !basisReady && (
           <section className="gate-role-readonly">
             <Info size={17} weight="fill" />
             <p>
               <b>FEA가 아직 작성 중입니다.</b>
               <span>
-                담당자가 FEA를 완료해 G1로 상신하면 팀장의 Go / Conditional Go /
+                담당자가 FEA를 완료해 G1로 상신하면 Admin의 Go / Conditional Go /
                 Drop 판정과 개발 담당자 지정 기능이 활성화됩니다.
               </span>
             </p>
           </section>
         )}
-        {isG1 && isMember && (
+        {isG1 && (isMember || role === ACCOUNT_ROLES.leader) && (
           <section className="gate-role-readonly member-g1-role">
             <Info size={17} weight="fill" />
             <p>
               <b>
                 {basisReady
-                  ? "FEA 상신이 완료되어 팀장 판정을 기다리고 있습니다."
+                  ? "FEA 상신이 완료되어 Admin 판정을 기다리고 있습니다."
                   : "AI 활성화팀 담당자는 FEA 작성·보완을 담당합니다."}
               </b>
               <span>
                 {basisReady
-                  ? "팀원은 최종 FEA와 승인 진행 상태, 판정 후 개발 담당자 배정 결과를 조회합니다. Go / Conditional Go / Drop 결정과 개발 담당자 지정은 AI 활성화팀 팀장만 수행합니다."
-                  : "요구자 인터뷰를 바탕으로 대안 검토·적합성·ROI·트랙 근거를 완성해 G1에 상신합니다. G1 승인과 개발 담당자 지정 권한은 팀장에게 있습니다."}
+                  ? "최종 FEA와 승인 진행 상태, 판정 후 개발 담당자 배정 결과를 조회합니다. Go / Conditional Go / Drop 결정과 개발 담당자 지정은 Admin만 수행합니다."
+                  : "요구자 인터뷰를 바탕으로 대안 검토·적합성·ROI·트랙 근거를 완성해 G1에 상신합니다. G1 승인과 개발 담당자 지정 권한은 Admin에게 있습니다."}
               </span>
             </p>
           </section>
@@ -6378,7 +6379,6 @@ function HistoricalG1Approval({
   const developers = teamAccounts.filter(
     (account) => account.appRole === "team_member" || account.appRole === "bts",
   );
-  const leader = teamAccounts.find((account) => account.appRole === "team_leader");
   const [decision, setDecision] = useState(record?.decision || "PENDING");
   const [developerIds, setDeveloperIds] = useState(
     record?.developerIds || project.developerIds || [],
@@ -6389,9 +6389,8 @@ function HistoricalG1Approval({
   const selectedDevelopers = developers.filter((account) => developerIds.includes(account.id));
   const approverName =
     record?.approverName ||
-    (identity?.appRole === "admin" ? identity.displayName : leader?.displayName) ||
     identity?.displayName ||
-    "AI 활성화팀 팀장";
+    "Admin";
   const decisionLabel =
     decision === "APPROVED"
       ? "Go"
@@ -6418,9 +6417,9 @@ function HistoricalG1Approval({
           <div>
             <small>{project.no} · G1 GATE</small>
             <h3>착수 승인</h3>
-            <p>완성된 타당성 평가서[FEA]를 근거로 추진 여부와 개발 담당자를 확정했습니다.</p>
+            <p>완성된 타당성 평가서[FEA]를 근거로 Admin이 추진 여부와 개발 담당자를 확정했습니다.</p>
           </div>
-          <Pill tone="green">팀장 승인 완료</Pill>
+          <Pill tone="green">Admin 승인 완료</Pill>
         </header>
         <div className="historical-g1-flow">
           <article><small>승인 기준 문서</small><b>{project.no}-FEA</b><span>작성 완료 · v1.0</span></article>
@@ -6441,12 +6440,12 @@ function HistoricalG1Approval({
   return (
     <section className="historical-g1-form" aria-label="G1 착수 승인 입력">
       <header>
-        <div><small>{project.no} · G1 GATE</small><h3>착수 승인</h3><p>FEA 작성 완료를 확인하고 팀장이 추진 판정과 개발 담당자를 확정합니다.</p></div>
-        <Pill tone={feaComplete ? "orange" : "gray"}>{feaComplete ? "팀장 판정 대기" : "FEA 작성 필요"}</Pill>
+        <div><small>{project.no} · G1 GATE</small><h3>착수 승인</h3><p>FEA 작성 완료를 확인하고 Admin이 추진 판정과 개발 담당자를 확정합니다.</p></div>
+        <Pill tone={feaComplete ? "orange" : "gray"}>{feaComplete ? "Admin 판정 대기" : "FEA 작성 필요"}</Pill>
       </header>
       <div className="historical-g1-basis">
         <div><small>승인 기준 문서</small><b>{project.no}-FEA</b><span>{feaComplete ? `작성 완료 · ${feaRecord?.authorName || "작성자 확인"}` : "FEA를 먼저 작성 완료해 주세요."}</span></div>
-        <div><small>G1 승인자</small><b>{approverName}</b><span>{canApprove ? "승인 권한 확인" : "팀장 또는 Admin만 처리 가능"}</span></div>
+        <div><small>G1 승인자</small><b>{approverName}</b><span>{canApprove ? "Admin 권한 확인" : "Admin만 처리 가능"}</span></div>
       </div>
       <fieldset className="historical-g1-decisions" disabled={!canApprove || !feaComplete}>
         <legend>G1 착수 판정</legend>
@@ -6470,7 +6469,7 @@ function HistoricalG1Approval({
         </fieldset>
       )}
       <label className="historical-g1-note"><span>판정 조건·사유 {decision === "CONDITIONAL" ? "· 필수" : "· 선택"}</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={!canApprove || !feaComplete} placeholder="Conditional Go 조건이나 Drop 사유, 착수 시 준수사항을 입력하세요." /></label>
-      <footer><span>{!feaComplete ? "FEA 작성 완료 후 G1 판정이 활성화됩니다." : !canApprove ? "AI 활성화팀 팀장 또는 Admin의 승인이 필요합니다." : "판정과 개발 담당자를 확인한 뒤 승인하세요."}</span><button className="primary" disabled={!canSubmit} onClick={() => onApprove({ values: [reason], status: "complete", decision, authorName: feaRecord?.authorName, approverName, developerIds, reason, updatedAt: new Date().toISOString() }, developerIds)}>G1 판정 확정 · 개발 담당 배정</button></footer>
+      <footer><span>{!feaComplete ? "FEA 작성 완료 후 G1 판정이 활성화됩니다." : !canApprove ? "Admin 승인이 필요합니다." : "판정과 개발 담당자를 확인한 뒤 승인하세요."}</span><button className="primary" disabled={!canSubmit} onClick={() => onApprove({ values: [reason], status: "complete", decision, authorName: feaRecord?.authorName, approverName, developerIds, reason, updatedAt: new Date().toISOString() }, developerIds)}>G1 판정 확정 · 개발 담당 배정</button></footer>
     </section>
   );
 }
@@ -7053,7 +7052,7 @@ function UserDashboard({
               identity={identity}
               feaRecord={current.historicalDocuments?.["1"]}
               record={deferredDocumentRecord}
-              canApprove={role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin}
+              canApprove={role === ACCOUNT_ROLES.admin}
               onApprove={(record, selectedDeveloperIds) => {
                 const finalDeveloperIds = record.decision === "REJECTED" ? [] : selectedDeveloperIds;
                 const finalDevelopers = teamAccounts.filter((account) => finalDeveloperIds.includes(account.id));
@@ -14076,7 +14075,7 @@ function Governance({
   });
   const roleLabel = (appRole: string) => ({ general_user: "일반 User", team_member: "AI 활성화팀 팀원", team_leader: "AI 활성화팀 팀장", bts: "BTS", admin: "admin" }[appRole] || appRole);
   const projectPermission = (appRole: string) => ({
-    team_leader: { title: "팀 전체 과제 감독", detail: "전체 이력 조회 · 담당자/리뷰어 지정 · G1/G3/G4 승인" },
+    team_leader: { title: "팀 전체 과제 감독", detail: "전체 이력 조회 · 리뷰어 지정 · G3/G4 승인" },
     team_member: { title: "배정된 과제 수행", detail: "담당 또는 리뷰어 배정 시 전체 이력 조회" },
     bts: { title: "배정된 과제 수행", detail: "BTS 수행자로 배정된 프로젝트와 전체 이력 조회" },
     admin: { title: "전체 시스템 관리", detail: "모든 과제 수정·삭제 및 역할 관리" },
@@ -14404,11 +14403,18 @@ function Governance({
               <div><small>AI ENABLEMENT ROLE</small><h2 id="governance-role-title">{roleLabel(selectedRoleAccount.appRole)} 권한</h2><p>{selectedRoleAccount.displayName} · {selectedRoleAccount.email}</p></div>
               <button aria-label="역할 설명 닫기" onClick={() => setSelectedRoleAccount(null)}><X size={20} /></button>
             </header>
-            {selectedRoleAccount.appRole === "team_leader" ? (
+            {selectedRoleAccount.appRole === "admin" ? (
+              <div className="governance-role-details">
+                <article><b>전체 시스템 관리</b><p>모든 Agent 과제와 변경 이력을 조회하고 단계와 관계없이 수정·삭제합니다.</p></article>
+                <article><b>G1 착수 승인</b><p>FEA를 근거로 추진 여부를 확정하고 개발 담당자를 지정합니다.</p></article>
+                <article><b>계정 역할 관리</b><p>AI 활성화팀, BTS, 팀장과 Admin 역할을 등록하거나 변경합니다.</p></article>
+                <article><b>전체 Gate 관리</b><p>필요한 승인 단계와 운영·Gallery 등록을 포함한 전체 관리 권한을 가집니다.</p></article>
+              </div>
+            ) : selectedRoleAccount.appRole === "team_leader" ? (
               <div className="governance-role-details">
                 <article><b>전체 과제 감독</b><p>접수 시점부터 운영까지 팀 전체 Agent 과제와 변경 이력을 조회합니다.</p></article>
-                <article><b>담당자·리뷰어 지정</b><p>G1에서 개발 담당자를, 배포 승인 준비 과정에서 독립 동료 리뷰어를 지정합니다.</p></article>
-                <article><b>Gate 의사결정</b><p>FEA를 근거로 G1 착수 승인하고, 지정된 승인 단계에서 최종 판단합니다.</p></article>
+                <article><b>리뷰어 지정</b><p>배포 승인 준비 과정에서 개발 담당자와 다른 독립 동료 리뷰어를 지정합니다.</p></article>
+                <article><b>Gate 의사결정</b><p>G3·G4 등 팀장에게 지정된 승인 단계에서 최종 판단합니다.</p></article>
                 <article><b>계정 역할 관리</b><p>일반 User를 AI 활성화팀 팀원으로 등록하거나 팀원 역할을 회수할 수 있습니다.</p></article>
               </div>
             ) : selectedRoleAccount.appRole === "bts" ? (

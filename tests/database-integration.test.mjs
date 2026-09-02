@@ -83,6 +83,8 @@ test("BTS role and team workload are persisted and served from PostgreSQL", asyn
   assert.match(api, /existing\.rows\[0\]\?\.app_role === "general_user"/);
   assert.match(api, /async function assignProjectDeveloper/);
   assert.match(api, /pathname\.endsWith\("\/developer"\)/);
+  assert.match(api, /actor\.app_role !== "admin"/);
+  assert.match(api, /Admin permission is required to assign a developer/);
   assert.match(api, /app_role in \('team_member','bts'\)/);
   assert.match(schema, /'team_leader', 'team_member', 'bts', 'general_user', 'admin'/);
   assert.match(schema, /\('bts',\s+'PROJECT_READ_ASSIGNED'/);

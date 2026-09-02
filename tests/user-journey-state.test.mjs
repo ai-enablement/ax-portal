@@ -61,7 +61,7 @@ test("lets AI team roles write FEA and locks G1 until complete", () => {
   assert.ok(page.includes("selectedJourney === 2 && isAiTeam"));
   assert.ok(page.includes("effectiveJourneyStep >= 2"));
   assert.ok(page.includes("AI 활성화팀 담당자는 FEA 작성·보완을 담당합니다."));
-  assert.ok(page.includes("G1 승인과 개발 담당자 지정 권한은 팀장에게 있습니다."));
+  assert.ok(page.includes("G1 승인과 개발 담당자 지정 권한은 Admin에게 있습니다."));
   assert.ok(page.includes("showLeaderDecisionOnly"));
   assert.ok(page.includes('g1Decision === "PENDING"'));
   assert.ok(page.includes("팀장 승인 완료"));
@@ -181,9 +181,11 @@ test("makes every historical stage writable without fixtures and enforces assign
 test("uses a full-width historical intake and restores the dedicated G1 approval flow", () => {
   assert.ok(page.includes('current.historicalImport ? "historical" : ""'));
   assert.ok(page.includes("function HistoricalG1Approval"));
-  assert.ok(page.includes("FEA 작성 완료를 확인하고 팀장이 추진 판정과 개발 담당자를 확정합니다."));
+  assert.ok(page.includes("FEA 작성 완료를 확인하고 Admin이 추진 판정과 개발 담당자를 확정합니다."));
   assert.ok(page.includes("G1 판정 확정 · 개발 담당 배정"));
   assert.ok(page.includes("G1 착수 판정과 개발 담당자 배정을 확정했습니다."));
+  assert.ok(page.includes("canApprove={role === ACCOUNT_ROLES.admin}"));
+  assert.ok(page.includes("개발 담당자 지정은 Admin만 수행합니다."));
   assert.ok(page.includes('authorName: identity?.displayName || "FEA 작성 담당자"'));
   assert.ok(page.includes('selectedJourney === 2 &&'));
   assert.ok(css.includes(".intake-result-layout.historical"));

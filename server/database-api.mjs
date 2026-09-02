@@ -721,8 +721,8 @@ async function assignProjectDeveloper(projectCode, body, identity) {
   }
   return withTransaction(async (client) => {
     const actor = await governanceActor(client, identity);
-    if (!actor || !["team_leader", "admin"].includes(actor.app_role)) {
-      return { status: 403, body: { error: "Team leader permission is required to assign a developer." } };
+    if (!actor || actor.app_role !== "admin") {
+      return { status: 403, body: { error: "Admin permission is required to assign a developer." } };
     }
     const project = (await client.query(
       `select id from agent_portal.projects
