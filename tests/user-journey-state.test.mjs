@@ -125,6 +125,10 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes("과거 과제 접수 날짜"));
   assert.ok(page.includes("과거 과제 현재 진행 단계"));
   assert.ok(page.includes("documentsDeferred: historical"));
+  assert.ok(page.includes("historicalBaselineStep: historical ? journeyStep : undefined"));
+  assert.ok(page.includes("최종 확인 · 과거 과제 이관"));
+  assert.ok(page.includes("선택한 현재 단계부터 순서대로 완료해야 다음 단계가 열립니다."));
+  assert.ok(page.includes("current.historicalImport && selectedJourney > effectiveJourneyStep"));
   assert.ok(page.includes("프로세스 진행 이력만 등록된 상태입니다."));
   assert.ok(page.includes("해당 단계에서 문서 추가"));
   assert.ok(!page.includes('min="2026-08-29"'));
@@ -186,6 +190,8 @@ test("uses a full-width historical intake and restores the dedicated G1 approval
   assert.ok(page.includes("개발 담당자 배정 확정"));
   assert.ok(page.includes("canDecide={role === ACCOUNT_ROLES.leader}"));
   assert.ok(page.includes("canAssign={role === ACCOUNT_ROLES.admin}"));
+  assert.ok(page.includes("allowMissingFea={historicalBaselineStep >= 2}"));
+  assert.ok(page.includes("과거 과제 이관 기준 · 선행 문서 작성 생략"));
   assert.ok(page.includes('authorName: identity?.displayName || "FEA 작성 담당자"'));
   assert.ok(page.includes('selectedJourney === 2 &&'));
   assert.ok(css.includes(".intake-result-layout.historical"));

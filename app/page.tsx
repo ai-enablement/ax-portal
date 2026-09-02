@@ -201,6 +201,7 @@ type UserProject = {
     }
   >;
   historicalImport?: boolean;
+  historicalBaselineStep?: number;
   documentsDeferred?: boolean;
 };
 
@@ -1205,6 +1206,7 @@ export default function Home() {
         developerIds: assignedDevelopers.map((account) => account.id),
         developerNames,
         historicalImport: historical,
+        historicalBaselineStep: historical ? journeyStep : undefined,
         documentsDeferred: historical,
       };
       const next = [project, ...current];
@@ -6337,6 +6339,7 @@ function HistoricalG1Approval({
   record,
   canDecide,
   canAssign,
+  allowMissingFea,
   onApprove,
 }: {
   project: UserProject;
@@ -6346,6 +6349,7 @@ function HistoricalG1Approval({
   record?: HistoricalDocumentRecord;
   canDecide: boolean;
   canAssign: boolean;
+  allowMissingFea: boolean;
   onApprove: (record: HistoricalDocumentRecord, developerIds: string[]) => void;
 }) {
   const developers = teamAccounts.filter(
@@ -6359,6 +6363,7 @@ function HistoricalG1Approval({
   const [reason, setReason] = useState(record?.reason || "");
   const isComplete = record?.status === "complete";
   const feaComplete = feaRecord?.status === "complete";
+  const feaReady = feaComplete || allowMissingFea;
   const selectedDevelopers = developers.filter((account) => developerIds.includes(account.id));
   const approverName =
     record?.approverName ||
@@ -6375,7 +6380,7 @@ function HistoricalG1Approval({
   const decisionConfirmed = decision !== "PENDING" && Boolean(record?.approverName);
   const canSubmitDecision =
     canDecide &&
-    feaComplete &&
+    feaReady &&
     decision !== "PENDING" &&
     (decision !== "CONDITIONAL" || reason.trim().length > 0);
   const canSubmitAssignment =
@@ -6419,13 +6424,13 @@ function HistoricalG1Approval({
     <section className="historical-g1-form" aria-label="G1 착수 승인 입력">
       <header>
         <div><small>{project.no} · G1 GATE</small><h3>착수 승인</h3><p>팀장이 G1 판정을 확정한 뒤 Admin이 개발 담당자를 배정합니다.</p></div>
-        <Pill tone={feaComplete ? "orange" : "gray"}>{!feaComplete ? "FEA 작성 필요" : !decisionConfirmed ? "팀장 판정 대기" : "Admin 배정 대기"}</Pill>
+        <Pill tone={feaReady ? "orange" : "gray"}>{!feaReady ? "FEA 작성 필요" : !decisionConfirmed ? "팀장 판정 대기" : "Admin 배정 대기"}</Pill>
       </header>
       <div className="historical-g1-basis">
-        <div><small>승인 기준 문서</small><b>{project.no}-FEA</b><span>{feaComplete ? `작성 완료 · ${feaRecord?.authorName || "작성자 확인"}` : "FEA를 먼저 작성 완료해 주세요."}</span></div>
+        <div><small>승인 기준 문서</small><b>{project.no}-FEA</b><span>{feaComplete ? `작성 완료 · ${feaRecord?.authorName || "작성자 확인"}` : allowMissingFea ? "과거 과제 이관 기준 · 선행 문서 작성 생략" : "FEA를 먼저 작성 완료해 주세요."}</span></div>
         <div><small>G1 승인자</small><b>{approverName}</b><span>{decisionConfirmed ? "팀장 판정 완료" : canDecide ? "팀장 권한 확인" : "팀장 판정 대기"}</span></div>
       </div>
-      <fieldset className="historical-g1-decisions" disabled={!canDecide || !feaComplete || decisionConfirmed}>
+      <fieldset className="historical-g1-decisions" disabled={!canDecide || !feaReady || decisionConfirmed}>
         <legend>G1 착수 판정</legend>
         {["APPROVED", "CONDITIONAL", "REJECTED"].map((value) => (
           <label key={value} className={decision === value ? "selected" : ""}>
@@ -6446,9 +6451,9 @@ function HistoricalG1Approval({
           ))}</div>
         </fieldset>
       )}
-      <label className="historical-g1-note"><span>판정 조건·사유 {decision === "CONDITIONAL" ? "· 필수" : "· 선택"}</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={!canDecide || !feaComplete || decisionConfirmed} placeholder="Conditional Go 조건이나 Drop 사유, 착수 시 준수사항을 입력하세요." /></label>
+      <label className="historical-g1-note"><span>판정 조건·사유 {decision === "CONDITIONAL" ? "· 필수" : "· 선택"}</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={!canDecide || !feaReady || decisionConfirmed} placeholder="Conditional Go 조건이나 Drop 사유, 착수 시 준수사항을 입력하세요." /></label>
       <footer>
-        <span>{!feaComplete ? "FEA 작성 완료 후 팀장 판정이 활성화됩니다." : !decisionConfirmed ? canDecide ? "판정과 사유를 확인한 뒤 확정하세요." : "AI 활성화팀 팀장의 G1 판정을 기다리고 있습니다." : decision === "REJECTED" ? "Drop 판정으로 G1 처리가 종료되었습니다." : canAssign ? "개발 담당자를 선택한 뒤 배정을 확정하세요." : "Admin의 개발 담당자 배정을 기다리고 있습니다."}</span>
+        <span>{!feaReady ? "FEA 작성 완료 후 팀장 판정이 활성화됩니다." : !decisionConfirmed ? canDecide ? "판정과 사유를 확인한 뒤 확정하세요." : "AI 활성화팀 팀장의 G1 판정을 기다리고 있습니다." : decision === "REJECTED" ? "Drop 판정으로 G1 처리가 종료되었습니다." : canAssign ? "개발 담당자를 선택한 뒤 배정을 확정하세요." : "Admin의 개발 담당자 배정을 기다리고 있습니다."}</span>
         {canDecide && !decisionConfirmed && <button className="primary" disabled={!canSubmitDecision} onClick={() => onApprove({ values: [reason], status: decision === "REJECTED" ? "complete" : "draft", decision, authorName: feaRecord?.authorName, approverName: identity?.displayName || approverName, developerIds: [], reason, updatedAt: new Date().toISOString() }, [])}>G1 판정 확정</button>}
         {canAssign && decisionConfirmed && decision !== "REJECTED" && <button className="primary" disabled={!canSubmitAssignment} onClick={() => onApprove({ ...record!, values: [reason], status: "complete", decision, developerIds, reason, updatedAt: new Date().toISOString() }, developerIds)}>개발 담당자 배정 확정</button>}
       </footer>
@@ -6603,18 +6608,24 @@ function UserDashboard({
         : current.no === "2026-031" && draftCompleted
           ? 1
           : current.journeyStep;
+  const historicalBaselineStep = current.historicalImport
+    ? current.historicalBaselineStep ?? current.journeyStep
+    : -1;
   const selectedOutput = lifecycleOutputs[selectedJourney];
   const deferredDocumentKey = `${current.no}:${selectedJourney}`;
   const deferredDocumentOpened = openedDeferredDocuments.includes(deferredDocumentKey);
   const deferredDocumentRecord = current.historicalDocuments?.[String(selectedJourney)];
   const canEditSelectedHistoricalDocument =
-    userJourney[selectedJourney]?.kind === "gate"
+    selectedJourney <= effectiveJourneyStep &&
+    (userJourney[selectedJourney]?.kind === "gate"
       ? role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
-      : canAuthorHistoricalDocument;
+      : canAuthorHistoricalDocument);
   const selectedOutputState = !hasProjects
     ? "생성 전"
     : selectedJourney < effectiveJourneyStep
-      ? "완료"
+      ? current.historicalImport && selectedJourney < historicalBaselineStep
+        ? "이관 완료"
+        : "완료"
       : selectedJourney === effectiveJourneyStep
         ? userJourney[selectedJourney].kind === "gate"
           ? "승인 대기"
@@ -6894,7 +6905,9 @@ function UserDashboard({
                       {rejectedGate
                         ? "반려·보완"
                         : index < effectiveJourneyStep
-                          ? "완료"
+                          ? current.historicalImport && index < historicalBaselineStep
+                            ? "이관 완료"
+                            : "완료"
                           : index === effectiveJourneyStep
                             ? "현재 단계"
                             : stage.kind === "gate"
@@ -6992,6 +7005,11 @@ function UserDashboard({
               title="선택된 Agent 과제가 없습니다."
               description="과제를 등록하거나 왼쪽 목록에서 선택하면 현재 단계와 문서 상태가 여기에 표시됩니다."
             />
+          ) : current.historicalImport && selectedJourney > effectiveJourneyStep ? (
+            <EmptyDataPage
+              title="아직 진행할 수 없는 단계입니다."
+              description={`${userJourney[effectiveJourneyStep].title} 단계를 완료하면 다음 단계의 작성과 승인이 활성화됩니다.`}
+            />
           ) : current.documentsDeferred &&
             selectedJourney !== 0 &&
             selectedJourney <= effectiveJourneyStep &&
@@ -7036,6 +7054,7 @@ function UserDashboard({
               record={deferredDocumentRecord}
               canDecide={role === ACCOUNT_ROLES.leader}
               canAssign={role === ACCOUNT_ROLES.admin}
+              allowMissingFea={historicalBaselineStep >= 2}
               onApprove={(record, selectedDeveloperIds) => {
                 const assignmentComplete = record.status === "complete";
                 const finalDeveloperIds = record.decision === "REJECTED" || !assignmentComplete ? [] : selectedDeveloperIds;
@@ -7051,6 +7070,10 @@ function UserDashboard({
                     developerNames,
                     handler: developerNames.join(" · ") || "담당자 배정 없음",
                     teamOwner: developerNames.join(" · ") || "담당자 배정 없음",
+                    ...(selectedJourney === effectiveJourneyStep && record.decision !== "REJECTED" ? {
+                      journeyStep: Math.min(userJourney.length - 1, selectedJourney + 1),
+                      status: `${userJourney[Math.min(userJourney.length - 1, selectedJourney + 1)].title} 진행 중`,
+                    } : {}),
                   } : {}),
                 });
                 setHomeG1Resolutions((items) => ({
@@ -7085,6 +7108,10 @@ function UserDashboard({
                     ...(current.historicalDocuments || {}),
                     [String(selectedJourney)]: record,
                   },
+                  ...(record.status === "complete" && selectedJourney === effectiveJourneyStep ? {
+                    journeyStep: Math.min(userJourney.length - 1, selectedJourney + 1),
+                    status: `${userJourney[Math.min(userJourney.length - 1, selectedJourney + 1)].title} 진행 중`,
+                  } : {}),
                 });
                 notify(`${selectedOutput.title} ${record.status === "complete" ? "작성을 완료" : "초안을 저장"}했습니다.`);
               }}
@@ -7098,6 +7125,10 @@ function UserDashboard({
                 onUpdateProject(current.no, {
                   intakeAnswers: answers,
                   requestedDate: answers[4] || "미입력",
+                  ...(effectiveJourneyStep === 0 ? {
+                    journeyStep: 1,
+                    status: `${userJourney[1].title} 진행 중`,
+                  } : {}),
                 });
                 setHistoricalIntakeEditing(false);
                 notify("에이전트 요구 접수서 보완 내용을 저장했습니다.");
@@ -7307,6 +7338,10 @@ function UserDashboard({
                         updatedAt: new Date().toISOString(),
                       },
                     },
+                    ...(effectiveJourneyStep === 1 ? {
+                      journeyStep: 2,
+                      status: `${userJourney[2].title} 진행 중`,
+                    } : {}),
                   });
                   notify("FEA 작성 완료가 기록되어 G1 착수 판정을 진행할 수 있습니다.");
                 }
@@ -14861,7 +14896,7 @@ function RequestWizard({
                         ))}
                       </select>
                     </label>
-                    <p>선택한 단계 이전 과정은 완료로 표시하고, 단계별 문서는 모두 ‘미등록’ 상태로 둡니다.</p>
+                    <p>선택한 단계 이전 문서·승인은 작성하지 않아도 ‘이관 완료’로 처리됩니다. 최종 확인 후에는 선택한 현재 단계부터 순서대로 완료해야 다음 단계가 열립니다.</p>
                   </div>
                 )}
                 {isAiTeam && (
@@ -14946,7 +14981,7 @@ function RequestWizard({
               <footer className="wizard-form-actions">
                 <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `${answers.filter(Boolean).length}/5 필수 항목 작성`}</span>
                 <button disabled={!canSubmit} onClick={submitRequest}>
-                  {isHistorical ? "과거 과제 등록" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
+                  {isHistorical ? "최종 확인 · 과거 과제 이관" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
                   <ArrowRight size={15} weight="bold" />
                 </button>
               </footer>
