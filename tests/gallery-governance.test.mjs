@@ -95,6 +95,14 @@ test("BP Solution is a distinct development role", () => {
   assert.match(page, /비피 솔루션 계정은 Agent 과제의 개발 담당자로 지정될 수 있습니다/);
 });
 
+test("BTS and BP Solution can be added to the roster by name only", () => {
+  assert.match(page, /const registrationEmailOptional = \["bts", "bp_solution"\]/);
+  assert.match(page, /BTS와 비피 솔루션은 이메일 없이 이름만으로도 등록할 수 있습니다/);
+  assert.match(page, /MS 계정 이메일 \(선택\)/);
+  assert.match(page, /이메일 미등록/);
+  assert.match(page, /key=\{account\.id\}/);
+});
+
 test("team dashboard maps registered accounts and database project assignments", () => {
   assert.match(page, /fetch\("\/api\/database\/team\/workload"/);
   assert.match(page, /setTeamAccounts\(payload\.members \|\| \[\]\)/);

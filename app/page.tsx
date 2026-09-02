@@ -14266,6 +14266,8 @@ function Governance({
   const [selectedRoleAccount, setSelectedRoleAccount] = useState<GovernanceUser | null>(null);
   const [editingAccount, setEditingAccount] = useState<GovernanceUser | null>(null);
   const [accountEditDraft, setAccountEditDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
+  const registrationEmailOptional = ["bts", "bp_solution"].includes(accountDraft.appRole);
+  const editEmailOptional = ["bts", "bp_solution"].includes(accountEditDraft.appRole);
   const [editingProjectNo, setEditingProjectNo] = useState<string | null>(null);
   const [adminDraft, setAdminDraft] = useState({
     name: "",
@@ -14296,7 +14298,7 @@ function Governance({
     if (!response.ok) return setAccountError(result.error || "계정을 등록하지 못했습니다.");
     setAccountDraft({ displayName: "", email: "", appRole: "team_member" });
     await loadAccounts();
-    notify("MS 계정 역할을 등록했습니다. 다음 로그인부터 해당 화면이 적용됩니다.");
+    notify(accountDraft.email ? "MS 계정 역할을 등록했습니다. 다음 로그인부터 해당 화면이 적용됩니다." : "이메일 없이 프로젝트 수행 인원을 등록했습니다.");
   };
   const changeAccountRole = async (account: GovernanceUser, appRole: string) => {
     setAccountError("");
@@ -14472,9 +14474,9 @@ function Governance({
             </div>
             {(isLeader || isAdmin) && (
               <div className="governance-account-form">
-                <div><b>프로젝트 수행 계정 등록</b><small>AI 활성화팀, BTS, 비피 솔루션 계정을 로그인 전에 미리 등록할 수 있습니다.</small></div>
+                <div><b>프로젝트 수행 계정 등록</b><small>BTS와 비피 솔루션은 이메일 없이 이름만으로도 등록할 수 있습니다.</small></div>
                 <input aria-label="등록할 사용자 이름" placeholder="이름" value={accountDraft.displayName} onChange={(event) => setAccountDraft({ ...accountDraft, displayName: event.target.value })} />
-                <input aria-label="등록할 MS 계정" type="email" placeholder="name@changshininc.com" value={accountDraft.email} onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })} />
+                <input aria-label="등록할 MS 계정" type="email" placeholder={registrationEmailOptional ? "MS 계정 이메일 (선택)" : "name@changshininc.com"} required={!registrationEmailOptional} value={accountDraft.email} onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })} />
                 <select aria-label="등록할 역할" value={accountDraft.appRole} onChange={(event) => setAccountDraft({ ...accountDraft, appRole: event.target.value })}>
                   <option value="team_member">AI 활성화팀 팀원</option>
                   <option value="bts">BTS</option>
@@ -14482,7 +14484,7 @@ function Governance({
                   {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}
                   {isAdmin && <option value="admin">admin</option>}
                 </select>
-                <button className="primary" onClick={registerAccount}>계정 등록</button>
+                <button className="primary" disabled={!accountDraft.displayName.trim() || (!registrationEmailOptional && !accountDraft.email.includes("@")) || Boolean(accountDraft.email && !accountDraft.email.includes("@"))} onClick={registerAccount}>계정 등록</button>
               </div>
             )}
             {accountError && <p className="governance-account-error">{accountError}</p>}
@@ -14498,7 +14500,7 @@ function Governance({
               {visibleAccounts.map((account) => (
                 <div
                   className={`governance-account-row ${["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) ? "is-clickable" : ""}`}
-                  key={account.email}
+                  key={account.id}
                   role={["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) ? "button" : undefined}
                   tabIndex={["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) ? 0 : undefined}
                   onClick={() => ["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) && setSelectedRoleAccount(account)}
@@ -14506,7 +14508,7 @@ function Governance({
                 >
                   <span>
                     <b>{account.displayName}</b>
-                    <small>{account.email}</small>
+                    <small>{account.email || "이메일 미등록"}</small>
                   </span>
                   <span>
                     {canManageAccount(account) ? (
@@ -14701,7 +14703,7 @@ function Governance({
             </header>
             <div className="governance-account-edit-form">
               <label><span>사용자 이름</span><input value={accountEditDraft.displayName} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, displayName: event.target.value })} /></label>
-              <label><span>MS 계정 이메일</span><input type="email" value={accountEditDraft.email} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, email: event.target.value })} /></label>
+              <label><span>MS 계정 이메일{editEmailOptional ? " (선택)" : ""}</span><input type="email" placeholder={editEmailOptional ? "이메일 없이 수행자로 등록됨" : "name@changshininc.com"} required={!editEmailOptional} value={accountEditDraft.email} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, email: event.target.value })} /></label>
               <label><span>계정 역할</span><select value={accountEditDraft.appRole} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, appRole: event.target.value })}>
                 <option value="general_user">일반 User</option>
                 <option value="team_member">AI 활성화팀 팀원</option>
@@ -14717,7 +14719,7 @@ function Governance({
               <button className="danger" onClick={() => void deleteAccount(editingAccount)}><Trash size={14} /> 계정 삭제</button>
               <span />
               <button onClick={() => setEditingAccount(null)}>취소</button>
-              <button className="primary" disabled={!accountEditDraft.displayName.trim() || !accountEditDraft.email.includes("@")} onClick={() => void saveAccount()}>변경 저장</button>
+              <button className="primary" disabled={!accountEditDraft.displayName.trim() || (!editEmailOptional && !accountEditDraft.email.includes("@")) || Boolean(accountEditDraft.email && !accountEditDraft.email.includes("@"))} onClick={() => void saveAccount()}>변경 저장</button>
             </footer>
           </section>
         </div>
@@ -14726,7 +14728,7 @@ function Governance({
         <div className="gallery-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedRoleAccount(null); }}>
           <section className="governance-role-modal" role="dialog" aria-modal="true" aria-labelledby="governance-role-title">
             <header>
-              <div><small>AI ENABLEMENT ROLE</small><h2 id="governance-role-title">{roleLabel(selectedRoleAccount.appRole)} 권한</h2><p>{selectedRoleAccount.displayName} · {selectedRoleAccount.email}</p></div>
+              <div><small>AI ENABLEMENT ROLE</small><h2 id="governance-role-title">{roleLabel(selectedRoleAccount.appRole)} 권한</h2><p>{selectedRoleAccount.displayName} · {selectedRoleAccount.email || "이메일 미등록"}</p></div>
               <button aria-label="역할 설명 닫기" onClick={() => setSelectedRoleAccount(null)}><X size={20} /></button>
             </header>
             {selectedRoleAccount.appRole === "admin" ? (

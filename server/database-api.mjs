@@ -506,7 +506,7 @@ async function listGovernanceUsers(identity) {
     );
   }
   const result = await pool.query(
-    `select u.id, u.email, u.display_name as "displayName", u.app_role as "appRole",
+    `select u.id, coalesce(u.email, '') as email, u.display_name as "displayName", u.app_role as "appRole",
             u.is_active as "isActive", u.last_login_at as "lastLoginAt",
             t.team_name as "teamName"
        from agent_portal.users u
@@ -518,9 +518,9 @@ async function listGovernanceUsers(identity) {
   );
   const users = result.rows.map((user) => ({
     ...user,
-    roleSource: bootstrapAdmins.has(user.email.toLowerCase())
+    roleSource: bootstrapAdmins.has(String(user.email || "").toLowerCase())
       ? "bootstrap_admin"
-      : bootstrapLeaders.has(user.email.toLowerCase())
+      : bootstrapLeaders.has(String(user.email || "").toLowerCase())
         ? "bootstrap_leader"
         : "portal_database",
   }));
@@ -545,11 +545,12 @@ async function registerGovernanceUser(body, identity) {
   const email = String(body.email || "").trim().toLowerCase();
   const displayName = String(body.displayName || "").trim();
   const newRole = String(body.appRole || "team_member");
+  const emailOptional = ["bts", "bp_solution"].includes(newRole);
   if (!['team_member', 'team_leader', 'bts', 'bp_solution', 'admin'].includes(newRole)) {
     return { status: 400, body: { error: "Only AI Enablement Team accounts can be registered here." } };
   }
-  if (!email || !email.includes("@") || !displayName) {
-    return { status: 400, body: { error: "Name and a valid MS account email are required." } };
+  if (!displayName || (!emailOptional && (!email || !email.includes("@"))) || (email && !email.includes("@"))) {
+    return { status: 400, body: { error: emailOptional ? "Name and a valid MS account email, when provided, are required." : "Name and a valid MS account email are required." } };
   }
   return withTransaction(async (client) => {
     const actor = await governanceActor(client, identity);
@@ -557,10 +558,12 @@ async function registerGovernanceUser(body, identity) {
       return { status: 403, body: { error: "Role assignment permission is required." } };
     }
     const catalog = await ensurePortalCatalog(client);
-    const existing = await client.query(
-      `select id, app_role from agent_portal.users where lower(email) = lower($1) limit 1 for update`,
-      [email],
-    );
+    const existing = email
+      ? await client.query(
+          `select id, app_role from agent_portal.users where lower(email) = lower($1) limit 1 for update`,
+          [email],
+        )
+      : { rows: [] };
     let user;
     if (existing.rows[0]?.app_role === "general_user") {
       user = (await client.query(
@@ -580,7 +583,7 @@ async function registerGovernanceUser(body, identity) {
     } else {
       user = (await client.query(
         `insert into agent_portal.users (organization_id, team_id, email, display_name, app_role, is_active)
-         values ($1,case when $4 in ('team_member','team_leader','bts','bp_solution','admin') then $2::bigint else null end,$3,$5,$4,true)
+         values ($1,case when $4 in ('team_member','team_leader','bts','bp_solution','admin') then $2::bigint else null end,nullif($3,''),$5,$4,true)
          returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
         [catalog.organizationId, catalog.aiTeamId, email, newRole, displayName],
       )).rows[0];
@@ -605,14 +608,15 @@ async function updateGovernanceUser(userId, body, identity) {
     const newRole = String(body.appRole || target.app_role);
     const email = String(body.email ?? target.email ?? "").trim().toLowerCase();
     const displayName = String(body.displayName ?? target.display_name ?? "").trim();
+    const emailOptional = ["bts", "bp_solution"].includes(newRole);
     if (!actor || !allowedRoleChange(actor.app_role, newRole)) {
       return { status: 403, body: { error: "Role assignment permission is required." } };
     }
-    if (!email || !email.includes("@") || !displayName) {
-      return { status: 400, body: { error: "Name and a valid MS account email are required." } };
+    if (!displayName || (!emailOptional && (!email || !email.includes("@"))) || (email && !email.includes("@"))) {
+      return { status: 400, body: { error: emailOptional ? "Name and a valid MS account email, when provided, are required." : "Name and a valid MS account email are required." } };
     }
     if (target.id === actor.id) return { status: 409, body: { error: "You cannot change your own role." } };
-    if (bootstrapAccountSource(target.email) && (email !== target.email.toLowerCase() || newRole !== target.app_role)) {
+    if (bootstrapAccountSource(target.email) && (email !== String(target.email || "").toLowerCase() || newRole !== target.app_role)) {
       return { status: 409, body: { error: "Bootstrap account email and role must be changed in Azure App Service settings." } };
     }
     if (actor.app_role === "team_leader" && !["general_user", "team_member", "bts", "bp_solution"].includes(target.app_role)) {
@@ -622,16 +626,18 @@ async function updateGovernanceUser(userId, body, identity) {
       const count = await client.query(`select count(*)::int as count from agent_portal.users where app_role='admin' and is_active=true`);
       if (count.rows[0].count <= 1) return { status: 409, body: { error: "The last active admin cannot be demoted." } };
     }
-    const duplicate = await client.query(
-      `select id from agent_portal.users where lower(email)=lower($1) and id<>$2 limit 1`,
-      [email, target.id],
-    );
+    const duplicate = email
+      ? await client.query(
+          `select id from agent_portal.users where lower(email)=lower($1) and id<>$2 limit 1`,
+          [email, target.id],
+        )
+      : { rows: [] };
     if (duplicate.rows[0]) return { status: 409, body: { error: "This MS account email is already registered." } };
     const catalog = await ensurePortalCatalog(client);
     const updated = (await client.query(
       `update agent_portal.users set app_role=$2,
               team_id=case when $2 in ('team_member','team_leader','bts','bp_solution','admin') then $3::bigint else null end,
-              email=$4, display_name=$5, is_active=true,
+              email=nullif($4,''), display_name=$5, is_active=true,
               updated_at=now() where id=$1
        returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
       [target.id, newRole, catalog.aiTeamId, email, displayName],
@@ -709,7 +715,7 @@ async function listTeamWorkload(identity) {
 
   const [memberResult, projectResult] = await Promise.all([
     pool.query(
-      `select u.id::text as id, u.email, u.display_name as "displayName",
+      `select u.id::text as id, coalesce(u.email, '') as email, u.display_name as "displayName",
               u.app_role as "appRole", u.job_title as "jobTitle"
          from agent_portal.users u
         where u.is_active = true
