@@ -117,6 +117,9 @@ test("keeps the new Agent request dialog readable", () => {
   assert.ok(css.includes(".chat-wizard .chat-message p"));
   assert.ok(css.includes("font-size: 28px !important"));
   assert.ok(css.includes("font-size: 14px !important"));
+  assert.match(css, /\.chat-wizard-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s);
+  assert.ok(css.includes(".chat-wizard-grid > .wizard-form-panel"));
+  assert.ok(css.includes("width: 100%"));
 });
 
 test("imports historical projects with past dates, a current stage, and deferred documents", () => {
@@ -157,7 +160,8 @@ test("assigns multiple registered developers while importing a historical projec
   assert.ok(page.includes('type="checkbox"'));
   assert.ok(page.includes("developerIds: historicalDeveloperIds"));
   assert.ok(page.includes("developerNames"));
-  assert.ok(page.includes('account.appRole === "team_member" || account.appRole === "bts"'));
+  assert.ok(page.includes("const eligibleDevelopers = teamAccounts"));
+  assert.ok(page.includes("일반 User를 제외한 등록 계정"));
   assert.ok(css.includes(".historical-developer-list"));
 });
 

@@ -38,10 +38,10 @@ test("opens dashboard projects in the matching home Agent record", () => {
   assert.ok(page.includes("projectNo={workflowTarget}"));
 });
 
-test("uses the same one-page home for leader, member, BTS, user, and admin", () => {
+test("uses the same one-page home for every account role", () => {
   assert.match(
     page,
-    /role === ACCOUNT_ROLES\.member \|\| role === ACCOUNT_ROLES\.bts \|\| role === ACCOUNT_ROLES\.leader \|\| role === ACCOUNT_ROLES\.admin/,
+    /role === ACCOUNT_ROLES\.member \|\| role === ACCOUNT_ROLES\.bts \|\| role === ACCOUNT_ROLES\.bpSolution \|\| role === ACCOUNT_ROLES\.leader \|\| role === ACCOUNT_ROLES\.admin/,
   );
   assert.ok(page.includes("팀 전체 Agent 과제"));
   assert.ok(page.includes("팀장 감독·승인"));
@@ -62,8 +62,8 @@ test("keeps gate approvals with the leader and system administration separate", 
   assert.ok(page.includes("등록된 Agent 과제가 없습니다"));
 });
 
-test("uses five account roles and project-scoped assignments", () => {
-  for (const role of ["leader", "member", "bts", "user", "admin"])
+test("uses six account roles and project-scoped assignments", () => {
+  for (const role of ["leader", "member", "bts", "bpSolution", "user", "admin"])
     assert.ok(page.includes(`${role}:`));
   for (const relationship of [
     "REQUESTER",
@@ -158,6 +158,14 @@ test("requires the team leader to assign an independent G3 reviewer", () => {
   assert.ok(page.includes("배정된 리뷰어에게 EVR·DEP 검토와 G3 서명 권한"));
   assert.ok(page.includes("Boolean(assignedReviewer)"));
   assert.ok(css.includes(".g3-reviewer-assignment"));
+});
+
+test("auto-approves the G3 reviewer signature when TBD is assigned", () => {
+  assert.ok(page.includes('"TBD"'));
+  assert.ok(page.includes('const tbdReviewer = reviewerDraft === "TBD"'));
+  assert.ok(page.includes("setG3ReviewerApproved(tbdReviewer)"));
+  assert.ok(page.includes("TBD 설정 · 리뷰어 승인 자동 완료"));
+  assert.ok(page.includes("리뷰어 승인을 자동 완료했습니다"));
 });
 
 test("lets the project developer author DEP and all six UG sections", () => {

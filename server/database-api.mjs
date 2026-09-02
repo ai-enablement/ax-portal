@@ -83,7 +83,7 @@ export async function ensurePortalUser(client, identity) {
 
   const catalog = await ensurePortalCatalog(client);
   const initialRole = bootstrapRole || "general_user";
-  const teamId = ["team_member", "team_leader", "bts", "admin"].includes(initialRole)
+  const teamId = ["team_member", "team_leader", "bts", "bp_solution", "admin"].includes(initialRole)
     ? catalog.aiTeamId
     : null;
 
@@ -157,6 +157,7 @@ const gallerySelect = `
         when 'team_member' then 'AI 활성화팀 팀원'
         when 'team_leader' then 'AI 활성화팀 팀장'
         when 'bts' then 'BTS'
+        when 'bp_solution' then '비피 솔루션'
         else 'admin'
       end as "applicant",
     to_char(gs.submitted_at at time zone 'Asia/Seoul', 'YYYY.MM.DD HH24:MI') as "submittedAt",
@@ -458,7 +459,7 @@ async function health() {
 }
 
 const governanceRoles = new Set(["team_member", "team_leader", "admin"]);
-const teamWorkspaceRoles = new Set(["team_member", "team_leader", "bts", "admin"]);
+const teamWorkspaceRoles = new Set(["team_member", "team_leader", "bts", "bp_solution", "admin"]);
 
 async function governanceActor(client, identity) {
   const actor = await findUser(client, identity);
@@ -510,9 +511,9 @@ async function listGovernanceUsers(identity) {
             t.team_name as "teamName"
        from agent_portal.users u
        left join agent_portal.teams t on t.id = u.team_id
-      where u.app_role in ('team_leader','team_member','bts','admin')
+      where u.app_role in ('team_leader','team_member','bts','bp_solution','admin')
       order by case u.app_role when 'admin' then 1 when 'team_leader' then 2
-                 when 'team_member' then 3 when 'bts' then 4 else 5 end,
+                 when 'team_member' then 3 when 'bts' then 4 when 'bp_solution' then 5 else 6 end,
                u.display_name, u.email`,
   );
   const users = result.rows.map((user) => ({
@@ -527,15 +528,15 @@ async function listGovernanceUsers(identity) {
 }
 
 function allowedRoleChange(actorRole, newRole) {
-  if (actorRole === "admin") return ["general_user", "team_member", "team_leader", "bts", "admin"].includes(newRole);
-  return actorRole === "team_leader" && ["general_user", "team_member", "bts"].includes(newRole);
+  if (actorRole === "admin") return ["general_user", "team_member", "team_leader", "bts", "bp_solution", "admin"].includes(newRole);
+  return actorRole === "team_leader" && ["general_user", "team_member", "bts", "bp_solution"].includes(newRole);
 }
 
 async function registerGovernanceUser(body, identity) {
   const email = String(body.email || "").trim().toLowerCase();
   const displayName = String(body.displayName || "").trim();
   const newRole = String(body.appRole || "team_member");
-  if (!['team_member', 'team_leader', 'bts', 'admin'].includes(newRole)) {
+  if (!['team_member', 'team_leader', 'bts', 'bp_solution', 'admin'].includes(newRole)) {
     return { status: 400, body: { error: "Only AI Enablement Team accounts can be registered here." } };
   }
   if (!email || !email.includes("@") || !displayName) {
@@ -570,7 +571,7 @@ async function registerGovernanceUser(body, identity) {
     } else {
       user = (await client.query(
         `insert into agent_portal.users (organization_id, team_id, email, display_name, app_role, is_active)
-         values ($1,case when $4 in ('team_member','team_leader','bts','admin') then $2 else null end,$3,$5,$4,true)
+         values ($1,case when $4 in ('team_member','team_leader','bts','bp_solution','admin') then $2 else null end,$3,$5,$4,true)
          returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
         [catalog.organizationId, catalog.aiTeamId, email, newRole, displayName],
       )).rows[0];
@@ -596,7 +597,7 @@ async function updateGovernanceUser(userId, body, identity) {
     )).rows[0];
     if (!target) return { status: 404, body: { error: "User not found." } };
     if (target.id === actor.id) return { status: 409, body: { error: "You cannot change your own role." } };
-    if (actor.app_role === "team_leader" && !["general_user", "team_member", "bts"].includes(target.app_role)) {
+    if (actor.app_role === "team_leader" && !["general_user", "team_member", "bts", "bp_solution"].includes(target.app_role)) {
       return { status: 403, body: { error: "Team leaders can only manage general users, AI Enablement Team members, and BTS users." } };
     }
     if (target.app_role === "admin" && newRole !== "admin") {
@@ -606,7 +607,7 @@ async function updateGovernanceUser(userId, body, identity) {
     const catalog = await ensurePortalCatalog(client);
     const updated = (await client.query(
       `update agent_portal.users set app_role=$2,
-              team_id=case when $2 in ('team_member','team_leader','bts','admin') then $3 else null end,
+              team_id=case when $2 in ('team_member','team_leader','bts','bp_solution','admin') then $3 else null end,
               updated_at=now() where id=$1
        returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
       [target.id, newRole, catalog.aiTeamId],
@@ -649,9 +650,9 @@ async function listTeamWorkload(identity) {
               u.app_role as "appRole", u.job_title as "jobTitle"
          from agent_portal.users u
         where u.is_active = true
-          and u.app_role in ('team_leader','team_member','bts','admin')
+          and u.app_role in ('team_leader','team_member','bts','bp_solution','admin')
         order by case u.app_role when 'team_leader' then 1 when 'team_member' then 2
-                   when 'bts' then 3 else 4 end,
+                   when 'bts' then 3 when 'bp_solution' then 4 else 5 end,
                  u.display_name, u.email`,
     ),
     pool.query(
@@ -682,7 +683,7 @@ async function listTeamWorkload(identity) {
           and pm.relationship in ('developer','reviewer','operator','security_reviewer','observer')
          left join agent_portal.users assigned
            on assigned.id = pm.user_id and assigned.is_active = true
-          and assigned.app_role in ('team_leader','team_member','bts','admin')
+          and assigned.app_role in ('team_leader','team_member','bts','bp_solution','admin')
         where p.deleted_at is null
         group by p.id, rt.team_name, requester.display_name, ls.stage_name
         order by p.updated_at desc, p.project_code desc`,
@@ -746,12 +747,12 @@ async function assignProjectDeveloper(projectCode, body, identity) {
     const assignee = (await client.query(
       `select id, display_name as "displayName", app_role as "appRole"
          from agent_portal.users
-        where id=$1 and is_active=true and app_role in ('team_member','bts')
+        where id=$1 and is_active=true and app_role <> 'general_user'
         limit 1`,
       [userId],
     )).rows[0];
     if (!assignee) {
-      return { status: 400, body: { error: "Select an active AI Enablement Team member or BTS user." } };
+      return { status: 400, body: { error: "Select an active non-general-user account." } };
     }
     await client.query(
       `update agent_portal.project_members

@@ -14713,7 +14713,12 @@ body {
   overflow-x: hidden;
 }
 .chat-wizard-grid {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+.chat-wizard-grid > .wizard-form-panel,
+.chat-wizard-grid > .wizard-chat-panel {
+  width: 100%;
+  max-width: none;
 }
 .wizard-steps {
   grid-template-columns: repeat(5, minmax(0, 1fr));

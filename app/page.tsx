@@ -43,6 +43,7 @@ const ACCOUNT_ROLES = {
   leader: "AI활성화팀 팀장",
   member: "AI활성화팀 팀원",
   bts: "BTS",
+  bpSolution: "비피 솔루션",
   user: "일반 User",
   admin: "admin",
 } as const;
@@ -52,7 +53,7 @@ type PortalIdentity = {
   email: string;
   displayName: string;
   objectId: string;
-  appRole: "team_leader" | "team_member" | "bts" | "general_user" | "admin";
+  appRole: "team_leader" | "team_member" | "bts" | "bp_solution" | "general_user" | "admin";
   accountRole: AccountRole;
   source: "entra" | "development";
   canSwitchRole: boolean;
@@ -61,6 +62,7 @@ const ACCOUNT_EMAILS: Record<AccountRole, string> = {
   [ACCOUNT_ROLES.leader]: "leader@example.invalid",
   [ACCOUNT_ROLES.member]: "member@example.invalid",
   [ACCOUNT_ROLES.bts]: "bts@example.invalid",
+  [ACCOUNT_ROLES.bpSolution]: "bp.solution@example.invalid",
   [ACCOUNT_ROLES.user]: "user@example.invalid",
   [ACCOUNT_ROLES.admin]: "admin@example.invalid",
 };
@@ -545,7 +547,7 @@ type TeamAccount = {
   id: string;
   email: string;
   displayName: string;
-  appRole: "team_leader" | "team_member" | "bts" | "admin";
+  appRole: "team_leader" | "team_member" | "bts" | "bp_solution" | "admin";
   jobTitle?: string;
 };
 
@@ -938,6 +940,17 @@ export default function Home() {
               "governance",
             ])
           : role === ACCOUNT_ROLES.bts
+            ? new Set<View>([
+                "home",
+                "teamboard",
+                "intake",
+                "definition",
+                "delivery",
+                "operations",
+                "hub",
+                "gallery",
+              ])
+          : role === ACCOUNT_ROLES.bpSolution
             ? new Set<View>([
                 "home",
                 "teamboard",
@@ -1392,6 +1405,7 @@ export default function Home() {
                   <option value={ACCOUNT_ROLES.leader}>AI 활성화팀 팀장</option>
                   <option value={ACCOUNT_ROLES.member}>AI 활성화팀 팀원</option>
                   <option value={ACCOUNT_ROLES.bts}>BTS</option>
+                  <option value={ACCOUNT_ROLES.bpSolution}>비피 솔루션</option>
                   <option value={ACCOUNT_ROLES.user}>일반 User</option>
                   <option value={ACCOUNT_ROLES.admin}>admin</option>
                 </select>
@@ -1412,6 +1426,8 @@ export default function Home() {
                         ? "AI 활성화팀 팀원"
                         : role === ACCOUNT_ROLES.bts
                           ? "BTS"
+                        : role === ACCOUNT_ROLES.bpSolution
+                          ? "비피 솔루션"
                         : role === ACCOUNT_ROLES.admin
                           ? "Admin"
                           : "일반 User"}
@@ -1772,7 +1788,7 @@ function Dashboard({
   notify: (message: string) => void;
 }) {
   const baseProjectItems =
-    role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
+    role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.bpSolution || role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin
       ? userProjectItems
       : userProjectItems;
   const targetRequirement = teamRequirementItems.find(
@@ -1789,6 +1805,7 @@ function Dashboard({
     role === ACCOUNT_ROLES.admin ||
     role === ACCOUNT_ROLES.member ||
     role === ACCOUNT_ROLES.bts ||
+    role === ACCOUNT_ROLES.bpSolution ||
     role === ACCOUNT_ROLES.user
   )
     return (
@@ -2615,6 +2632,8 @@ function TeamPortfolioAnalytics({
                         ? "AI 활성화팀"
                         : member.appRole === "bts"
                           ? "BTS"
+                        : member.appRole === "bp_solution"
+                          ? "비피 솔루션"
                           : "admin"}
                   </small>
                 </span>
@@ -4607,7 +4626,8 @@ function GateApprovalResult({
   const isLeader = isTeamLeader || isAdmin;
   const isMember =
     (role.includes("AI활성화팀") && role.includes("담당자")) ||
-    role === ACCOUNT_ROLES.bts;
+    role === ACCOUNT_ROLES.bts ||
+    role === ACCOUNT_ROLES.bpSolution;
   const isRequester = role === "일반 User";
   const canActOnG2 = isRequester || isMember || isLeader;
   const isCompletedG2 = projectNo === "2026-021" && gate === "G2";
@@ -5117,7 +5137,7 @@ function GateApprovalResult({
         {isG1 && isAdmin && basisReady && g1Decision !== "PENDING" && g1Decision !== "DROP" && g1Assignee === "미배정" && (
           <section className="g1-leader-decision g1-admin-assignment">
             <header><div><Pill tone="violet">Admin 액션</Pill><h4>개발 담당자 배정</h4><p>팀장이 확정한 {g1StatusLabel} 판정을 확인하고 실제 개발 담당자를 지정합니다.</p></div></header>
-            <div className="g1-decision-fields"><label>개발 담당자 (AI 활성화팀 · BTS)<select value={selectedG1Assignee?.displayName || ""} onChange={(event) => { const account = assignees.find((item) => item.displayName === event.target.value); setG1Assignee(account?.displayName || "미배정"); }}><option value="">미배정</option>{assignees.filter((account) => ["team_member", "bts"].includes(account.appRole)).map((account) => <option key={account.id} value={account.displayName}>{account.displayName} · {account.appRole === "bts" ? "BTS" : "AI 활성화팀"}</option>)}</select></label></div>
+            <div className="g1-decision-fields"><label>개발 담당자 (일반 User 제외)<select value={selectedG1Assignee?.displayName || ""} onChange={(event) => { const account = assignees.find((item) => item.displayName === event.target.value); setG1Assignee(account?.displayName || "미배정"); }}><option value="">미배정</option>{assignees.map((account) => <option key={account.id} value={account.displayName}>{account.displayName} · {account.appRole === "bts" ? "BTS" : account.appRole === "bp_solution" ? "비피 솔루션" : account.appRole === "admin" ? "admin" : account.appRole === "team_leader" ? "AI 활성화팀 팀장" : "AI 활성화팀 팀원"}</option>)}</select></label></div>
             <button className="primary" disabled={!selectedG1Assignee} onClick={async () => { if (!selectedG1Assignee || !onAssignDeveloper) return; try { await onAssignDeveloper(projectNo, selectedG1Assignee.id); onG1Resolved?.(g1Decision, selectedG1Assignee.displayName, g1Reason); notify(`${selectedG1Assignee.displayName}님을 개발 담당자로 배정했습니다.`); } catch (error) { notify(error instanceof Error ? error.message : "개발 담당자 배정에 실패했습니다."); } }}>개발 담당자 배정 확정</button>
           </section>
         )}
@@ -6419,9 +6439,7 @@ function HistoricalG1Approval({
   allowMissingFea: boolean;
   onApprove: (record: HistoricalDocumentRecord, developerIds: string[]) => void;
 }) {
-  const developers = teamAccounts.filter(
-    (account) => account.appRole === "team_member" || account.appRole === "bts",
-  );
+  const developers = teamAccounts;
   const leader = teamAccounts.find((account) => account.appRole === "team_leader");
   const [decision, setDecision] = useState(record?.decision || "PENDING");
   const [developerIds, setDeveloperIds] = useState(
@@ -6509,11 +6527,11 @@ function HistoricalG1Approval({
       {decision !== "REJECTED" && (
         <fieldset className="historical-g1-developers" disabled={!canAssign || !decisionConfirmed}>
           <legend>개발 담당자 배정 <span>{developerIds.length}명 선택</span></legend>
-          <p>등록된 AI 활성화팀 팀원과 BTS 중 실제 개발 담당자를 선택합니다.</p>
+          <p>일반 User를 제외한 등록 계정 중 실제 개발 담당자를 선택합니다.</p>
           <div>{developers.map((account) => (
             <label key={account.id} className={developerIds.includes(account.id) ? "selected" : ""}>
               <input type="checkbox" checked={developerIds.includes(account.id)} onChange={() => toggleDeveloper(account.id)} />
-              <span><b>{account.displayName || account.email}</b><small>{account.email} · {account.appRole === "bts" ? "BTS" : "AI 활성화팀 팀원"}</small></span>
+              <span><b>{account.displayName || account.email}</b><small>{account.email} · {account.appRole === "bts" ? "BTS" : account.appRole === "bp_solution" ? "비피 솔루션" : account.appRole === "admin" ? "admin" : account.appRole === "team_leader" ? "AI 활성화팀 팀장" : "AI 활성화팀 팀원"}</small></span>
             </label>
           ))}</div>
         </fieldset>
@@ -6558,7 +6576,7 @@ function UserDashboard({
   const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const isAiTeam = isLeader || isAiTeamMember;
-  const isProjectContributor = isAiTeam || role === ACCOUNT_ROLES.bts;
+  const isProjectContributor = isAiTeam || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.bpSolution;
   const [selected, setSelected] = useState(0);
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
@@ -6829,7 +6847,7 @@ function UserDashboard({
               <h2>
                 {isLeader
                   ? "팀 전체 Agent 과제"
-                  : isAiTeamMember || role === ACCOUNT_ROLES.bts
+                  : isAiTeamMember || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.bpSolution
                     ? "내 담당 Agent 과제"
                     : "내 Agent 과제"}
               </h2>
@@ -10076,6 +10094,7 @@ function DeliveryWorkplace({
   ];
   const current = deliveryProjects[selectedProject];
   const reviewerCandidates = [
+    "TBD",
     "정지헌",
     "허정환",
     "허시영",
@@ -11872,6 +11891,7 @@ function DeliveryWorkplace({
                   <p>
                     개발 담당자와 다른 AI 활성화팀 팀원을 팀장이 지정합니다.
                     배정된 리뷰어에게 EVR·DEP 검토와 G3 서명 권한이 열립니다.
+                    TBD를 선택하면 리뷰어 승인은 자동 완료됩니다.
                   </p>
                 </div>
                 <Pill tone={assignedReviewer ? "green" : "orange"}>
@@ -11907,10 +11927,11 @@ function DeliveryWorkplace({
                         ...items,
                         [current.no]: reviewerDraft,
                       }));
-                      setG3ReviewerApproved(false);
-                      notify(
-                        `${reviewerDraft} 담당자를 ${current.name}의 G3 동료 리뷰어로 배정했습니다.`,
-                      );
+                      const tbdReviewer = reviewerDraft === "TBD";
+                      setG3ReviewerApproved(tbdReviewer);
+                      notify(tbdReviewer
+                        ? `${current.name}의 G3 리뷰어를 TBD로 설정해 리뷰어 승인을 자동 완료했습니다.`
+                        : `${reviewerDraft} 담당자를 ${current.name}의 G3 동료 리뷰어로 배정했습니다.`);
                     }}
                   >
                     {assignedReviewer ? "리뷰어 변경·저장" : "리뷰어 배정"}
@@ -11922,7 +11943,9 @@ function DeliveryWorkplace({
                   <b>{assignedReviewer || "아직 배정되지 않았습니다."}</b>
                   <span>
                     {assignedReviewer
-                      ? isReviewer
+                      ? assignedReviewer === "TBD"
+                        ? "TBD 설정 · 리뷰어 승인 자동 완료"
+                        : isReviewer
                         ? "내 리뷰 과제 · 전체 프로젝트 이력과 승인 근거 열람 가능"
                         : "배정된 리뷰어만 독립 검토와 승인 가능"
                       : "AI 활성화팀장이 리뷰어를 배정하면 검토가 시작됩니다."}
@@ -13642,6 +13665,8 @@ function Gallery({
         ? { name: identity?.displayName || "AI 활성화팀 팀원", department: "AI 활성화팀", roleLabel: "AI 활성화팀 팀원" }
         : role === ACCOUNT_ROLES.bts
           ? { name: identity?.displayName || "BTS 담당자", department: "BTS", roleLabel: "BTS" }
+        : role === ACCOUNT_ROLES.bpSolution
+          ? { name: identity?.displayName || "비피 솔루션 담당자", department: "비피 솔루션", roleLabel: "비피 솔루션" }
         : role === ACCOUNT_ROLES.admin
           ? { name: identity?.displayName || "Portal Admin", department: "AI 활성화팀", roleLabel: "Admin" }
           : { name: identity?.displayName || "일반 User", department: "현업", roleLabel: "일반 User" };
@@ -14122,7 +14147,7 @@ function Governance({
   const [accounts, setAccounts] = useState<GovernanceUser[]>([]);
   const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
-  const [accountFilter, setAccountFilter] = useState<"all" | "ai" | "bts" | "admin">("all");
+  const [accountFilter, setAccountFilter] = useState<"all" | "ai" | "bts" | "bp" | "admin">("all");
   const [accountDraft, setAccountDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
   const [accountError, setAccountError] = useState("");
   const [selectedRoleAccount, setSelectedRoleAccount] = useState<GovernanceUser | null>(null);
@@ -14172,14 +14197,16 @@ function Governance({
     const matchesRole = accountFilter === "all"
       || (accountFilter === "ai" && ["team_member", "team_leader"].includes(account.appRole))
       || (accountFilter === "bts" && account.appRole === "bts")
+      || (accountFilter === "bp" && account.appRole === "bp_solution")
       || (accountFilter === "admin" && account.appRole === "admin");
     return matchesSearch && matchesRole;
   });
-  const roleLabel = (appRole: string) => ({ general_user: "일반 User", team_member: "AI 활성화팀 팀원", team_leader: "AI 활성화팀 팀장", bts: "BTS", admin: "admin" }[appRole] || appRole);
+  const roleLabel = (appRole: string) => ({ general_user: "일반 User", team_member: "AI 활성화팀 팀원", team_leader: "AI 활성화팀 팀장", bts: "BTS", bp_solution: "비피 솔루션", admin: "admin" }[appRole] || appRole);
   const projectPermission = (appRole: string) => ({
     team_leader: { title: "팀 전체 과제 감독", detail: "전체 이력 조회 · G1/G3/G4 승인" },
     team_member: { title: "배정된 과제 수행", detail: "담당 또는 리뷰어 배정 시 전체 이력 조회" },
     bts: { title: "배정된 과제 수행", detail: "BTS 수행자로 배정된 프로젝트와 전체 이력 조회" },
+    bp_solution: { title: "배정된 과제 수행", detail: "비피 솔루션 개발 담당자로 배정된 프로젝트와 전체 이력 조회" },
     admin: { title: "전체 시스템 관리", detail: "모든 과제 수정·삭제 및 역할 관리" },
     general_user: { title: "요청·Owner 과제", detail: "요청자 또는 Project Owner 범위" },
   }[appRole] || { title: "역할 기준 접근", detail: "등록된 역할에 따라 접근" });
@@ -14244,8 +14271,8 @@ function Governance({
         </div>
         <div>
           <p>계정 역할</p>
-          <strong>4</strong>
-          <small>팀장 · 팀원 · BTS · admin</small>
+          <strong>5</strong>
+          <small>팀장 · 팀원 · BTS · 비피 솔루션 · admin</small>
         </div>
         <div>
           <p>프로젝트 배정</p>
@@ -14278,6 +14305,7 @@ function Governance({
                 <button className={accountFilter === "all" ? "active" : ""} onClick={() => setAccountFilter("all")}>전체 {accounts.length}</button>
                 <button className={accountFilter === "ai" ? "active" : ""} onClick={() => setAccountFilter("ai")}>AI 활성화팀 {accounts.filter((item) => ["team_member", "team_leader"].includes(item.appRole)).length}</button>
                 <button className={accountFilter === "bts" ? "active" : ""} onClick={() => setAccountFilter("bts")}>BTS {accounts.filter((item) => item.appRole === "bts").length}</button>
+                <button className={accountFilter === "bp" ? "active" : ""} onClick={() => setAccountFilter("bp")}>비피 솔루션 {accounts.filter((item) => item.appRole === "bp_solution").length}</button>
                 <button className={accountFilter === "admin" ? "active" : ""} onClick={() => setAccountFilter("admin")}>admin {accounts.filter((item) => item.appRole === "admin").length}</button>
               </div>
               <label>
@@ -14292,12 +14320,13 @@ function Governance({
             </div>
             {(isLeader || isAdmin) && (
               <div className="governance-account-form">
-                <div><b>프로젝트 수행 계정 등록</b><small>AI 활성화팀과 BTS 계정을 로그인 전에 미리 등록할 수 있습니다.</small></div>
+                <div><b>프로젝트 수행 계정 등록</b><small>AI 활성화팀, BTS, 비피 솔루션 계정을 로그인 전에 미리 등록할 수 있습니다.</small></div>
                 <input aria-label="등록할 사용자 이름" placeholder="이름" value={accountDraft.displayName} onChange={(event) => setAccountDraft({ ...accountDraft, displayName: event.target.value })} />
                 <input aria-label="등록할 MS 계정" type="email" placeholder="name@changshininc.com" value={accountDraft.email} onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })} />
                 <select aria-label="등록할 역할" value={accountDraft.appRole} onChange={(event) => setAccountDraft({ ...accountDraft, appRole: event.target.value })}>
                   <option value="team_member">AI 활성화팀 팀원</option>
                   <option value="bts">BTS</option>
+                  <option value="bp_solution">비피 솔루션</option>
                   {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}
                   {isAdmin && <option value="admin">admin</option>}
                 </select>
@@ -14316,21 +14345,21 @@ function Governance({
               </div>
               {visibleAccounts.map((account) => (
                 <div
-                  className={`governance-account-row ${["team_member", "team_leader", "bts"].includes(account.appRole) ? "is-clickable" : ""}`}
+                  className={`governance-account-row ${["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) ? "is-clickable" : ""}`}
                   key={account.email}
-                  role={["team_member", "team_leader", "bts"].includes(account.appRole) ? "button" : undefined}
-                  tabIndex={["team_member", "team_leader", "bts"].includes(account.appRole) ? 0 : undefined}
-                  onClick={() => ["team_member", "team_leader", "bts"].includes(account.appRole) && setSelectedRoleAccount(account)}
-                  onKeyDown={(event) => { if (["Enter", " "].includes(event.key) && ["team_member", "team_leader", "bts"].includes(account.appRole)) setSelectedRoleAccount(account); }}
+                  role={["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) ? "button" : undefined}
+                  tabIndex={["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) ? 0 : undefined}
+                  onClick={() => ["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole) && setSelectedRoleAccount(account)}
+                  onKeyDown={(event) => { if (["Enter", " "].includes(event.key) && ["team_member", "team_leader", "bts", "bp_solution"].includes(account.appRole)) setSelectedRoleAccount(account); }}
                 >
                   <span>
                     <b>{account.displayName}</b>
                     <small>{account.email}</small>
                   </span>
                   <span>
-                    {(isAdmin || (isLeader && ["general_user", "team_member", "bts"].includes(account.appRole))) ? (
+                    {(isAdmin || (isLeader && ["general_user", "team_member", "bts", "bp_solution"].includes(account.appRole))) ? (
                       <select value={account.appRole} onClick={(event) => event.stopPropagation()} onChange={(event) => changeAccountRole(account, event.target.value)}>
-                        <option value="general_user">일반 User</option><option value="team_member">AI 활성화팀 팀원</option><option value="bts">BTS</option>
+                        <option value="general_user">일반 User</option><option value="team_member">AI 활성화팀 팀원</option><option value="bts">BTS</option><option value="bp_solution">비피 솔루션</option>
                         {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}{isAdmin && <option value="admin">admin</option>}
                       </select>
                     ) : <Pill tone={account.appRole === "admin" ? "violet" : "blue"}>{roleLabel(account.appRole)}</Pill>}
@@ -14526,6 +14555,13 @@ function Governance({
                 <article><b>수행 문서 작성</b><p>프로젝트에서 부여된 개발·리뷰·운영 관계에 따라 필요한 산출물을 작성합니다.</p></article>
                 <article><b>권한 제한</b><p>팀장 Gate 최종 승인과 Admin 계정·시스템 관리 권한은 부여되지 않습니다.</p></article>
               </div>
+            ) : selectedRoleAccount.appRole === "bp_solution" ? (
+              <div className="governance-role-details">
+                <article><b>개발 담당자 배정</b><p>비피 솔루션 계정은 Agent 과제의 개발 담당자로 지정될 수 있습니다.</p></article>
+                <article><b>전체 이력 조회</b><p>배정 시점부터 해당 프로젝트의 요구 접수, 설계·개발, 평가와 운영 이력을 조회합니다.</p></article>
+                <article><b>수행 문서 작성</b><p>개발 담당자로 배정된 프로젝트에서 요구 정의서와 개발·평가·배포·운영 산출물을 작성합니다.</p></article>
+                <article><b>권한 제한</b><p>팀장 Gate 최종 승인과 Admin 계정·시스템 관리 권한은 부여되지 않습니다.</p></article>
+              </div>
             ) : (
               <div className="governance-role-details">
                 <article><b>배정된 과제 수행</b><p>개발 담당자로 지정된 시점부터 내 Agent 과제에서 전체 업무를 수행합니다.</p></article>
@@ -14625,9 +14661,7 @@ function RequestWizard({
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
   const isHistorical = isAiTeam && registrationMode === "HISTORICAL";
-  const eligibleDevelopers = teamAccounts.filter(
-    (account) => account.appRole === "team_member" || account.appRole === "bts",
-  );
+  const eligibleDevelopers = teamAccounts;
   const requiresHistoricalG1Record = isHistorical && historicalJourneyStep >= 3;
   const toggleHistoricalDeveloper = (accountId: string) => {
     setHistoricalDeveloperIds((current) =>
@@ -14992,7 +15026,7 @@ function RequestWizard({
                       개발 담당자 지정
                       <span>{historicalDeveloperIds.length}명 선택</span>
                     </legend>
-                    <p>{requiresHistoricalG1Record ? "요구 정의 이상 단계로 이관하려면 당시 개발 담당자를 한 명 이상 선택해야 합니다." : "AI 활성화팀 팀원과 BTS 중 여러 명을 선택할 수 있습니다. 담당자를 정하지 않고 먼저 이관해도 됩니다."}</p>
+                    <p>{requiresHistoricalG1Record ? "요구 정의 이상 단계로 이관하려면 당시 개발 담당자를 한 명 이상 선택해야 합니다." : "일반 User를 제외한 등록 계정 중 여러 명을 선택할 수 있습니다. 담당자를 정하지 않고 먼저 이관해도 됩니다."}</p>
                     {eligibleDevelopers.length ? (
                       <div className="historical-developer-list">
                         {eligibleDevelopers.map((account) => (
@@ -15007,7 +15041,7 @@ function RequestWizard({
                             />
                             <span>
                               <b>{account.displayName || account.email}</b>
-                              <small>{account.email} · {account.appRole === "bts" ? "BTS" : "AI 활성화팀 팀원"}</small>
+                              <small>{account.email} · {account.appRole === "bts" ? "BTS" : account.appRole === "bp_solution" ? "비피 솔루션" : account.appRole === "admin" ? "admin" : account.appRole === "team_leader" ? "AI 활성화팀 팀장" : "AI 활성화팀 팀원"}</small>
                             </span>
                           </label>
                         ))}

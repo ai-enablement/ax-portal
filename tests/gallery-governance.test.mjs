@@ -56,13 +56,14 @@ test("admin can manage published Gallery agents and uses the leader workspace", 
 });
 
 test("governance account filters exclude the general-user filter and are interactive", () => {
-  assert.match(page, /useState<"all" \| "ai" \| "bts" \| "admin">\("all"\)/);
+  assert.match(page, /useState<"all" \| "ai" \| "bts" \| "bp" \| "admin">\("all"\)/);
   assert.match(page, /setAccountFilter\("all"\)/);
   assert.match(page, /setAccountFilter\("ai"\)/);
   assert.match(page, /setAccountFilter\("admin"\)/);
   assert.match(page, /setAccountFilter\("bts"\)/);
+  assert.match(page, /setAccountFilter\("bp"\)/);
   assert.doesNotMatch(page, /setAccountFilter\("general_user"\)/);
-  assert.match(page, /<small>팀장 · 팀원 · BTS · admin<\/small>/);
+  assert.match(page, /<small>팀장 · 팀원 · BTS · 비피 솔루션 · admin<\/small>/);
   assert.match(page, /PORTAL_BOOTSTRAP_LEADER_EMAILS/);
 });
 
@@ -71,6 +72,12 @@ test("BTS is a distinct assignable role without leader or admin authority", () =
   assert.match(page, /<option value="bts">BTS<\/option>/);
   assert.match(page, /BTS 수행자로 배정된 프로젝트/);
   assert.match(page, /팀장 Gate 최종 승인과 Admin 계정·시스템 관리 권한은 부여되지 않습니다/);
+});
+
+test("BP Solution is a distinct development role", () => {
+  assert.match(page, /bpSolution: "비피 솔루션"/);
+  assert.match(page, /<option value="bp_solution">비피 솔루션<\/option>/);
+  assert.match(page, /비피 솔루션 계정은 Agent 과제의 개발 담당자로 지정될 수 있습니다/);
 });
 
 test("team dashboard maps registered accounts and database project assignments", () => {

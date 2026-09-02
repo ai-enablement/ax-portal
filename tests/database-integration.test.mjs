@@ -72,26 +72,30 @@ test("governance roles are stored in PostgreSQL and enforced by the server", asy
   assert.match(api, /app_role = 'admin'/);
 });
 
-test("BTS role and team workload are persisted and served from PostgreSQL", async () => {
-  const [api, schema, migration] = await Promise.all([
+test("non-user development roles and team workload are persisted and served from PostgreSQL", async () => {
+  const [api, schema, btsMigration, bpMigration] = await Promise.all([
     read("server/database-api.mjs"),
     read("database/postgresql/agent_governance_portal_schema.sql"),
     read("database/postgresql/20260902_add_bts_role.sql"),
+    read("database/postgresql/20260902_add_bp_solution_role.sql"),
   ]);
-  assert.match(api, /const teamWorkspaceRoles = new Set\(\["team_member", "team_leader", "bts", "admin"\]\)/);
+  assert.match(api, /const teamWorkspaceRoles = new Set\(\["team_member", "team_leader", "bts", "bp_solution", "admin"\]\)/);
   assert.match(api, /pathname === "\/team\/workload"/);
-  assert.match(api, /assigned\.app_role in \('team_leader','team_member','bts','admin'\)/);
-  assert.match(api, /where u\.app_role in \('team_leader','team_member','bts','admin'\)/);
+  assert.match(api, /assigned\.app_role in \('team_leader','team_member','bts','bp_solution','admin'\)/);
+  assert.match(api, /where u\.app_role in \('team_leader','team_member','bts','bp_solution','admin'\)/);
   assert.match(api, /existing\.rows\[0\]\?\.app_role === "general_user"/);
   assert.match(api, /async function assignProjectDeveloper/);
   assert.match(api, /pathname\.endsWith\("\/developer"\)/);
   assert.match(api, /actor\.app_role !== "admin"/);
   assert.match(api, /Admin permission is required to assign a developer/);
-  assert.match(api, /app_role in \('team_member','bts'\)/);
-  assert.match(schema, /'team_leader', 'team_member', 'bts', 'general_user', 'admin'/);
+  assert.match(api, /app_role <> 'general_user'/);
+  assert.match(schema, /'team_leader', 'team_member', 'bts', 'bp_solution', 'general_user', 'admin'/);
   assert.match(schema, /\('bts',\s+'PROJECT_READ_ASSIGNED'/);
-  assert.match(migration, /add constraint users_app_role_check/);
-  assert.match(migration, /create or replace view agent_portal\.v_member_workload/);
+  assert.match(schema, /\('bp_solution',\s+'PROJECT_READ_ASSIGNED'/);
+  assert.match(btsMigration, /create or replace view agent_portal\.v_member_workload/);
+  assert.match(bpMigration, /add constraint users_app_role_check/);
+  assert.match(bpMigration, /\('bp_solution', 'G2_APPROVE_DEVELOPER'/);
+  assert.match(bpMigration, /create or replace view agent_portal\.v_member_workload/);
 });
 
 test("Azure Web App build and Hybrid Connection settings are present", async () => {
