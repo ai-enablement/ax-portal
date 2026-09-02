@@ -46,3 +46,4 @@ async function route(request, context) {
 export const GET = route;
 export const POST = route;
 export const PATCH = route;
+export const DELETE = route;

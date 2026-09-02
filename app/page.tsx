@@ -14264,6 +14264,8 @@ function Governance({
   const [accountDraft, setAccountDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
   const [accountError, setAccountError] = useState("");
   const [selectedRoleAccount, setSelectedRoleAccount] = useState<GovernanceUser | null>(null);
+  const [editingAccount, setEditingAccount] = useState<GovernanceUser | null>(null);
+  const [accountEditDraft, setAccountEditDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
   const [editingProjectNo, setEditingProjectNo] = useState<string | null>(null);
   const [adminDraft, setAdminDraft] = useState({
     name: "",
@@ -14297,6 +14299,7 @@ function Governance({
     notify("MS 계정 역할을 등록했습니다. 다음 로그인부터 해당 화면이 적용됩니다.");
   };
   const changeAccountRole = async (account: GovernanceUser, appRole: string) => {
+    setAccountError("");
     const response = await fetch(`/api/database/governance/users/${account.id}`, {
       method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ appRole }),
     });
@@ -14305,6 +14308,42 @@ function Governance({
     await loadAccounts();
     notify(`${account.displayName} 계정 역할을 변경했습니다.`);
   };
+  const openAccountEditor = (account: GovernanceUser) => {
+    setAccountError("");
+    setEditingAccount(account);
+    setAccountEditDraft({
+      displayName: account.displayName,
+      email: account.email,
+      appRole: account.appRole,
+    });
+  };
+  const saveAccount = async () => {
+    if (!editingAccount) return;
+    setAccountError("");
+    const response = await fetch(`/api/database/governance/users/${editingAccount.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...accountEditDraft, reason: "Admin & Governance 계정 정보 수정" }),
+    });
+    const result = await response.json();
+    if (!response.ok) return setAccountError(result.error || "계정 정보를 수정하지 못했습니다.");
+    setEditingAccount(null);
+    await loadAccounts();
+    notify(`${accountEditDraft.displayName} 계정 정보를 수정했습니다.`);
+  };
+  const deleteAccount = async (account: GovernanceUser) => {
+    if (!window.confirm(`${account.displayName} 계정을 삭제하시겠습니까? 과제와 감사 이력은 보존됩니다.`)) return;
+    setAccountError("");
+    const response = await fetch(`/api/database/governance/users/${account.id}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok) return setAccountError(result.error || "계정을 삭제하지 못했습니다.");
+    if (editingAccount?.id === account.id) setEditingAccount(null);
+    await loadAccounts();
+    notify(`${account.displayName} 계정을 삭제했습니다. 기존 과제와 감사 이력은 보존됩니다.`);
+  };
+  const canManageAccount = (account: GovernanceUser) =>
+    !account.roleSource?.startsWith("bootstrap_") &&
+    (isAdmin || (role === ACCOUNT_ROLES.leader && ["team_member", "bts", "bp_solution"].includes(account.appRole)));
   const visibleAccounts = accounts.filter((account) => {
     const matchesSearch = `${account.displayName} ${account.email}`.toLowerCase().includes(accountSearch.toLowerCase());
     const matchesRole = accountFilter === "all"
@@ -14454,7 +14493,7 @@ function Governance({
                 <span>프로젝트별 권한</span>
                 <span>할당 기준</span>
                 <span>상태</span>
-                <span />
+                <span>관리</span>
               </div>
               {visibleAccounts.map((account) => (
                 <div
@@ -14470,7 +14509,7 @@ function Governance({
                     <small>{account.email}</small>
                   </span>
                   <span>
-                    {(isAdmin || (isLeader && ["general_user", "team_member", "bts", "bp_solution"].includes(account.appRole))) ? (
+                    {canManageAccount(account) ? (
                       <select value={account.appRole} onClick={(event) => event.stopPropagation()} onChange={(event) => changeAccountRole(account, event.target.value)}>
                         <option value="general_user">일반 User</option><option value="team_member">AI 활성화팀 팀원</option><option value="bts">BTS</option><option value="bp_solution">비피 솔루션</option>
                         {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}{isAdmin && <option value="admin">admin</option>}
@@ -14483,7 +14522,16 @@ function Governance({
                   </span>
                   <span><small>{account.roleSource === "bootstrap_leader" ? "PORTAL_BOOTSTRAP_LEADER_EMAILS" : account.roleSource === "bootstrap_admin" ? "PORTAL_BOOTSTRAP_ADMIN_EMAILS" : account.lastLoginAt ? "Entra 로그인 · 포털 DB" : "포털 사전 등록"}</small></span>
                   <span><Pill tone={account.isActive ? "green" : "gray"}>{account.isActive ? "활성" : "비활성"}</Pill></span>
-                  <span className="chev">›</span>
+                  <span className="governance-account-actions">
+                    {canManageAccount(account) ? (
+                      <>
+                        <button aria-label={`${account.displayName} 계정 수정`} onClick={(event) => { event.stopPropagation(); openAccountEditor(account); }}><PencilSimple size={14} /> 수정</button>
+                        <button className="danger" aria-label={`${account.displayName} 계정 삭제`} onClick={(event) => { event.stopPropagation(); void deleteAccount(account); }}><Trash size={14} /> 삭제</button>
+                      </>
+                    ) : (
+                      <small>{account.roleSource?.startsWith("bootstrap_") ? "Azure 설정" : "조회 전용"}</small>
+                    )}
+                  </span>
                 </div>
               ))}
             </div>
@@ -14640,6 +14688,40 @@ function Governance({
           </div>
         )}
       </section>
+      {editingAccount && (
+        <div className="gallery-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingAccount(null); }}>
+          <section className="governance-account-modal" role="dialog" aria-modal="true" aria-labelledby="governance-account-edit-title">
+            <header>
+              <div>
+                <small>ACCOUNT MANAGEMENT</small>
+                <h2 id="governance-account-edit-title">사용자 계정 수정</h2>
+                <p>이름, MS 계정 이메일과 포털 역할을 사용자별로 변경합니다.</p>
+              </div>
+              <button aria-label="계정 수정 닫기" onClick={() => setEditingAccount(null)}><X size={20} /></button>
+            </header>
+            <div className="governance-account-edit-form">
+              <label><span>사용자 이름</span><input value={accountEditDraft.displayName} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, displayName: event.target.value })} /></label>
+              <label><span>MS 계정 이메일</span><input type="email" value={accountEditDraft.email} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, email: event.target.value })} /></label>
+              <label><span>계정 역할</span><select value={accountEditDraft.appRole} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, appRole: event.target.value })}>
+                <option value="general_user">일반 User</option>
+                <option value="team_member">AI 활성화팀 팀원</option>
+                <option value="bts">BTS</option>
+                <option value="bp_solution">비피 솔루션</option>
+                {isAdmin && <option value="team_leader">AI 활성화팀 팀장</option>}
+                {isAdmin && <option value="admin">admin</option>}
+              </select></label>
+              <div className="governance-account-delete-note"><Info size={17} /><span><b>계정 삭제 시</b><small>포털 수행 역할은 제거되지만 기존 과제 배정과 감사 이력은 보존됩니다.</small></span></div>
+              {accountError && <p className="governance-account-error">{accountError}</p>}
+            </div>
+            <footer>
+              <button className="danger" onClick={() => void deleteAccount(editingAccount)}><Trash size={14} /> 계정 삭제</button>
+              <span />
+              <button onClick={() => setEditingAccount(null)}>취소</button>
+              <button className="primary" disabled={!accountEditDraft.displayName.trim() || !accountEditDraft.email.includes("@")} onClick={() => void saveAccount()}>변경 저장</button>
+            </footer>
+          </section>
+        </div>
+      )}
       {selectedRoleAccount && (
         <div className="gallery-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedRoleAccount(null); }}>
           <section className="governance-role-modal" role="dialog" aria-modal="true" aria-labelledby="governance-role-title">

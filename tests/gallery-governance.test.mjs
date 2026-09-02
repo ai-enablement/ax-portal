@@ -67,6 +67,21 @@ test("governance account filters exclude the general-user filter and are interac
   assert.match(page, /PORTAL_BOOTSTRAP_LEADER_EMAILS/);
 });
 
+test("governance accounts can be edited or removed per user while retaining history", () => {
+  assert.match(page, /사용자 계정 수정/);
+  assert.match(page, /MS 계정 이메일/);
+  assert.match(page, /method: "PATCH"/);
+  assert.match(page, /method: "DELETE"/);
+  assert.match(page, /계정 삭제 시/);
+  assert.match(page, /기존 과제 배정과 감사 이력은 보존됩니다/);
+  assert.match(page, /canManageAccount\(account\)/);
+  assert.match(page, /account\.roleSource\?\.startsWith\("bootstrap_"\)/);
+  assert.match(page, /> 수정<\/button>/);
+  assert.match(page, /> 삭제<\/button>/);
+  assert.match(css, /\.governance-account-modal/);
+  assert.match(css, /\.governance-account-actions/);
+});
+
 test("BTS is a distinct assignable role without leader or admin authority", () => {
   assert.match(page, /bts: "BTS"/);
   assert.match(page, /<option value="bts">BTS<\/option>/);

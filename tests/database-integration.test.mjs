@@ -27,6 +27,7 @@ test("Next.js Node route handles same-origin database calls", async () => {
   assert.match(route, /runtime = "nodejs"/);
   assert.match(route, /handleDatabaseRequest/);
   assert.match(route, /cache-control/);
+  assert.match(route, /export const DELETE = route/);
   assert.doesNotMatch(route, /DATABASE_GATEWAY_TOKEN|CUSTOMER_HTTP/);
 });
 
@@ -70,6 +71,18 @@ test("governance roles are stored in PostgreSQL and enforced by the server", asy
   assert.match(api, /split_part\(configured\.email, '@', 1\)/);
   assert.match(api, /app_role = 'team_leader'/);
   assert.match(api, /app_role = 'admin'/);
+});
+
+test("governance users support protected per-account editing and soft deletion", async () => {
+  const api = await read("server/database-api.mjs");
+  assert.match(api, /email=\$4, display_name=\$5, is_active=true/);
+  assert.match(api, /lower\(email\)=lower\(\$1\) and id<>\$2/);
+  assert.match(api, /Bootstrap account email and role must be changed in Azure App Service settings/);
+  assert.match(api, /method === "DELETE" && pathname\.startsWith\("\/governance\/users\/"\)/);
+  assert.match(api, /You cannot delete your own account/);
+  assert.match(api, /The last active admin cannot be deleted/);
+  assert.match(api, /set app_role='general_user', team_id=null, is_active=false/);
+  assert.match(api, /Admin & Governance 계정 삭제 · 이력 보존/);
 });
 
 test("non-user development roles and team workload are persisted and served from PostgreSQL", async () => {

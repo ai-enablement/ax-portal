@@ -532,6 +532,15 @@ function allowedRoleChange(actorRole, newRole) {
   return actorRole === "team_leader" && ["general_user", "team_member", "bts", "bp_solution"].includes(newRole);
 }
 
+function bootstrapAccountSource(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  const leaders = new Set(String(process.env.PORTAL_BOOTSTRAP_LEADER_EMAILS || process.env.PORTAL_TEAM_LEADER_EMAILS || "").toLowerCase().split(/[;,\s]+/).filter(Boolean));
+  const admins = new Set(String(process.env.PORTAL_BOOTSTRAP_ADMIN_EMAILS || process.env.PORTAL_ADMIN_EMAILS || "").toLowerCase().split(/[;,\s]+/).filter(Boolean));
+  if (admins.has(normalized)) return "bootstrap_admin";
+  if (leaders.has(normalized)) return "bootstrap_leader";
+  return null;
+}
+
 async function registerGovernanceUser(body, identity) {
   const email = String(body.email || "").trim().toLowerCase();
   const displayName = String(body.displayName || "").trim();
@@ -586,17 +595,26 @@ async function registerGovernanceUser(body, identity) {
 }
 
 async function updateGovernanceUser(userId, body, identity) {
-  const newRole = String(body.appRole || "");
   return withTransaction(async (client) => {
     const actor = await governanceActor(client, identity);
+    const target = (await client.query(
+      `select id, email, display_name, app_role, is_active
+         from agent_portal.users where id=$1 for update`, [userId],
+    )).rows[0];
+    if (!target) return { status: 404, body: { error: "User not found." } };
+    const newRole = String(body.appRole || target.app_role);
+    const email = String(body.email ?? target.email ?? "").trim().toLowerCase();
+    const displayName = String(body.displayName ?? target.display_name ?? "").trim();
     if (!actor || !allowedRoleChange(actor.app_role, newRole)) {
       return { status: 403, body: { error: "Role assignment permission is required." } };
     }
-    const target = (await client.query(
-      `select id, app_role, is_active from agent_portal.users where id=$1 for update`, [userId],
-    )).rows[0];
-    if (!target) return { status: 404, body: { error: "User not found." } };
+    if (!email || !email.includes("@") || !displayName) {
+      return { status: 400, body: { error: "Name and a valid MS account email are required." } };
+    }
     if (target.id === actor.id) return { status: 409, body: { error: "You cannot change your own role." } };
+    if (bootstrapAccountSource(target.email) && (email !== target.email.toLowerCase() || newRole !== target.app_role)) {
+      return { status: 409, body: { error: "Bootstrap account email and role must be changed in Azure App Service settings." } };
+    }
     if (actor.app_role === "team_leader" && !["general_user", "team_member", "bts", "bp_solution"].includes(target.app_role)) {
       return { status: 403, body: { error: "Team leaders can only manage general users, AI Enablement Team members, and BTS users." } };
     }
@@ -604,13 +622,19 @@ async function updateGovernanceUser(userId, body, identity) {
       const count = await client.query(`select count(*)::int as count from agent_portal.users where app_role='admin' and is_active=true`);
       if (count.rows[0].count <= 1) return { status: 409, body: { error: "The last active admin cannot be demoted." } };
     }
+    const duplicate = await client.query(
+      `select id from agent_portal.users where lower(email)=lower($1) and id<>$2 limit 1`,
+      [email, target.id],
+    );
+    if (duplicate.rows[0]) return { status: 409, body: { error: "This MS account email is already registered." } };
     const catalog = await ensurePortalCatalog(client);
     const updated = (await client.query(
       `update agent_portal.users set app_role=$2,
               team_id=case when $2 in ('team_member','team_leader','bts','bp_solution','admin') then $3::bigint else null end,
+              email=$4, display_name=$5, is_active=true,
               updated_at=now() where id=$1
        returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
-      [target.id, newRole, catalog.aiTeamId],
+      [target.id, newRole, catalog.aiTeamId, email, displayName],
     )).rows[0];
     if (target.app_role !== newRole) await client.query(
       `insert into agent_portal.user_role_history (user_id, previous_role, new_role, changed_by, change_reason)
@@ -618,6 +642,45 @@ async function updateGovernanceUser(userId, body, identity) {
       [target.id, target.app_role, newRole, actor.id, String(body.reason || "Admin & Governance 역할 변경")],
     );
     return { status: 200, body: { user: updated } };
+  });
+}
+
+async function deleteGovernanceUser(userId, identity) {
+  return withTransaction(async (client) => {
+    const actor = await governanceActor(client, identity);
+    if (!actor) return { status: 403, body: { error: "Account management permission is required." } };
+    const target = (await client.query(
+      `select id, email, app_role, is_active from agent_portal.users where id=$1 for update`,
+      [userId],
+    )).rows[0];
+    if (!target) return { status: 404, body: { error: "User not found." } };
+    if (target.id === actor.id) return { status: 409, body: { error: "You cannot delete your own account." } };
+    if (bootstrapAccountSource(target.email)) {
+      return { status: 409, body: { error: "Bootstrap accounts must be removed from Azure App Service settings first." } };
+    }
+    if (actor.app_role === "team_leader" && !["team_member", "bts", "bp_solution"].includes(target.app_role)) {
+      return { status: 403, body: { error: "Team leaders can only delete team member, BTS, or BP Solution accounts." } };
+    }
+    if (actor.app_role !== "admin" && actor.app_role !== "team_leader") {
+      return { status: 403, body: { error: "Admin or team leader permission is required." } };
+    }
+    if (target.app_role === "admin") {
+      const count = await client.query(`select count(*)::int as count from agent_portal.users where app_role='admin' and is_active=true`);
+      if (count.rows[0].count <= 1) return { status: 409, body: { error: "The last active admin cannot be deleted." } };
+    }
+    await client.query(
+      `update agent_portal.users
+          set app_role='general_user', team_id=null, is_active=false, updated_at=now()
+        where id=$1`,
+      [target.id],
+    );
+    await client.query(
+      `insert into agent_portal.user_role_history
+         (user_id, previous_role, new_role, changed_by, change_reason)
+       values ($1,$2,'general_user',$3,$4)`,
+      [target.id, target.app_role, actor.id, "Admin & Governance 계정 삭제 · 이력 보존"],
+    );
+    return { status: 200, body: { deleted: true, id: target.id } };
   });
 }
 
@@ -797,6 +860,11 @@ export async function handleDatabaseRequest({ method, pathname, body = {}, ident
     const id = Number(pathname.split("/").filter(Boolean).at(-1));
     if (!Number.isInteger(id) || id <= 0) return { status: 400, body: { error: "Valid user id is required." } };
     return updateGovernanceUser(id, body, identity);
+  }
+  if (method === "DELETE" && pathname.startsWith("/governance/users/")) {
+    const id = Number(pathname.split("/").filter(Boolean).at(-1));
+    if (!Number.isInteger(id) || id <= 0) return { status: 400, body: { error: "Valid user id is required." } };
+    return deleteGovernanceUser(id, identity);
   }
   if (method === "GET" && pathname === "/governance/role-history") return listRoleHistory(identity);
   if (method === "GET" && pathname === "/team/workload") return listTeamWorkload(identity);
