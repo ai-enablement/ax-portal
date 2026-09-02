@@ -129,6 +129,12 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes("최종 확인 · 과거 과제 이관"));
   assert.ok(page.includes("선택한 현재 단계부터 순서대로 완료해야 다음 단계가 열립니다."));
   assert.ok(page.includes("current.historicalImport && selectedJourney > effectiveJourneyStep"));
+  assert.ok(page.includes("requiresHistoricalG1Record"));
+  assert.ok(page.includes("G1 착수 판정 이관"));
+  assert.ok(page.includes('["GO", "CONDITIONAL"] as const'));
+  assert.ok(page.includes("historicalG1Decision"));
+  assert.ok(page.includes("importedG1Record"));
+  assert.ok(page.includes('historicalDocuments: importedG1Record ? { "2": importedG1Record } : undefined'));
   assert.ok(page.includes("프로세스 진행 이력만 등록된 상태입니다."));
   assert.ok(page.includes("해당 단계에서 문서 추가"));
   assert.ok(!page.includes('min="2026-08-29"'));
@@ -139,6 +145,7 @@ test("imports historical projects with past dates, a current stage, and deferred
 test("assigns multiple registered developers while importing a historical project", () => {
   assert.ok(page.includes("teamAccounts={teamAccounts}"));
   assert.ok(page.includes("historicalDeveloperIds"));
+  assert.ok(page.includes("historicalDeveloperIds.length > 0"));
   assert.ok(page.includes("개발 담당자 지정"));
   assert.ok(page.includes('type="checkbox"'));
   assert.ok(page.includes("developerIds: historicalDeveloperIds"));

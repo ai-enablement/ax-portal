@@ -1136,6 +1136,8 @@ export default function Home() {
       receivedDate: string;
       currentJourneyStep: number;
       developerIds: string[];
+      g1Decision?: "GO" | "CONDITIONAL";
+      g1Reason?: string;
     },
   ) => {
     setSubmittedProjects((current) => {
@@ -1160,6 +1162,26 @@ export default function Home() {
       const developerLabel = developerNames.length
         ? developerNames.join(" · ")
         : "담당자 배정 필요";
+      const historicalLeader = teamAccounts.find(
+        (account) => account.appRole === "team_leader",
+      );
+      const importedG1Record =
+        historical && journeyStep >= 3
+          ? {
+              values: [registration?.g1Reason || "과거 과제 이관 시 G1 판정 기록"],
+              status: "complete" as const,
+              decision:
+                registration?.g1Decision === "CONDITIONAL"
+                  ? "CONDITIONAL"
+                  : "APPROVED",
+              approverName:
+                historicalLeader?.displayName || "AI 활성화팀 팀장",
+              developerIds: assignedDevelopers.map((account) => account.id),
+              reason:
+                registration?.g1Reason || "과거 과제 이관 시 Go 판정 확인",
+              updatedAt: new Date().toISOString(),
+            }
+          : null;
       const stageNumber = userJourney
         .slice(0, journeyStep + 1)
         .filter((item) => item.kind === "stage").length;
@@ -1205,6 +1227,7 @@ export default function Home() {
         projectOwner,
         developerIds: assignedDevelopers.map((account) => account.id),
         developerNames,
+        historicalDocuments: importedG1Record ? { "2": importedG1Record } : undefined,
         historicalImport: historical,
         historicalBaselineStep: historical ? journeyStep : undefined,
         documentsDeferred: historical,
@@ -6583,7 +6606,21 @@ function UserDashboard({
     setSelected(0);
     notify(`${current.name} 과제가 삭제되었습니다.`);
   };
-  const currentG1Resolution = homeG1Resolutions[current.no] || null;
+  const importedG1Record = current.historicalDocuments?.["2"];
+  const currentG1Resolution =
+    homeG1Resolutions[current.no] ||
+    (importedG1Record?.status === "complete" && importedG1Record.decision
+      ? {
+          decision:
+            importedG1Record.decision === "CONDITIONAL"
+              ? ("CONDITIONAL" as const)
+              : importedG1Record.decision === "REJECTED"
+                ? ("DROP" as const)
+                : ("GO" as const),
+          assignee: current.developerNames?.join(" · ") || "미배정",
+          reason: importedG1Record.reason || "",
+        }
+      : null);
   const g1Status = !hasProjects
     ? ""
     : currentG1Resolution
@@ -14500,6 +14537,8 @@ function RequestWizard({
       receivedDate: string;
       currentJourneyStep: number;
       developerIds: string[];
+      g1Decision?: "GO" | "CONDITIONAL";
+      g1Reason?: string;
     },
   ) => void;
 }) {
@@ -14533,6 +14572,8 @@ function RequestWizard({
   const [receivedDate, setReceivedDate] = useState("");
   const [historicalJourneyStep, setHistoricalJourneyStep] = useState(0);
   const [historicalDeveloperIds, setHistoricalDeveloperIds] = useState<string[]>([]);
+  const [historicalG1Decision, setHistoricalG1Decision] = useState<"GO" | "CONDITIONAL">("GO");
+  const [historicalG1Reason, setHistoricalG1Reason] = useState("");
   const [manualTitle, setManualTitle] = useState("");
   const [requesterName, setRequesterName] = useState("");
   const [requesterDepartment, setRequesterDepartment] = useState("");
@@ -14546,6 +14587,7 @@ function RequestWizard({
   const selectedDevelopers = eligibleDevelopers.filter((account) =>
     historicalDeveloperIds.includes(account.id),
   );
+  const requiresHistoricalG1Record = isHistorical && historicalJourneyStep >= 3;
   const toggleHistoricalDeveloper = (accountId: string) => {
     setHistoricalDeveloperIds((current) =>
       current.includes(accountId)
@@ -14580,6 +14622,9 @@ function RequestWizard({
     );
   const canSubmit = Boolean(
     (isHistorical ? manualTitle.trim() && receivedDate : allAnswersComplete) &&
+      (!requiresHistoricalG1Record ||
+        (historicalDeveloperIds.length > 0 &&
+          (historicalG1Decision === "GO" || historicalG1Reason.trim()))) &&
       resolvedProjectOwner &&
       resolvedRequester &&
       requestTitle.trim() &&
@@ -14598,6 +14643,8 @@ function RequestWizard({
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
         developerIds: historicalDeveloperIds,
+        g1Decision: requiresHistoricalG1Record ? historicalG1Decision : undefined,
+        g1Reason: requiresHistoricalG1Record ? historicalG1Reason.trim() : undefined,
       },
     );
     close();
@@ -14899,6 +14946,25 @@ function RequestWizard({
                     <p>선택한 단계 이전 문서·승인은 작성하지 않아도 ‘이관 완료’로 처리됩니다. 최종 확인 후에는 선택한 현재 단계부터 순서대로 완료해야 다음 단계가 열립니다.</p>
                   </div>
                 )}
+                {requiresHistoricalG1Record && (
+                  <fieldset className="historical-g1-import-field wide">
+                    <legend>G1 착수 판정 이관</legend>
+                    <p>요구 정의 이상 단계는 G1을 통과한 과제이므로 당시 팀장 판정과 개발 담당자를 함께 등록합니다.</p>
+                    <div className="historical-g1-import-options">
+                      {(["GO", "CONDITIONAL"] as const).map((decision) => (
+                        <label key={decision} className={historicalG1Decision === decision ? "selected" : ""}>
+                          <input type="radio" name="historical-g1-decision" checked={historicalG1Decision === decision} onChange={() => setHistoricalG1Decision(decision)} />
+                          <span><b>{decision === "GO" ? "Go" : "Conditional Go"}</b><small>{decision === "GO" ? "조건 없이 요구 정의 이상 진행" : "조건 이행을 전제로 진행"}</small></span>
+                        </label>
+                      ))}
+                    </div>
+                    <label className="historical-g1-import-reason">
+                      <span>판정 조건·사유 {historicalG1Decision === "CONDITIONAL" ? "· 필수" : "· 선택"}</span>
+                      <textarea value={historicalG1Reason} onChange={(event) => setHistoricalG1Reason(event.target.value)} placeholder="당시 G1 판정 사유나 Conditional Go 조건을 입력하세요." />
+                    </label>
+                    <small>G1 승인자: {teamAccounts.find((account) => account.appRole === "team_leader")?.displayName || "AI 활성화팀 팀장"}</small>
+                  </fieldset>
+                )}
                 {isAiTeam && (
                   <fieldset className="wizard-owner-field wizard-requester-field wide">
                     <legend>요구자 정보</legend>
@@ -14914,7 +14980,7 @@ function RequestWizard({
                       개발 담당자 지정
                       <span>{historicalDeveloperIds.length}명 선택</span>
                     </legend>
-                    <p>AI 활성화팀 팀원과 BTS 중 여러 명을 선택할 수 있습니다. 담당자를 정하지 않고 먼저 이관해도 됩니다.</p>
+                    <p>{requiresHistoricalG1Record ? "요구 정의 이상 단계로 이관하려면 당시 개발 담당자를 한 명 이상 선택해야 합니다." : "AI 활성화팀 팀원과 BTS 중 여러 명을 선택할 수 있습니다. 담당자를 정하지 않고 먼저 이관해도 됩니다."}</p>
                     {eligibleDevelopers.length ? (
                       <div className="historical-developer-list">
                         {eligibleDevelopers.map((account) => (

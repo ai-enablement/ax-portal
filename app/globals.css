@@ -13901,6 +13901,82 @@ body {
   font-size: 12px;
   line-height: 1.55;
 }
+.historical-g1-import-field {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #d8caa8;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+.historical-g1-import-field legend {
+  padding: 0 5px;
+  color: #4b3a16;
+  font-size: 14px;
+  font-weight: 800;
+}
+.historical-g1-import-field > p {
+  margin: 0 0 12px;
+  color: #6f6248;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.historical-g1-import-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.historical-g1-import-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #ddd5c4;
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+.historical-g1-import-options label.selected {
+  border-color: #b2852f;
+  background: #fff4d9;
+}
+.historical-g1-import-options input {
+  width: 17px;
+  height: 17px;
+  accent-color: #9b6b18;
+}
+.historical-g1-import-options span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.historical-g1-import-options b {
+  color: #392d17;
+  font-size: 13px;
+}
+.historical-g1-import-options small,
+.historical-g1-import-field > small {
+  color: #786b52;
+  font-size: 11px;
+}
+.historical-g1-import-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  color: #4b3a16;
+  font-size: 12px;
+  font-weight: 700;
+}
+.historical-g1-import-reason textarea {
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 1px solid #d9d0bd;
+  border-radius: 8px;
+  resize: vertical;
+  font: inherit;
+  font-weight: 400;
+}
 .historical-developer-field {
   grid-column: 1 / -1;
   margin: 0;
@@ -14560,6 +14636,10 @@ body {
     grid-column: auto;
   }
   .historical-project-fields {
+    grid-template-columns: 1fr;
+  }
+  .historical-g1-import-options,
+  .historical-developer-list {
     grid-template-columns: 1fr;
   }
   .chat-wizard > header h2 {
