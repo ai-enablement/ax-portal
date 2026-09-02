@@ -84,6 +84,8 @@ test("non-user development roles and team workload are persisted and served from
   assert.match(api, /assigned\.app_role in \('team_leader','team_member','bts','bp_solution','admin'\)/);
   assert.match(api, /where u\.app_role in \('team_leader','team_member','bts','bp_solution','admin'\)/);
   assert.match(api, /existing\.rows\[0\]\?\.app_role === "general_user"/);
+  assert.match(api, /then \$2::bigint else null end/);
+  assert.match(api, /then \$3::bigint else null end/);
   assert.match(api, /async function assignProjectDeveloper/);
   assert.match(api, /pathname\.endsWith\("\/developer"\)/);
   assert.match(api, /actor\.app_role !== "admin"/);

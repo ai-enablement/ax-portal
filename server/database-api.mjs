@@ -571,7 +571,7 @@ async function registerGovernanceUser(body, identity) {
     } else {
       user = (await client.query(
         `insert into agent_portal.users (organization_id, team_id, email, display_name, app_role, is_active)
-         values ($1,case when $4 in ('team_member','team_leader','bts','bp_solution','admin') then $2 else null end,$3,$5,$4,true)
+         values ($1,case when $4 in ('team_member','team_leader','bts','bp_solution','admin') then $2::bigint else null end,$3,$5,$4,true)
          returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
         [catalog.organizationId, catalog.aiTeamId, email, newRole, displayName],
       )).rows[0];
@@ -607,7 +607,7 @@ async function updateGovernanceUser(userId, body, identity) {
     const catalog = await ensurePortalCatalog(client);
     const updated = (await client.query(
       `update agent_portal.users set app_role=$2,
-              team_id=case when $2 in ('team_member','team_leader','bts','bp_solution','admin') then $3 else null end,
+              team_id=case when $2 in ('team_member','team_leader','bts','bp_solution','admin') then $3::bigint else null end,
               updated_at=now() where id=$1
        returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
       [target.id, newRole, catalog.aiTeamId],
