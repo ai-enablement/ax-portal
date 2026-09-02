@@ -888,13 +888,15 @@ export default function Home() {
   }, [identityStatus, role]);
 
   const userProjectItems = useMemo<UserProject[]>(
-    () =>
-      [...submittedProjects, ...userProjects, ...generalUserOwnerProjects]
-        .filter((project) => !deletedProjectNos.includes(project.no))
+    () => {
+      const submittedProjectNos = new Set(submittedProjects.map((project) => project.no));
+      return [...submittedProjects, ...userProjects, ...generalUserOwnerProjects]
+        .filter((project) => submittedProjectNos.has(project.no) || !deletedProjectNos.includes(project.no))
         .map((project) => ({
           ...project,
           ...(projectOverrides[project.no] || {}),
-        })),
+        }));
+    },
     [submittedProjects, deletedProjectNos, projectOverrides],
   );
   const adminProjectItems = useMemo<UserProject[]>(() => {
@@ -1205,6 +1207,19 @@ export default function Home() {
       g1Reason?: string;
     },
   ) => {
+    const registrationReceivedDate = registration?.receivedDate || new Date().toISOString().slice(0, 10);
+    const registrationProjectYear = registrationReceivedDate.slice(0, 4) || String(new Date().getFullYear());
+    const occupiedProjectNos = [
+      ...submittedProjects.map((project) => project.no),
+      ...teamWorkloadProjects.map((project) => project.id),
+      ...deletedProjectNos,
+    ];
+    const nextProjectSequence =
+      occupiedProjectNos.reduce((highest, projectNo) => {
+        const match = projectNo.match(new RegExp(`^${registrationProjectYear}-(\\d+)$`));
+        return match ? Math.max(highest, Number(match[1])) : highest;
+      }, 0) + 1;
+    const submittedProjectNo = `${registrationProjectYear}-${String(nextProjectSequence).padStart(3, "0")}`;
     setSubmittedProjects((current) => {
       const historical = Boolean(registration?.historical);
       const category: ProjectCategory =
@@ -1214,11 +1229,7 @@ export default function Home() {
       const journeyStep = historical
         ? Math.max(0, Math.min(userJourney.length - 1, registration?.currentJourneyStep ?? 0))
         : 1;
-      const receivedDate = registration?.receivedDate || new Date().toISOString().slice(0, 10);
-      const projectYear = receivedDate.slice(0, 4) || String(new Date().getFullYear());
-      const sequence = String(
-        current.filter((item) => item.no.startsWith(`${projectYear}-`)).length + 1,
-      ).padStart(3, "0");
+      const receivedDate = registrationReceivedDate;
       const currentStage = userJourney[journeyStep];
       const assignedDevelopers = historical
         ? teamAccounts.filter((account) =>
@@ -1299,7 +1310,7 @@ export default function Home() {
               ? "delivery"
               : "operations";
       const project: UserProject = {
-        no: `${projectYear}-${sequence}`,
+        no: submittedProjectNo,
         name: title,
         category,
         stage: Math.max(stageNumber, 1),
@@ -1353,6 +1364,7 @@ export default function Home() {
       );
       return next;
     });
+    setWorkflowTarget(submittedProjectNo);
     setView("home");
     notify(
       registration?.historical
@@ -6742,6 +6754,7 @@ function UserDashboard({
     // Synchronize an externally selected project with the local master-detail view.
     setSelected(nextIndex);
     setSelectedJourney(projectItems[nextIndex].journeyStep);
+    setFilter("전체");
     // projectItems is rebuilt by the role filter; its length and projectNo are
     // the stable synchronization inputs for this master-detail selection.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -168,6 +168,16 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(css.includes(".deferred-document-card"));
 });
 
+test("shows a newly imported project even after deleted or database project numbers", () => {
+  assert.ok(page.includes("...teamWorkloadProjects.map((project) => project.id)"));
+  assert.ok(page.includes("...deletedProjectNos"));
+  assert.ok(page.includes("const nextProjectSequence"));
+  assert.ok(page.includes("setWorkflowTarget(submittedProjectNo)"));
+  assert.ok(page.includes('setFilter("전체")'));
+  assert.ok(page.includes("submittedProjectNos.has(project.no) || !deletedProjectNos.includes(project.no)"));
+  assert.ok(!page.includes("current.filter((item) => item.no.startsWith"));
+});
+
 test("assigns multiple registered developers while importing a historical project", () => {
   assert.ok(page.includes("teamAccounts={teamAccounts}"));
   assert.ok(page.includes("historicalDeveloperIds"));
