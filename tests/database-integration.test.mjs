@@ -66,8 +66,10 @@ test("governance roles are stored in PostgreSQL and enforced by the server", asy
   assert.match(api, /You cannot change your own role/);
   assert.match(api, /PORTAL_BOOTSTRAP_LEADER_EMAILS/);
   assert.match(api, /bootstrap_leader/);
-  assert.match(api, /set app_role = 'team_leader', team_id = \$2/);
-  assert.match(api, /set app_role = 'admin', team_id = \$2/);
+  assert.match(api, /from unnest\(\$3::text\[\]\) as configured\(email\)/);
+  assert.match(api, /split_part\(configured\.email, '@', 1\)/);
+  assert.match(api, /app_role = 'team_leader'/);
+  assert.match(api, /app_role = 'admin'/);
 });
 
 test("BTS role and team workload are persisted and served from PostgreSQL", async () => {

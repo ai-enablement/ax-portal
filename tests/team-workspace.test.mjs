@@ -46,7 +46,8 @@ test("uses the same one-page home for leader, member, BTS, user, and admin", () 
   assert.ok(page.includes("팀 전체 Agent 과제"));
   assert.ok(page.includes("팀장 감독·승인"));
   assert.ok(page.includes("viewerMode={!isProjectContributor}"));
-  assert.ok(page.includes("G1 판정 확정 · FEA 업데이트"));
+  assert.ok(page.includes("G1 판정 확정"));
+  assert.ok(page.includes("개발 담당자 배정 확정"));
   assert.ok(page.includes("G3 최종 승인"));
   assert.ok(page.includes("G4 최종 승인"));
   assert.ok(page.includes('role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin'));

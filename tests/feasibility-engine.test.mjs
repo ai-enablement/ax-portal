@@ -38,8 +38,10 @@ test("embeds a writable FEA workspace in AI team home screens", () => {
   assert.ok(css.includes(".home-fea-form-grid"));
 });
 
-test("advances an embedded FEA to the leader G1 action", () => {
+test("advances an embedded FEA to the separated leader decision and admin assignment", () => {
   assert.ok(page.includes("onComplete?.()"));
   assert.ok(page.includes("feaCompletedProjects.includes(current.no)"));
-  assert.ok(page.includes("G1 판정 확정 · FEA 업데이트"));
+  assert.ok(page.includes("G1 판정 확정"));
+  assert.ok(page.includes("Admin 액션"));
+  assert.ok(page.includes("개발 담당자 배정 확정"));
 });

@@ -473,23 +473,35 @@ async function listGovernanceUsers(identity) {
   const bootstrapLeaders = new Set(String(process.env.PORTAL_BOOTSTRAP_LEADER_EMAILS || process.env.PORTAL_TEAM_LEADER_EMAILS || "").toLowerCase().split(/[;,\s]+/).filter(Boolean));
   const bootstrapAdmins = new Set(String(process.env.PORTAL_BOOTSTRAP_ADMIN_EMAILS || process.env.PORTAL_ADMIN_EMAILS || "").toLowerCase().split(/[;,\s]+/).filter(Boolean));
   const catalog = await ensurePortalCatalog(pool);
-  if (bootstrapLeaders.size) {
+  const leaderEmails = [...bootstrapLeaders].filter((email) => !bootstrapAdmins.has(email));
+  if (leaderEmails.length) {
     await pool.query(
-      `update agent_portal.users
-          set app_role = 'team_leader', team_id = $2, is_active = true,
-              updated_at = now()
-        where lower(email) = any($1::text[])
-          and lower(email) <> all($3::text[])`,
-      [[...bootstrapLeaders], catalog.aiTeamId, [...bootstrapAdmins]],
+      `insert into agent_portal.users
+         (organization_id, team_id, email, display_name, app_role, is_active)
+       select $1, $2, configured.email, split_part(configured.email, '@', 1),
+              'team_leader', true
+         from unnest($3::text[]) as configured(email)
+       on conflict (lower(email)) where email is not null do update set
+         team_id = excluded.team_id,
+         app_role = 'team_leader',
+         is_active = true,
+         updated_at = now()`,
+      [catalog.organizationId, catalog.aiTeamId, leaderEmails],
     );
   }
   if (bootstrapAdmins.size) {
     await pool.query(
-      `update agent_portal.users
-          set app_role = 'admin', team_id = $2, is_active = true,
-              updated_at = now()
-        where lower(email) = any($1::text[])`,
-      [[...bootstrapAdmins], catalog.aiTeamId],
+      `insert into agent_portal.users
+         (organization_id, team_id, email, display_name, app_role, is_active)
+       select $1, $2, configured.email, split_part(configured.email, '@', 1),
+              'admin', true
+         from unnest($3::text[]) as configured(email)
+       on conflict (lower(email)) where email is not null do update set
+         team_id = excluded.team_id,
+         app_role = 'admin',
+         is_active = true,
+         updated_at = now()`,
+      [catalog.organizationId, catalog.aiTeamId, [...bootstrapAdmins]],
     );
   }
   const result = await pool.query(
