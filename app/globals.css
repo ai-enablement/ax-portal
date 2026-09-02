@@ -18608,6 +18608,95 @@ body {
   }
 }
 
+.chat-wizard .project-owner-picker {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  background: #fff;
+}
+.chat-wizard .project-owner-picker legend {
+  padding: 0 6px;
+  color: #253247;
+  font-size: 14px;
+  font-weight: 800;
+}
+.chat-wizard .project-owner-picker > p {
+  margin: 0 0 12px;
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.project-owner-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.chat-wizard .project-owner-options > label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.project-owner-options > label:hover { border-color: #7396c3; }
+.project-owner-options > label.selected {
+  border-color: #2f67ac;
+  background: #eef5ff;
+}
+.project-owner-options > label:focus-within {
+  outline: 2px solid #2f67ac;
+  outline-offset: 2px;
+}
+.chat-wizard .project-owner-options input[type="radio"] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: #2f67ac;
+  box-shadow: none;
+}
+.project-owner-options label > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.chat-wizard .project-owner-options strong { color: #253247; font-size: 14px; }
+.chat-wizard .project-owner-options small { color: #64748b; font-size: 12px; line-height: 1.5; }
+.chat-wizard .project-owner-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  color: #253247;
+  font-size: 13px;
+  font-weight: 700;
+}
+.chat-wizard .project-owner-details input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+}
+@media (max-width: 640px) {
+  .project-owner-options { grid-template-columns: 1fr; }
+}
+
 .top-actions .role-select.authenticated-account {
   height: auto;
   min-height: 38px;

@@ -14832,6 +14832,38 @@ function suggestRequestTitle(problem: string) {
   return `${summary || "신규 업무"} Agent`;
 }
 
+function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange, name }: {
+  mode: "SELF" | "OTHER";
+  onModeChange: (mode: "SELF" | "OTHER") => void;
+  requester: string;
+  owner: string;
+  onOwnerChange: (owner: string) => void;
+  name: string;
+}) {
+  return (
+    <fieldset className="project-owner-picker">
+      <legend>Project Owner 지정</legend>
+      <p>과제를 책임질 Owner를 선택해 주세요.</p>
+      <div className="project-owner-options">
+        <label className={mode === "SELF" ? "selected" : ""}>
+          <input type="radio" name={name} checked={mode === "SELF"} onChange={() => onModeChange("SELF")} />
+          <span><strong>요구자와 동일</strong><small>{requester || "입력한 요구자 정보가 반영됩니다."}</small></span>
+        </label>
+        <label className={mode === "OTHER" ? "selected" : ""}>
+          <input type="radio" name={name} checked={mode === "OTHER"} onChange={() => onModeChange("OTHER")} />
+          <span><strong>다른 Owner 지정</strong><small>요구자와 다른 담당자를 직접 입력합니다.</small></span>
+        </label>
+      </div>
+      {mode === "OTHER" && (
+        <label className="project-owner-details">
+          <span>Owner 이름 · 소속</span>
+          <input value={owner} onChange={(event) => onOwnerChange(event.target.value)} placeholder="예: 박서연 · 품질혁신팀" aria-label="Project Owner 이름과 소속" />
+        </label>
+      )}
+    </fieldset>
+  );
+}
+
 function RequestWizard({
   role,
   identity,
@@ -15142,36 +15174,7 @@ function RequestWizard({
                       onChange={(event) => updateAnswer(event.target.value)}
                     />
                   </label>
-                  <fieldset className="wizard-owner-field">
-                    <legend>Project Owner 지정</legend>
-                    <p>요구자와 Owner는 같을 수도, 다를 수도 있습니다.</p>
-                    <label>
-                      <input
-                        type="radio"
-                        name="project-owner-mode"
-                        checked={ownerMode === "SELF"}
-                        onChange={() => setOwnerMode("SELF")}
-                      />
-                      요구자와 동일{requesterOwnerLabel ? ` · ${requesterOwnerLabel}` : ""}
-                    </label>
-                    <label>
-                      <input
-                        type="radio"
-                        name="project-owner-mode"
-                        checked={ownerMode === "OTHER"}
-                        onChange={() => setOwnerMode("OTHER")}
-                      />
-                      다른 Owner 지정
-                    </label>
-                    {ownerMode === "OTHER" && (
-                      <input
-                        value={projectOwner}
-                        onChange={(event) => setProjectOwner(event.target.value)}
-                        placeholder="예: 박서연 · 품질혁신팀장"
-                        aria-label="Project Owner 이름과 소속"
-                      />
-                    )}
-                  </fieldset>
+                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} name="project-owner-mode" />
                 </div>
               ) : (
                 <textarea
@@ -15345,21 +15348,7 @@ function RequestWizard({
                   />
                   {isHistorical && <small>선택 입력 · 과거 날짜도 등록할 수 있습니다.</small>}
                 </label>
-                <fieldset className="wizard-owner-field">
-                  <legend>Project Owner 지정</legend>
-                  <p>요구자와 Owner는 같을 수도, 다를 수도 있습니다.</p>
-                  <label>
-                    <input type="radio" name="form-project-owner-mode" checked={ownerMode === "SELF"} onChange={() => setOwnerMode("SELF")} />
-                    요구자와 동일{requesterOwnerLabel ? ` · ${requesterOwnerLabel}` : ""}
-                  </label>
-                  <label>
-                    <input type="radio" name="form-project-owner-mode" checked={ownerMode === "OTHER"} onChange={() => setOwnerMode("OTHER")} />
-                    다른 Owner 지정
-                  </label>
-                  {ownerMode === "OTHER" && (
-                    <input value={projectOwner} onChange={(event) => setProjectOwner(event.target.value)} placeholder="예: 박서연 · 품질혁신팀장" aria-label="Project Owner 이름과 소속" />
-                  )}
-                </fieldset>
+                <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} name="form-project-owner-mode" />
               </div>
               <footer className="wizard-form-actions">
                 <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `${answers.filter(Boolean).length}/5 필수 항목 작성`}</span>

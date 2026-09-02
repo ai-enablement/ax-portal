@@ -16,8 +16,18 @@ test("persists submitted intake and advances to FEA waiting", () => {
   assert.ok(page.includes('status: historical ? `${currentStage.title} 진행 중` : "타당성 평가 대기"'));
   assert.ok(page.includes("onSubmit("));
   assert.ok(page.includes('ownerMode === "SELF"'));
-  assert.ok(page.includes("요구자와 Owner는 같을 수도, 다를 수도 있습니다."));
+  assert.ok(page.includes("과제를 책임질 Owner를 선택해 주세요."));
   assert.ok(page.includes("projectOwner,"));
+});
+
+test("owner selection shares a full-width accessible picker in both writing modes", () => {
+  assert.equal((page.match(/<ProjectOwnerField mode=/g) || []).length, 2);
+  assert.ok(page.includes('name={name} checked={mode === "SELF"}'));
+  assert.ok(page.includes('name={name} checked={mode === "OTHER"}'));
+  assert.ok(page.includes('onOwnerChange(event.target.value)'));
+  assert.match(css, /\.chat-wizard \.project-owner-picker\s*\{\s*grid-column: 1 \/ -1/);
+  assert.match(css, /\.project-owner-options input\[type="radio"\][\s\S]*?width: 16px/);
+  assert.match(css, /@media \(max-width: 640px\)\s*\{\s*\.project-owner-options \{ grid-template-columns: 1fr/);
 });
 
 test("lets AI team register an intake on behalf of the requester", () => {
