@@ -28,7 +28,41 @@ test("Next.js Node route handles same-origin database calls", async () => {
   assert.match(route, /handleDatabaseRequest/);
   assert.match(route, /cache-control/);
   assert.match(route, /export const DELETE = route/);
+  assert.match(route, /export const PUT = route/);
   assert.doesNotMatch(route, /DATABASE_GATEWAY_TOKEN|CUSTOMER_HTTP/);
+});
+
+test("operational project actions use PostgreSQL transactions, normalized records, and audit logs", async () => {
+  const [api, page, permissions] = await Promise.all([
+    read("server/database-api.mjs"),
+    read("app/page.tsx"),
+    read("database/postgresql/20260902_grant_operational_app_permissions.sql"),
+  ]);
+  for (const route of [
+    'pathname === "/projects"',
+    'pathname.startsWith("/projects/")',
+  ]) assert.match(api, new RegExp(route.replace(/[()/.]/g, "\\$&")));
+  assert.match(api, /next_project_code\(\$1\)/);
+  assert.match(api, /insert into agent_portal\.projects/);
+  assert.match(api, /insert into agent_portal\.project_members/);
+  assert.match(api, /insert into agent_portal\.project_stage_history/);
+  assert.match(api, /insert into agent_portal\.intake_requests/);
+  assert.match(api, /insert into agent_portal\.intake_messages/);
+  assert.match(api, /insert into agent_portal\.documents/);
+  assert.match(api, /insert into agent_portal\.gates/);
+  assert.match(api, /insert into agent_portal\.gate_approvals/);
+  assert.match(api, /insert into agent_portal\.audit_logs/);
+  assert.match(api, /clientRequestId/);
+  assert.match(api, /General users can only update their own intake content/);
+  assert.match(page, /projectUpdateQueue/);
+  assert.match(page, /feaDraft/);
+  assert.match(page, /g2Approvals/);
+  assert.match(page, /\/api\/database\/projects/);
+  assert.doesNotMatch(page, /localStorage\.setItem\("agent-portal-submitted-projects"/);
+  assert.match(permissions, /grant usage on schema agent_portal to ax_projects_app/);
+  assert.match(permissions, /agent_portal\.audit_logs/);
+  assert.match(permissions, /next_project_code\(integer\)/);
+  assert.match(permissions, /change_project_stage\(bigint, text, bigint, text\)/);
 });
 
 test("PostgreSQL pool is bounded, timeout-protected, and SSL-disabled", async () => {
@@ -161,12 +195,13 @@ test("Azure Web App build and Hybrid Connection settings are present", async () 
   assert.match(workflow, /package: deployment/);
 });
 
-test("Gallery prefers PostgreSQL and clearly exposes fallback state", async () => {
+test("Gallery requires PostgreSQL and never falls back to browser persistence", async () => {
   const page = await read("app/page.tsx");
 
   assert.match(page, /fetch\("\/api\/database\/health"/);
   assert.match(page, /\/api\/database\/gallery\/applications/);
   assert.match(page, /PostgreSQL 연결/);
-  assert.match(page, /브라우저 임시 저장/);
+  assert.match(page, /PostgreSQL 연결 불가/);
+  assert.doesNotMatch(page, /Agent Gallery 등록 신청이 이 브라우저에 임시 저장/);
   assert.match(page, /setDatabaseStatus\("fallback"\)/);
 });

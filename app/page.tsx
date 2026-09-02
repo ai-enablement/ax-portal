@@ -172,6 +172,8 @@ const projects: ProjectSummary[] = [];
 
 type UserProject = {
   no: string;
+  clientRequestId?: string;
+  createdByUserId?: string;
   name: string;
   category: ProjectCategory;
   stage: number;
@@ -214,9 +216,40 @@ type UserProject = {
   historicalImport?: boolean;
   historicalBaselineStep?: number;
   documentsDeferred?: boolean;
+  source?: "database";
+  intakeDraftCompleted?: boolean;
+  feaCompleted?: boolean;
+  feaDraft?: {
+    summary: string;
+    alternatives: string[];
+    conclusion: string;
+    fitGrades: string[];
+    fitNotes: string[];
+    countPerMonth: string;
+    asIsMinutes: string;
+    people: string;
+    toBeMinutes: string;
+    developmentCost: string;
+    writeExec: boolean;
+    sensitive: boolean;
+    scope: string;
+    damageFinancial: boolean;
+    autonomy: string;
+  };
+  g1Resolution?: { decision: "GO" | "CONDITIONAL" | "DROP"; assignee: string; reason: string };
+  g2ReworkState?: "editing" | "resubmitted";
+  g2Approval?: { decision: "APPROVED" | "REWORK"; reason: string };
+  g2Approvals?: Record<string, { decision: "APPROVED" | "REWORK"; reason: string; actorName?: string; updatedAt: string }>;
+  intakeMessages?: { role: string; text: string }[];
 };
 
 const userProjects: UserProject[] = [];
+
+const defaultIntakeMessages = [
+  { role: "agent", text: "어떤 업무에서 가장 많은 시간이나 반복 작업이 발생하나요?" },
+  { role: "user", text: "개발 BOM이 바뀔 때 관련 부품과 품질 문서를 일일이 찾아 영향 범위를 확인합니다." },
+  { role: "agent", text: "한 달에 몇 번 발생하고, 한 건을 확인하는 데 평균 얼마나 걸리나요?" },
+];
 
 const emptyProject: UserProject = {
   no: "",
@@ -737,6 +770,7 @@ export default function Home() {
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>("checking");
   const [teamAccounts, setTeamAccounts] = useState<TeamAccount[]>([]);
   const [teamWorkloadProjects, setTeamWorkloadProjects] = useState<TeamRequirement[]>(initialTeamRequirements);
+  const projectUpdateQueue = useRef(new Map<string, Promise<void>>());
 
   const actorEmail = identity?.canSwitchRole
     ? ACCOUNT_EMAILS[role]
@@ -804,10 +838,6 @@ export default function Home() {
         "agent-portal-project-overrides",
       );
       if (overrides) setProjectOverrides(JSON.parse(overrides));
-      const galleryItems = window.localStorage.getItem(
-        "agent-portal-gallery-applications",
-      );
-      if (galleryItems) setGalleryApplications(JSON.parse(galleryItems));
     } catch {
       window.localStorage.removeItem("agent-portal-submitted-projects");
     }
@@ -820,13 +850,17 @@ export default function Home() {
     async function loadDatabaseData() {
       if (identityStatus !== "ready") return;
       try {
-        const [healthResponse, galleryResponse] = await Promise.all([
+        const [healthResponse, galleryResponse, projectsResponse] = await Promise.all([
           fetch("/api/database/health", { signal: controller.signal }),
           fetch("/api/database/gallery/applications", {
             signal: controller.signal,
           }),
+          fetch("/api/database/projects", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
         ]);
-        if (!healthResponse.ok || !galleryResponse.ok) {
+        if (!healthResponse.ok || !galleryResponse.ok || !projectsResponse.ok) {
           throw new Error("Database gateway is unavailable.");
         }
         const galleryPayload = (await galleryResponse.json()) as {
@@ -834,11 +868,36 @@ export default function Home() {
         };
         if (!active) return;
         const databaseApplications = galleryPayload.applications || [];
+        let projectPayload = (await projectsResponse.json()) as { projects?: UserProject[] };
+        const legacyRaw = window.localStorage.getItem("agent-portal-submitted-projects");
+        if (legacyRaw) {
+          const legacyProjects = (JSON.parse(legacyRaw) as UserProject[]).filter((project) => project.source !== "database");
+          let migrationFailed = false;
+          for (const legacyProject of legacyProjects) {
+            const migrationProject = {
+              ...legacyProject,
+              clientRequestId: legacyProject.clientRequestId || `legacy:${legacyProject.no}:${legacyProject.receivedDate || legacyProject.updated}:${legacyProject.name}`,
+            };
+            const migrationResponse = await fetch("/api/database/projects", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ project: migrationProject }),
+              signal: controller.signal,
+            });
+            if (!migrationResponse.ok) migrationFailed = true;
+          }
+          if (!migrationFailed && legacyProjects.length) {
+            window.localStorage.removeItem("agent-portal-submitted-projects");
+            window.localStorage.removeItem("agent-portal-deleted-projects");
+            window.localStorage.removeItem("agent-portal-project-overrides");
+            const refreshed = await fetch("/api/database/projects", { cache: "no-store", signal: controller.signal });
+            if (refreshed.ok) projectPayload = await refreshed.json() as { projects?: UserProject[] };
+          }
+        }
         setGalleryApplications(databaseApplications);
-        window.localStorage.setItem(
-          "agent-portal-gallery-applications",
-          JSON.stringify(databaseApplications),
-        );
+        setSubmittedProjects(projectPayload.projects || []);
+        setDeletedProjectNos([]);
+        setProjectOverrides({});
         setDatabaseStatus("connected");
       } catch (error) {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -923,41 +982,42 @@ export default function Home() {
   }, [submittedProjects, teamWorkloadProjects, deletedProjectNos]);
 
   const deleteProject = (projectNo: string) => {
-    setDeletedProjectNos((current) => {
-      const next = current.includes(projectNo)
-        ? current
-        : [...current, projectNo];
-      window.localStorage.setItem(
-        "agent-portal-deleted-projects",
-        JSON.stringify(next),
-      );
-      return next;
-    });
-    setSubmittedProjects((current) => {
-      const next = current.filter((project) => project.no !== projectNo);
-      window.localStorage.setItem(
-        "agent-portal-submitted-projects",
-        JSON.stringify(next),
-      );
-      return next;
-    });
+    void (async () => {
+      const response = await fetch(`/api/database/projects/${encodeURIComponent(projectNo)}`, { method: "DELETE" });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) return notify(payload.error || "과제를 삭제하지 못했습니다.");
+      setSubmittedProjects((current) => current.filter((project) => project.no !== projectNo));
+      setTeamWorkloadProjects((current) => current.filter((project) => project.id !== projectNo));
+    })();
   };
 
   const updateProject = (
     projectNo: string,
     changes: Partial<UserProject>,
   ) => {
-    setProjectOverrides((current) => {
-      const next = {
-        ...current,
-        [projectNo]: { ...(current[projectNo] || {}), ...changes },
-      };
-      window.localStorage.setItem(
-        "agent-portal-project-overrides",
-        JSON.stringify(next),
-      );
-      return next;
+    setSubmittedProjects((current) => current.map((project) => project.no === projectNo ? { ...project, ...changes } : project));
+    const previous = projectUpdateQueue.current.get(projectNo) || Promise.resolve();
+    const request = previous.catch(() => undefined).then(async () => {
+      const response = await fetch(`/api/database/projects/${encodeURIComponent(projectNo)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ changes }),
+      });
+      const payload = (await response.json()) as { project?: UserProject; error?: string };
+      if (!response.ok || !payload.project) {
+        notify(payload.error || "과제 변경사항을 DB에 저장하지 못했습니다.");
+        const refreshed = await fetch("/api/database/projects", { cache: "no-store" });
+        if (refreshed.ok) {
+          const refreshedPayload = await refreshed.json() as { projects?: UserProject[] };
+          setSubmittedProjects(refreshedPayload.projects || []);
+        }
+        return;
+      }
+      setSubmittedProjects((current) => current.map((project) => project.no === projectNo ? payload.project! : project));
+    }).finally(() => {
+      if (projectUpdateQueue.current.get(projectNo) === request) projectUpdateQueue.current.delete(projectNo);
     });
+    projectUpdateQueue.current.set(projectNo, request);
   };
 
   const filteredAgents = useMemo(
@@ -1059,14 +1119,16 @@ export default function Home() {
           : item,
       ),
     );
+    setSubmittedProjects((items) => items.map((item) => item.no === projectNo ? {
+      ...item,
+      developerIds: [payload.assignee!.id],
+      developerNames: [payload.assignee!.displayName],
+      handler: payload.assignee!.displayName,
+    } : item));
   };
 
   const saveGalleryApplications = (items: GalleryApplication[]) => {
     setGalleryApplications(items);
-    window.localStorage.setItem(
-      "agent-portal-gallery-applications",
-      JSON.stringify(items),
-    );
   };
 
   const openGallerySubmission = (draft: GalleryDraft) => {
@@ -1075,47 +1137,36 @@ export default function Home() {
   };
 
   const submitGalleryApplication = async (application: GalleryApplication) => {
-    const optimistic = [application, ...galleryApplications];
-    saveGalleryApplications(optimistic);
-    setGalleryDraft(null);
-    if (databaseStatus === "connected") {
-      try {
-        const response = await fetch("/api/database/gallery/applications", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...application, actorEmail }),
-        });
-        const payload = (await response.json()) as {
-          application?: GalleryApplication;
-          error?: string;
-        };
-        if (!response.ok || !payload.application) {
-          throw new Error(payload.error || "등록 신청 저장에 실패했습니다.");
-        }
-        saveGalleryApplications([
-          payload.application,
-          ...optimistic.filter((item) => item.id !== application.id),
-        ]);
-        notify("Agent Gallery 등록 신청이 PostgreSQL에 저장되었습니다.");
-        return;
-      } catch {
-        setDatabaseStatus("fallback");
-        notify("DB에 연결되지 않아 이 브라우저에 임시 저장했습니다.");
-        return;
+    try {
+      const response = await fetch("/api/database/gallery/applications", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...application, actorEmail }),
+      });
+      const payload = (await response.json()) as {
+        application?: GalleryApplication;
+        error?: string;
+      };
+      if (!response.ok || !payload.application) {
+        throw new Error(payload.error || "등록 신청 저장에 실패했습니다.");
       }
+      saveGalleryApplications([
+        payload.application,
+        ...galleryApplications.filter((item) => item.id !== application.id),
+      ]);
+      setGalleryDraft(null);
+      setDatabaseStatus("connected");
+      notify("Agent Gallery 등록 신청이 PostgreSQL에 저장되었습니다.");
+    } catch (error) {
+      setDatabaseStatus("fallback");
+      notify(error instanceof Error ? error.message : "DB 저장에 실패했습니다. 다시 시도해 주세요.");
     }
-    notify("Agent Gallery 등록 신청이 이 브라우저에 임시 저장되었습니다.");
   };
 
   const updateGalleryApplication = async (
     id: string,
     changes: Partial<GalleryApplication>,
   ) => {
-    const next = galleryApplications.map((application) =>
-      application.id === id ? { ...application, ...changes } : application,
-    );
-    saveGalleryApplications(next);
-    if (databaseStatus !== "connected") return;
     try {
       const response = await fetch(
         `/api/database/gallery/applications/${encodeURIComponent(id)}`,
@@ -1133,24 +1184,24 @@ export default function Home() {
         throw new Error(payload.error || "변경 내용을 저장하지 못했습니다.");
       }
       saveGalleryApplications(
-        next.map((application) =>
+        galleryApplications.map((application) =>
           application.id === id ? payload.application! : application,
         ),
       );
-    } catch {
+      setDatabaseStatus("connected");
+    } catch (error) {
       setDatabaseStatus("fallback");
-      notify("DB에 연결되지 않아 변경 내용을 이 브라우저에 임시 저장했습니다.");
+      notify(error instanceof Error ? error.message : "DB 저장에 실패했습니다. 다시 시도해 주세요.");
     }
   };
 
   const deleteGalleryApplication = async (id: string) => {
     if (!window.confirm("등록된 Agent와 검토 이력을 삭제하시겠습니까?")) return;
-    if (databaseStatus === "connected") {
-      const response = await fetch(`/api/database/gallery/applications/${encodeURIComponent(id)}`, { method: "DELETE" });
-      const payload = await response.json();
-      if (!response.ok) return notify(payload.error || "Agent를 삭제하지 못했습니다.");
-    }
+    const response = await fetch(`/api/database/gallery/applications/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const payload = await response.json();
+    if (!response.ok) return notify(payload.error || "Agent를 삭제하지 못했습니다.");
     saveGalleryApplications(galleryApplications.filter((application) => application.id !== id));
+    setDatabaseStatus("connected");
     notify("등록된 Agent를 삭제했습니다.");
   };
 
@@ -1192,7 +1243,7 @@ export default function Home() {
     setLlmCostGuideOpen(true);
   };
 
-  const submitAgentRequest = (
+  const submitAgentRequest = async (
     answers: string[],
     title: string,
     projectOwner: string,
@@ -1203,24 +1254,12 @@ export default function Home() {
       receivedDate: string;
       currentJourneyStep: number;
       developerIds: string[];
+      clientRequestId?: string;
       g1Decision?: "GO" | "CONDITIONAL";
       g1Reason?: string;
     },
-  ) => {
+  ): Promise<boolean> => {
     const registrationReceivedDate = registration?.receivedDate || new Date().toISOString().slice(0, 10);
-    const registrationProjectYear = registrationReceivedDate.slice(0, 4) || String(new Date().getFullYear());
-    const occupiedProjectNos = [
-      ...submittedProjects.map((project) => project.no),
-      ...teamWorkloadProjects.map((project) => project.id),
-      ...deletedProjectNos,
-    ];
-    const nextProjectSequence =
-      occupiedProjectNos.reduce((highest, projectNo) => {
-        const match = projectNo.match(new RegExp(`^${registrationProjectYear}-(\\d+)$`));
-        return match ? Math.max(highest, Number(match[1])) : highest;
-      }, 0) + 1;
-    const submittedProjectNo = `${registrationProjectYear}-${String(nextProjectSequence).padStart(3, "0")}`;
-    setSubmittedProjects((current) => {
       const historical = Boolean(registration?.historical);
       const category: ProjectCategory =
         role === ACCOUNT_ROLES.user
@@ -1310,7 +1349,8 @@ export default function Home() {
               ? "delivery"
               : "operations";
       const project: UserProject = {
-        no: submittedProjectNo,
+        no: "pending",
+        clientRequestId: registration?.clientRequestId || crypto.randomUUID(),
         name: title,
         category,
         stage: Math.max(stageNumber, 1),
@@ -1357,14 +1397,25 @@ export default function Home() {
         historicalBaselineStep: historical ? journeyStep : undefined,
         documentsDeferred: historical,
       };
-      const next = [project, ...current];
-      window.localStorage.setItem(
-        "agent-portal-submitted-projects",
-        JSON.stringify(next),
-      );
-      return next;
-    });
-    setWorkflowTarget(submittedProjectNo);
+    try {
+      const response = await fetch("/api/database/projects", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ project }),
+      });
+      const payload = (await response.json()) as { project?: UserProject; error?: string };
+      if (!response.ok || !payload.project) throw new Error(payload.error || "과제를 DB에 저장하지 못했습니다.");
+      setSubmittedProjects((current) => [payload.project!, ...current.filter((item) => item.no !== payload.project!.no)]);
+      setWorkflowTarget(payload.project.no);
+      setDeletedProjectNos([]);
+      setProjectOverrides({});
+      window.localStorage.removeItem("agent-portal-submitted-projects");
+      window.localStorage.removeItem("agent-portal-deleted-projects");
+      window.localStorage.removeItem("agent-portal-project-overrides");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "과제를 DB에 저장하지 못했습니다.");
+      return false;
+    }
     setView("home");
     notify(
       registration?.historical
@@ -1373,6 +1424,7 @@ export default function Home() {
         ? "에이전트 요구 접수서[INT]가 제출되었습니다. 신규 과제가 타당성 평가 대기로 등록되었습니다."
         : "요청자를 대신해 에이전트 요구 접수서[INT]를 등록했습니다. 신규 과제가 타당성 평가 대기로 이동했습니다.",
     );
+    return true;
   };
 
   return (
@@ -3018,16 +3070,19 @@ function HomeFeasibilityEditor({
   project,
   role,
   blankStart = false,
+  onSave,
   onComplete,
 }: {
   project: UserProject;
   role: string;
   blankStart?: boolean;
+  onSave?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
   onComplete?: () => void;
 }) {
   const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const author = isLeader ? "AI 활성화팀 팀장" : "AI 활성화팀 담당자";
   const [summary, setSummary] = useState(() => {
+    if (project.feaDraft?.summary !== undefined) return project.feaDraft.summary;
     if (blankStart) {
       return (project.intakeAnswers || [])
         .slice(0, 4)
@@ -3037,18 +3092,20 @@ function HomeFeasibilityEditor({
     }
     return `${project.description} 현업 인터뷰를 통해 현재 업무량과 기대 결과를 확인하고 있습니다.`;
   });
-  const [alternatives, setAlternatives] = useState(["", "", "", ""]);
-  const [conclusion, setConclusion] = useState("");
-  const [fitGrades, setFitGrades] = useState(["미평가", "미평가", "미평가", "미평가", "미평가"]);
-  const [countPerMonth, setCountPerMonth] = useState("");
-  const [asIsMinutes, setAsIsMinutes] = useState("");
-  const [people, setPeople] = useState("");
-  const [toBeMinutes, setToBeMinutes] = useState("");
-  const [writeExec, setWriteExec] = useState(false);
-  const [sensitive, setSensitive] = useState(false);
-  const [scope, setScope] = useState("COMPANY");
-  const [damageFinancial, setDamageFinancial] = useState(false);
-  const [autonomy, setAutonomy] = useState("L0");
+  const [alternatives, setAlternatives] = useState(project.feaDraft?.alternatives || ["", "", "", ""]);
+  const [conclusion, setConclusion] = useState(project.feaDraft?.conclusion || "");
+  const [fitGrades, setFitGrades] = useState(project.feaDraft?.fitGrades || ["미평가", "미평가", "미평가", "미평가", "미평가"]);
+  const [fitNotes, setFitNotes] = useState(project.feaDraft?.fitNotes || ["", "", "", "", ""]);
+  const [countPerMonth, setCountPerMonth] = useState(project.feaDraft?.countPerMonth || "");
+  const [asIsMinutes, setAsIsMinutes] = useState(project.feaDraft?.asIsMinutes || "");
+  const [people, setPeople] = useState(project.feaDraft?.people || "");
+  const [toBeMinutes, setToBeMinutes] = useState(project.feaDraft?.toBeMinutes || "");
+  const [developmentCost, setDevelopmentCost] = useState(project.feaDraft?.developmentCost || "");
+  const [writeExec, setWriteExec] = useState(project.feaDraft?.writeExec || false);
+  const [sensitive, setSensitive] = useState(project.feaDraft?.sensitive || false);
+  const [scope, setScope] = useState(project.feaDraft?.scope || "COMPANY");
+  const [damageFinancial, setDamageFinancial] = useState(project.feaDraft?.damageFinancial || false);
+  const [autonomy, setAutonomy] = useState(project.feaDraft?.autonomy || "L0");
   const [saveState, setSaveState] = useState("자동 저장됨");
   const [completionMessage, setCompletionMessage] = useState("");
   const track = useMemo(
@@ -3076,7 +3133,13 @@ function HomeFeasibilityEditor({
     setAlternatives((items) =>
       items.map((item, itemIndex) => (itemIndex === index ? value : item)),
     );
+  const currentDraft = (): NonNullable<UserProject["feaDraft"]> => ({
+    summary, alternatives, conclusion, fitGrades, fitNotes,
+    countPerMonth, asIsMinutes, people, toBeMinutes, developmentCost,
+    writeExec, sensitive, scope, damageFinancial, autonomy,
+  });
   const saveDocument = () => {
+    onSave?.(currentDraft());
     setSaveState("방금 저장됨");
     setCompletionMessage("작성 내용과 판정 근거가 저장되었습니다.");
   };
@@ -3089,6 +3152,7 @@ function HomeFeasibilityEditor({
     }
     setSaveState("작성 완료");
     setCompletionMessage("FEA가 작성 완료되어 G1 착수 승인 대기로 이동했습니다.");
+    onSave?.(currentDraft());
     onComplete?.();
   };
   const alternativeLabels = [
@@ -3186,7 +3250,7 @@ function HomeFeasibilityEditor({
           <header><span>03</span><div><b>에이전트 적합성 진단</b><small>5개 기준을 상·중·하로 판단</small></div><Pill tone="orange">미평가</Pill></header>
           <div className="home-fea-fit">
             {fitLabels.map((label, index) => (
-              <label key={label}><span>{label}</span><select value={fitGrades[index]} onChange={(event) => setFitGrades((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}><option>미평가</option><option>상</option><option>중</option><option>하</option></select><input placeholder="인터뷰를 바탕으로 판단 근거 입력" /></label>
+              <label key={label}><span>{label}</span><select value={fitGrades[index]} onChange={(event) => setFitGrades((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}><option>미평가</option><option>상</option><option>중</option><option>하</option></select><input value={fitNotes[index]} onChange={(event) => setFitNotes((items) => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder="인터뷰를 바탕으로 판단 근거 입력" /></label>
             ))}
           </div>
         </section>
@@ -3203,7 +3267,7 @@ function HomeFeasibilityEditor({
             <b>{roi.computed ? `월 ${roi.savedHours}시간 · 연 ${roi.savedMdYear} M/D 절감` : "⬜ 미확보"}</b>
             <p>{roi.computed ? roi.formula : roi.reason}</p>
           </div>
-          <label className="home-fea-cost">개발 비용 추정<input placeholder="인력 M/D + 플랫폼/API 비용 · 확인된 값만 입력" /></label>
+          <label className="home-fea-cost">개발 비용 추정<input value={developmentCost} onChange={(event) => setDevelopmentCost(event.target.value)} placeholder="인력 M/D + 플랫폼/API 비용 · 확인된 값만 입력" /></label>
         </section>
         <section>
           <header><span>05</span><div><b>위험 식별·유형·트랙 판정</b><small>5개 응답을 전건 검사해 자동 판정</small></div><Pill tone={track.track === "HIGH" ? "red" : "orange"}>{track.label} 트랙</Pill></header>
@@ -3239,6 +3303,7 @@ function FeasibilityResult({
   role = ACCOUNT_ROLES.user,
   projectItem,
   forceDraft = false,
+  onSave,
   onComplete,
 }: {
   projectNo: string;
@@ -3247,6 +3312,7 @@ function FeasibilityResult({
   role?: string;
   projectItem?: UserProject;
   forceDraft?: boolean;
+  onSave?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
   onComplete?: () => void;
 }) {
   const [activeSection, setActiveSection] = useState(0);
@@ -3348,6 +3414,7 @@ function FeasibilityResult({
         project={project}
         role={role}
         blankStart={forceDraft}
+        onSave={onSave}
         onComplete={onComplete}
       />
     );
@@ -4711,10 +4778,13 @@ function GateApprovalResult({
   notify,
   onG1Resolved,
   onStartArdRework,
+  onG2Vote,
   initialG1Resolution,
+  initialG2Approvals,
   g2ReworkSubmitted = false,
   basisReady = true,
   homeEmbedded = false,
+  projectItem,
   assignees = [],
   onAssignDeveloper,
 }: {
@@ -4728,14 +4798,17 @@ function GateApprovalResult({
     reason: string,
   ) => void;
   onStartArdRework?: () => void;
+  onG2Vote?: (decision: "APPROVED" | "REWORK", reason: string) => void;
   initialG1Resolution?: {
     decision: "GO" | "CONDITIONAL" | "DROP";
     assignee: string;
     reason: string;
   } | null;
+  initialG2Approvals?: UserProject["g2Approvals"];
   g2ReworkSubmitted?: boolean;
   basisReady?: boolean;
   homeEmbedded?: boolean;
+  projectItem?: UserProject;
   assignees?: TeamAccount[];
   onAssignDeveloper?: (projectNo: string, userId: string) => Promise<void>;
 }) {
@@ -4750,13 +4823,15 @@ function GateApprovalResult({
     role === ACCOUNT_ROLES.bts ||
     role === ACCOUNT_ROLES.bpSolution;
   const isRequester = role === "일반 User";
-  const canActOnG2 = isRequester || isMember || isLeader;
+  const g2RoleKey = isRequester ? "requester" : isMember ? "developer" : "team_leader";
+  const initialG2Approval = initialG2Approvals?.[g2RoleKey];
+  const canActOnG2 = isRequester || isMember || isTeamLeader;
   const isCompletedG2 = projectNo === "2026-021" && gate === "G2";
   const [detailMode, setDetailMode] = useState<"evidence" | "ard" | null>(null);
-  const project =
+  const project = projectItem ||
     [...memberAdditionalProjects, ...userProjects].find(
       (item) => item.no === projectNo,
-    ) || userProjects[0];
+    ) || emptyProject;
   const [g1Decision, setG1Decision] = useState<
     "PENDING" | "GO" | "CONDITIONAL" | "DROP"
   >(
@@ -4777,15 +4852,19 @@ function GateApprovalResult({
   );
   const [g1Reason, setG1Reason] = useState(initialG1Resolution?.reason || "");
   const [myG2Vote, setMyG2Vote] = useState<"PENDING" | "APPROVED" | "REWORK">(
-    "PENDING",
+    initialG2Approval?.decision || "PENDING",
   );
-  const [g2Reason, setG2Reason] = useState("");
+  const [g2Reason, setG2Reason] = useState(initialG2Approval?.reason || "");
   const [deadlineChangeOpen, setDeadlineChangeOpen] = useState(false);
   const [proposedDeadline, setProposedDeadline] = useState(
     project.committedDate.includes("G2") ? "" : project.committedDate,
   );
   const [deadlineReason, setDeadlineReason] = useState("");
   const [deadlineRequestSent, setDeadlineRequestSent] = useState(false);
+  const persistedG2Status = (key: "requester" | "developer" | "team_leader") => {
+    const currentVote = key === g2RoleKey ? myG2Vote : initialG2Approvals?.[key]?.decision || "PENDING";
+    return currentVote === "REWORK" ? "반려" : currentVote === "APPROVED" ? "승인" : "대기";
+  };
   const approvers = isG1
     ? [
         {
@@ -4884,9 +4963,11 @@ function GateApprovalResult({
       : [
           {
             role: "요구자",
-            name: projectNo === "2026-021" ? "정수빈" : "김현우",
+            name: project.source === "database" ? project.requester || project.owner : projectNo === "2026-021" ? "정수빈" : "김현우",
             status: isCompletedG2
               ? "승인"
+              : project.source === "database"
+                ? persistedG2Status("requester")
               : isRequester
                 ? myG2Vote === "REWORK"
                   ? "반려"
@@ -4899,13 +4980,15 @@ function GateApprovalResult({
           },
           {
             role: "개발 담당자",
-            name: project.teamOwner.includes("배정 대기")
+            name: project.developerNames?.join(" · ") || (project.teamOwner.includes("배정 대기")
               ? "미배정"
               : project.teamOwner
                   .replace("AI활성화팀 ", "")
-                  .replace(" 담당자", ""),
+                  .replace(" 담당자", "")),
             status: isCompletedG2
               ? "승인"
+              : project.source === "database"
+                ? persistedG2Status("developer")
               : isMember
                 ? myG2Vote === "REWORK"
                   ? "반려"
@@ -4923,6 +5006,8 @@ function GateApprovalResult({
             name: "최병두",
             status: isCompletedG2
               ? "승인"
+              : project.source === "database"
+                ? persistedG2Status("team_leader")
               : isLeader
                 ? myG2Vote === "REWORK"
                   ? "반려"
@@ -5323,6 +5408,7 @@ function GateApprovalResult({
                 disabled={!g2Reason.trim()}
                 onClick={() => {
                   setMyG2Vote("REWORK");
+                  onG2Vote?.("REWORK", g2Reason);
                   notify("ARD 보완·수정 요청이 기록되었습니다.");
                 }}
               >
@@ -5332,6 +5418,7 @@ function GateApprovalResult({
                 className="primary"
                 onClick={() => {
                   setMyG2Vote("APPROVED");
+                  onG2Vote?.("APPROVED", g2Reason);
                   notify(
                     `${isLeader ? "AI활성화팀장" : isMember ? "개발 담당자" : "요구자"} 승인이 기록되었습니다.`,
                   );
@@ -6487,7 +6574,7 @@ function HistoricalStageDocumentEditor({
     <section className="historical-stage-editor" aria-label={`${output.title} 작성`}>
       <header>
         <div>
-          <small>{output.code} · {project.no} · 과거 과제 이관 작성본</small>
+          <small>{output.code} · {project.no} · {project.historicalImport ? "과거 과제 이관 작성본" : "운영 DB 작성본"}</small>
           <h3>{output.title}</h3>
           <p>{output.summary}</p>
         </div>
@@ -6702,43 +6789,13 @@ function UserDashboard({
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [chatInput, setChatInput] = useState("");
-  const [draftCompleted, setDraftCompleted] = useState(false);
   const [historicalIntakeEditing, setHistoricalIntakeEditing] = useState(false);
-  const [feaCompletedProjects, setFeaCompletedProjects] = useState<string[]>(
-    [],
-  );
-  const [homeG1Resolutions, setHomeG1Resolutions] = useState<
-    Record<
-      string,
-      {
-        decision: "GO" | "CONDITIONAL" | "DROP";
-        assignee: string;
-        reason: string;
-      }
-    >
-  >({});
-  const [g2ReworkProjects, setG2ReworkProjects] = useState<
-    Record<string, "editing" | "resubmitted">
-  >({});
   const [pilotReleaseDocument, setPilotReleaseDocument] = useState<
     "DEP" | "UG" | null
   >(null);
   const [openedDeferredDocuments, setOpenedDeferredDocuments] = useState<string[]>([]);
   const currentStageDetailRef = useRef<HTMLDivElement>(null);
-  const [messages, setMessages] = useState([
-    {
-      role: "agent",
-      text: "어떤 업무에서 가장 많은 시간이나 반복 작업이 발생하나요?",
-    },
-    {
-      role: "user",
-      text: "개발 BOM이 바뀔 때 관련 부품과 품질 문서를 일일이 찾아 영향 범위를 확인합니다.",
-    },
-    {
-      role: "agent",
-      text: "한 달에 몇 번 발생하고, 한 건을 확인하는 데 평균 얼마나 걸리나요?",
-    },
-  ]);
+  const [messages, setMessages] = useState(defaultIntakeMessages);
   useEffect(() => {
     if (projectItems.length === 0) {
       // Keep the master-detail selection stable while the production dataset is empty.
@@ -6762,6 +6819,11 @@ function UserDashboard({
 
   const hasProjects = projectItems.length > 0;
   const current = projectItems[selected] || projectItems[0] || emptyProject;
+  useEffect(() => {
+    // Synchronize the persisted intake conversation when the selected project changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMessages(current.intakeMessages?.length ? current.intakeMessages : defaultIntakeMessages);
+  }, [current.no, current.intakeMessages]);
   const assignedDeveloperIds = current.developerIds || [];
   const signedInTeamAccount = teamAccounts.find(
     (account) => account.email.toLowerCase() === identity?.email?.toLowerCase(),
@@ -6792,7 +6854,7 @@ function UserDashboard({
   };
   const importedG1Record = current.historicalDocuments?.["2"];
   const currentG1Resolution =
-    homeG1Resolutions[current.no] ||
+    current.g1Resolution ||
     (importedG1Record?.status === "complete" && importedG1Record.decision
       ? {
           decision:
@@ -6819,14 +6881,14 @@ function UserDashboard({
   const intakeComplete =
     hasProjects &&
     !current.documentsDeferred &&
-    (current.journeyStep > 0 || (current.no === "2026-031" && draftCompleted));
+    (current.journeyStep > 0 || current.intakeDraftCompleted);
   const effectiveJourneyStep = !hasProjects
     ? -1
-    : g2ReworkProjects[current.no] === "resubmitted"
+    : current.g2ReworkState === "resubmitted"
       ? Math.max(4, current.journeyStep)
-      : feaCompletedProjects.includes(current.no)
+      : current.feaCompleted
         ? Math.max(2, current.journeyStep)
-        : current.no === "2026-031" && draftCompleted
+        : current.intakeDraftCompleted
           ? 1
           : current.journeyStep;
   const historicalBaselineStep = current.historicalImport
@@ -6888,14 +6950,16 @@ function UserDashboard({
   };
   const sendDraftAnswer = () => {
     if (!chatInput.trim()) return;
-    setMessages((items) => [
-      ...items,
+    const nextMessages = [
+      ...messages,
       { role: "user", text: chatInput.trim() },
       {
         role: "agent",
         text: "좋습니다. 답변을 접수서 초안에 반영했습니다. 기대하는 처리 방식과 목표 시간을 알려주세요.",
       },
-    ]);
+    ];
+    setMessages(nextMessages);
+    onUpdateProject(current.no, { intakeMessages: nextMessages });
     setChatInput("");
   };
   const showCurrentStage = () => {
@@ -7050,9 +7114,9 @@ function UserDashboard({
             <div>
               {hasProjects && (
                 <Pill tone={current.tone}>
-                  {g2ReworkProjects[current.no] === "editing"
+                  {current.g2ReworkState === "editing"
                     ? "ARD 보완 중"
-                    : g2ReworkProjects[current.no] === "resubmitted"
+                    : current.g2ReworkState === "resubmitted"
                       ? "G2 재승인 대기"
                       : intakeComplete
                         ? current.status.replace("내 작성 필요", "작성 완료")
@@ -7088,7 +7152,7 @@ function UserDashboard({
               const rejectedGate =
                 current.no === "2026-028" &&
                 index === 4 &&
-                g2ReworkProjects[current.no] !== "resubmitted";
+                current.g2ReworkState !== "resubmitted";
               return (
                 <button
                   type="button"
@@ -7261,6 +7325,16 @@ function UserDashboard({
                     ...(current.historicalDocuments || {}),
                     "2": { ...record, developerIds: finalDeveloperIds },
                   },
+                  g1Resolution: {
+                    decision:
+                      record.decision === "CONDITIONAL"
+                        ? "CONDITIONAL"
+                        : record.decision === "REJECTED"
+                          ? "DROP"
+                          : "GO",
+                    assignee: developerNames.join(" · ") || "미배정",
+                    reason: record.reason || "",
+                  },
                   ...(assignmentComplete ? {
                     developerIds: finalDeveloperIds,
                     developerNames,
@@ -7272,26 +7346,14 @@ function UserDashboard({
                     } : {}),
                   } : {}),
                 });
-                setHomeG1Resolutions((items) => ({
-                  ...items,
-                  [current.no]: {
-                    decision:
-                      record.decision === "CONDITIONAL"
-                        ? "CONDITIONAL"
-                        : record.decision === "REJECTED"
-                          ? "DROP"
-                          : "GO",
-                    assignee: developerNames.join(" · ") || "미배정",
-                    reason: record.reason || "",
-                  },
-                }));
                 notify(record.status === "complete" ? record.decision === "REJECTED" ? "팀장 G1 Drop 판정을 확정했습니다." : "Admin이 개발 담당자 배정을 확정했습니다." : "팀장 G1 판정을 확정했습니다. Admin 개발 담당자 배정 대기로 이동합니다.");
               }}
             />
-          ) : current.historicalImport &&
+          ) : (current.historicalImport || current.source === "database") &&
             selectedJourney >= 2 &&
             selectedJourney !== 2 &&
-            (deferredDocumentOpened || deferredDocumentRecord) ? (
+            !(current.source === "database" && selectedJourney === 4) &&
+            (current.source === "database" || deferredDocumentOpened || deferredDocumentRecord) ? (
             <HistoricalStageDocumentEditor
               key={deferredDocumentKey}
               project={current}
@@ -7437,7 +7499,7 @@ function UserDashboard({
                 </div>
                 {!intakeComplete && !current.historicalImport && (
                   <footer>
-                    <button onClick={() => setDraftCompleted(true)}>
+                    <button onClick={() => onUpdateProject(current.no, { intakeDraftCompleted: true })}>
                       작성 완료 및 AI Agent 검토{" "}
                       <ArrowRight size={14} weight="bold" />
                     </button>
@@ -7523,12 +7585,11 @@ function UserDashboard({
                 current.historicalImport &&
                 (deferredDocumentOpened || Boolean(deferredDocumentRecord))
               }
+              onSave={(feaDraft) => onUpdateProject(current.no, { feaDraft })}
               onComplete={() => {
-                setFeaCompletedProjects((items) =>
-                  items.includes(current.no) ? items : [...items, current.no],
-                );
                 if (current.historicalImport) {
                   onUpdateProject(current.no, {
+                    feaCompleted: true,
                     historicalDocuments: {
                       ...(current.historicalDocuments || {}),
                       "1": {
@@ -7544,7 +7605,7 @@ function UserDashboard({
                     } : {}),
                   });
                   notify("FEA 작성 완료가 기록되어 G1 착수 판정을 진행할 수 있습니다.");
-                }
+                } else onUpdateProject(current.no, { feaCompleted: true });
               }}
             />
           ) : (selectedJourney === 2 && isAiTeam) ||
@@ -7558,44 +7619,38 @@ function UserDashboard({
               notify={notify}
               basisReady={selectedJourney !== 2 || effectiveJourneyStep >= 2}
               homeEmbedded
+              projectItem={current}
               assignees={teamAccounts}
               onAssignDeveloper={onAssignProjectDeveloper}
               initialG1Resolution={currentG1Resolution}
+              initialG2Approvals={current.g2Approvals}
               onG1Resolved={(decision, assignee, reason) =>
-                setHomeG1Resolutions((items) => ({
-                  ...items,
-                  [current.no]: { decision, assignee, reason },
-                }))
+                onUpdateProject(current.no, { g1Resolution: { decision, assignee, reason } })
               }
               g2ReworkSubmitted={
-                g2ReworkProjects[current.no] === "resubmitted"
+                current.g2ReworkState === "resubmitted"
               }
               onStartArdRework={() => {
-                setG2ReworkProjects((items) => ({
-                  ...items,
-                  [current.no]: "editing",
-                }));
+                onUpdateProject(current.no, { g2ReworkState: "editing" });
                 setSelectedJourney(3);
                 notify(
                   "G2 반려 사유와 보완 대상 ARD 항목을 불러왔습니다.",
                 );
               }}
+              onG2Vote={(decision, reason) => onUpdateProject(current.no, { g2Approval: { decision, reason } })}
             />
           ) : selectedJourney === 3 ? (
             <RequirementDefinitionResult
               projectNo={current.no}
               state={selectedOutputState}
-              reworkMode={g2ReworkProjects[current.no] === "editing"}
+              reworkMode={current.g2ReworkState === "editing"}
               reworkReason={
                 current.no === "2026-028"
                   ? "Out of Scope와 평가셋 정답 라벨 책임자를 명확히 한 뒤 다시 검토해야 합니다."
                   : undefined
               }
               onReworkSubmit={() => {
-                setG2ReworkProjects((items) => ({
-                  ...items,
-                  [current.no]: "resubmitted",
-                }));
+                onUpdateProject(current.no, { g2ReworkState: "resubmitted" });
                 setSelectedJourney(4);
                 notify(
                   "ARD v0.9 보완본이 G2에 재상신되었습니다. 새 3자 승인 라운드가 시작됩니다.",
@@ -13996,7 +14051,7 @@ function Gallery({
                 ? "PostgreSQL 연결"
                 : databaseStatus === "checking"
                   ? "DB 확인 중"
-                  : "브라우저 임시 저장"}
+                  : "PostgreSQL 연결 불가"}
             </span>
             <button className="gallery-submit-button" onClick={startPersonalSubmission}>
               <Plus size={18} weight="bold" /> {isTeam ? "Agent 올리기" : "내 Agent 올리기"}
@@ -14803,10 +14858,11 @@ function RequestWizard({
       receivedDate: string;
       currentJourneyStep: number;
       developerIds: string[];
+      clientRequestId?: string;
       g1Decision?: "GO" | "CONDITIONAL";
       g1Reason?: string;
     },
-  ) => void;
+  ) => Promise<boolean>;
 }) {
   const isAiTeam = role !== ACCOUNT_ROLES.user;
   const labels = [
@@ -14846,6 +14902,7 @@ function RequestWizard({
   const [requesterEmail, setRequesterEmail] = useState("");
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
+  const submissionRequestId = useRef(crypto.randomUUID());
   const isHistorical = isAiTeam && registrationMode === "HISTORICAL";
   const eligibleDevelopers = teamAccounts;
   const requiresHistoricalG1Record = isHistorical && historicalJourneyStep >= 3;
@@ -14891,10 +14948,10 @@ function RequestWizard({
       requestTitle.trim() &&
       !submitted,
   );
-  const submitRequest = () => {
+  const submitRequest = async () => {
     if (!canSubmit) return;
     setSubmitted(true);
-    onSubmit(
+    const saved = await onSubmit(
       [...answers],
       requestTitle,
       resolvedProjectOwner,
@@ -14905,16 +14962,18 @@ function RequestWizard({
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
         developerIds: historicalDeveloperIds,
+        clientRequestId: submissionRequestId.current,
         g1Decision: requiresHistoricalG1Record ? historicalG1Decision : undefined,
         g1Reason: requiresHistoricalG1Record ? historicalG1Reason.trim() : undefined,
       },
     );
-    close();
+    if (saved) close();
+    else setSubmitted(false);
   };
   const advance = () => {
     if (!answers[step - 1].trim() || submitted) return;
     if (step < 5) setStep(step + 1);
-    else submitRequest();
+    else void submitRequest();
   };
   const openChatMode = () => {
     setRegistrationMode("NEW");

@@ -82,9 +82,9 @@ test("lets AI team roles write FEA and locks G1 until complete", () => {
   assert.ok(page.includes('g1Decision === "PENDING"'));
   assert.ok(page.includes("팀장 승인 완료"));
   assert.ok(page.includes("homeEmbedded"));
-  assert.ok(page.includes("homeG1Resolutions"));
+  assert.ok(page.includes("current.g1Resolution"));
   assert.ok(page.includes("initialG1Resolution={currentG1Resolution}"));
-  assert.ok(page.includes("[current.no]: { decision, assignee, reason }"));
+  assert.ok(page.includes("g1Resolution: { decision, assignee, reason }"));
   assert.ok(css.includes(".schedule-g1-status.conditional"));
 });
 
@@ -95,7 +95,7 @@ test("closes rejected G2 rounds and uses the correct three signers", () => {
   assert.ok(page.includes("보완 중인 ARD 보기"));
   assert.ok(page.includes("ARD 보완하기"));
   assert.ok(page.includes("보완 완료 · G2 재상신"));
-  assert.ok(page.includes("g2ReworkProjects"));
+  assert.ok(page.includes("current.g2ReworkState"));
   assert.ok(page.includes("G2 재검토 진행 중"));
   assert.ok(page.includes("ARD v0.9가 보완 완료되어 새 G2 승인 라운드가 열렸습니다"));
   assert.ok(page.includes("activeSections"));
@@ -168,14 +168,14 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(css.includes(".deferred-document-card"));
 });
 
-test("shows a newly imported project even after deleted or database project numbers", () => {
-  assert.ok(page.includes("...teamWorkloadProjects.map((project) => project.id)"));
-  assert.ok(page.includes("...deletedProjectNos"));
-  assert.ok(page.includes("const nextProjectSequence"));
-  assert.ok(page.includes("setWorkflowTarget(submittedProjectNo)"));
-  assert.ok(page.includes('setFilter("전체")'));
+test("stores a newly imported project in PostgreSQL and opens the assigned database number", () => {
+  assert.ok(page.includes('fetch("/api/database/projects", {'));
+  assert.ok(page.includes('method: "POST"'));
+  assert.ok(page.includes('no: "pending"'));
+  assert.ok(page.includes("setWorkflowTarget(payload.project.no)"));
+  assert.ok(page.includes("clientRequestId"));
   assert.ok(page.includes("submittedProjectNos.has(project.no) || !deletedProjectNos.includes(project.no)"));
-  assert.ok(!page.includes("current.filter((item) => item.no.startsWith"));
+  assert.ok(!page.includes('localStorage.setItem("agent-portal-submitted-projects"'));
 });
 
 test("assigns multiple registered developers while importing a historical project", () => {
