@@ -1088,6 +1088,7 @@ on conflict (app_role, action_code) do update set action_name = excluded.action_
 create or replace function next_project_code(p_project_year integer default extract(year from current_date)::integer)
 returns text
 language plpgsql
+set search_path = pg_catalog, agent_portal, pg_temp
 as $$
 declare
   next_number integer;
@@ -1115,6 +1116,7 @@ create or replace function change_project_stage(
 )
 returns void
 language plpgsql
+set search_path = pg_catalog, agent_portal, pg_temp
 as $$
 declare
   old_stage_code text;

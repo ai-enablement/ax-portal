@@ -1041,7 +1041,7 @@ async function createOperationalProject(body, identity) {
       await client.query(
         `insert into agent_portal.project_stage_history
            (project_id,stage_code,stage_state,entered_at,exited_at,changed_by,note)
-         values ($1,$2,$3,$4,case when $3='completed' then $4 else null end,$5,$6)`,
+         values ($1,$2,$3,$4::timestamptz,case when $3='completed' then $4::timestamptz else null end,$5,$6)`,
         [project.id, portalJourneyStageCodes[index], index < journeyStep ? "completed" : "active", receivedDate, actor.id, state.historicalImport ? "과거 과제 이관" : "신규 과제 접수"],
       );
     }

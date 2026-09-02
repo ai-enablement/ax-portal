@@ -65,6 +65,17 @@ test("operational project actions use PostgreSQL transactions, normalized record
   assert.match(permissions, /change_project_stage\(bigint, text, bigint, text\)/);
 });
 
+test("project history dates have explicit types and helper functions have a fixed schema", async () => {
+  const api = await read("server/database-api.mjs");
+  const schema = await read("database/postgresql/agent_governance_portal_schema.sql");
+  const migration = await read("database/postgresql/20260903_fix_project_function_search_path.sql");
+  assert.ok(api.includes("values ($1,$2,$3,$4::timestamptz,case when $3='completed' then $4::timestamptz else null end,$5,$6)"));
+  for (const name of ["next_project_code", "change_project_stage"]) {
+    assert.match(schema, new RegExp(`create or replace function ${name}\\([\\s\\S]*?language plpgsql\\s+set search_path = pg_catalog, agent_portal, pg_temp`));
+    assert.ok(migration.includes(`alter function agent_portal.${name}(`));
+  }
+});
+
 test("PostgreSQL pool is bounded, timeout-protected, and SSL-disabled", async () => {
   const pool = await read("server/db/pool.mjs");
 
