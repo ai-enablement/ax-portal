@@ -155,7 +155,7 @@ test("opens deferred documents in the selected project and restores intake value
 });
 
 test("starts historical FEA as a real draft and lets contributors complete intake", () => {
-  assert.ok(page.includes("forceDraft={current.documentsDeferred && deferredDocumentOpened}"));
+  assert.ok(page.includes("deferredDocumentOpened || Boolean(deferredDocumentRecord)"));
   assert.ok(page.includes("editable && (!ready || forceDraft)"));
   assert.ok(page.includes("blankStart={forceDraft}"));
   assert.ok(page.includes("function HistoricalIntakeEditor"));
@@ -178,6 +178,19 @@ test("makes every historical stage writable without fixtures and enforces assign
   assert.ok(css.includes(".historical-stage-permission"));
 });
 
+test("uses a full-width historical intake and restores the dedicated G1 approval flow", () => {
+  assert.ok(page.includes('current.historicalImport ? "historical" : ""'));
+  assert.ok(page.includes("function HistoricalG1Approval"));
+  assert.ok(page.includes("FEA 작성 완료를 확인하고 팀장이 추진 판정과 개발 담당자를 확정합니다."));
+  assert.ok(page.includes("G1 판정 확정 · 개발 담당 배정"));
+  assert.ok(page.includes("G1 착수 판정과 개발 담당자 배정을 확정했습니다."));
+  assert.ok(page.includes('authorName: identity?.displayName || "FEA 작성 담당자"'));
+  assert.ok(page.includes('selectedJourney === 2 &&'));
+  assert.ok(css.includes(".intake-result-layout.historical"));
+  assert.ok(css.includes(".historical-g1-developers"));
+  assert.ok(css.includes("flex-wrap: wrap"));
+});
+
 test("shows no completed or current lifecycle step when there are no projects", () => {
   assert.match(page, /const effectiveJourneyStep = !hasProjects\s*\? -1/);
   assert.ok(page.includes('title="선택된 Agent 과제가 없습니다."'));
@@ -191,6 +204,8 @@ test("limits user deletion to intake and gives admin full project controls", () 
   assert.ok(page.includes("agent-portal-project-overrides"));
   assert.ok(page.includes("current.journeyStep === 0"));
   assert.ok(page.includes("role === ACCOUNT_ROLES.user"));
+  assert.ok(page.includes("role === ACCOUNT_ROLES.admin ||"));
+  assert.ok(page.includes("Admin 삭제는 현재 단계와 관계없이 적용됩니다."));
   assert.ok(page.includes("과제 삭제"));
   assert.ok(page.includes("Agent 과제 관리"));
   assert.ok(page.includes("Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나"));

@@ -193,6 +193,10 @@ type UserProject = {
       values: string[];
       status: "draft" | "complete";
       decision?: string;
+      authorName?: string;
+      approverName?: string;
+      developerIds?: string[];
+      reason?: string;
       updatedAt: string;
     }
   >;
@@ -6354,6 +6358,123 @@ function HistoricalStageDocumentEditor({
   );
 }
 
+function HistoricalG1Approval({
+  project,
+  teamAccounts,
+  identity,
+  feaRecord,
+  record,
+  canApprove,
+  onApprove,
+}: {
+  project: UserProject;
+  teamAccounts: TeamAccount[];
+  identity: PortalIdentity | null;
+  feaRecord?: HistoricalDocumentRecord;
+  record?: HistoricalDocumentRecord;
+  canApprove: boolean;
+  onApprove: (record: HistoricalDocumentRecord, developerIds: string[]) => void;
+}) {
+  const developers = teamAccounts.filter(
+    (account) => account.appRole === "team_member" || account.appRole === "bts",
+  );
+  const leader = teamAccounts.find((account) => account.appRole === "team_leader");
+  const [decision, setDecision] = useState(record?.decision || "PENDING");
+  const [developerIds, setDeveloperIds] = useState(
+    record?.developerIds || project.developerIds || [],
+  );
+  const [reason, setReason] = useState(record?.reason || "");
+  const isComplete = record?.status === "complete";
+  const feaComplete = feaRecord?.status === "complete";
+  const selectedDevelopers = developers.filter((account) => developerIds.includes(account.id));
+  const approverName =
+    record?.approverName ||
+    (identity?.appRole === "admin" ? identity.displayName : leader?.displayName) ||
+    identity?.displayName ||
+    "AI 활성화팀 팀장";
+  const decisionLabel =
+    decision === "APPROVED"
+      ? "Go"
+      : decision === "CONDITIONAL"
+        ? "Conditional Go"
+        : decision === "REJECTED"
+          ? "Drop"
+          : "판정 대기";
+  const canSubmit =
+    canApprove &&
+    feaComplete &&
+    decision !== "PENDING" &&
+    (decision === "REJECTED" || developerIds.length > 0) &&
+    (decision !== "CONDITIONAL" || reason.trim().length > 0);
+  const toggleDeveloper = (id: string) =>
+    setDeveloperIds((items) =>
+      items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
+    );
+
+  if (isComplete) {
+    return (
+      <section className="historical-g1-result" aria-label="G1 착수 승인 결과">
+        <header>
+          <div>
+            <small>{project.no} · G1 GATE</small>
+            <h3>착수 승인</h3>
+            <p>완성된 타당성 평가서[FEA]를 근거로 추진 여부와 개발 담당자를 확정했습니다.</p>
+          </div>
+          <Pill tone="green">팀장 승인 완료</Pill>
+        </header>
+        <div className="historical-g1-flow">
+          <article><small>승인 기준 문서</small><b>{project.no}-FEA</b><span>작성 완료 · v1.0</span></article>
+          <ArrowRight size={18} weight="bold" />
+          <article><small>게이트 결과</small><b>{decisionLabel}</b><span>{decision === "REJECTED" ? "과제 종료" : "다음 단계 이동 가능"}</span></article>
+        </div>
+        <div className="historical-g1-people">
+          <article><CheckCircle size={22} weight="fill" /><div><small>FEA 작성 담당</small><b>{feaRecord?.authorName || "작성 담당자"}</b><span>작성 완료</span></div></article>
+          <article><CheckCircle size={22} weight="fill" /><div><small>G1 승인자</small><b>{record?.approverName || approverName}</b><span>승인</span></div></article>
+          <article><CheckCircle size={22} weight="fill" /><div><small>개발 담당</small><b>{selectedDevelopers.map((account) => account.displayName || account.email).join(" · ") || "미배정"}</b><span>{decision === "REJECTED" ? "배정 없음" : "배정"}</span></div></article>
+        </div>
+        {record?.reason && <div className="historical-g1-reason"><b>판정 조건·사유</b><p>{record.reason}</p></div>}
+        <footer><span>처리 경로</span><b>{decision === "REJECTED" ? "G1 Drop · 과제 종료" : "G1 통과 → 요구 정의 단계 이동"}</b></footer>
+      </section>
+    );
+  }
+
+  return (
+    <section className="historical-g1-form" aria-label="G1 착수 승인 입력">
+      <header>
+        <div><small>{project.no} · G1 GATE</small><h3>착수 승인</h3><p>FEA 작성 완료를 확인하고 팀장이 추진 판정과 개발 담당자를 확정합니다.</p></div>
+        <Pill tone={feaComplete ? "orange" : "gray"}>{feaComplete ? "팀장 판정 대기" : "FEA 작성 필요"}</Pill>
+      </header>
+      <div className="historical-g1-basis">
+        <div><small>승인 기준 문서</small><b>{project.no}-FEA</b><span>{feaComplete ? `작성 완료 · ${feaRecord?.authorName || "작성자 확인"}` : "FEA를 먼저 작성 완료해 주세요."}</span></div>
+        <div><small>G1 승인자</small><b>{approverName}</b><span>{canApprove ? "승인 권한 확인" : "팀장 또는 Admin만 처리 가능"}</span></div>
+      </div>
+      <fieldset className="historical-g1-decisions" disabled={!canApprove || !feaComplete}>
+        <legend>G1 착수 판정</legend>
+        {["APPROVED", "CONDITIONAL", "REJECTED"].map((value) => (
+          <label key={value} className={decision === value ? "selected" : ""}>
+            <input type="radio" name={`g1-${project.no}`} value={value} checked={decision === value} onChange={() => setDecision(value)} />
+            <span><b>{value === "APPROVED" ? "Go" : value === "CONDITIONAL" ? "Conditional Go" : "Drop"}</b><small>{value === "APPROVED" ? "조건 없이 다음 단계 진행" : value === "CONDITIONAL" ? "조건 이행을 전제로 진행" : "착수하지 않고 과제 종료"}</small></span>
+          </label>
+        ))}
+      </fieldset>
+      {decision !== "REJECTED" && (
+        <fieldset className="historical-g1-developers" disabled={!canApprove || !feaComplete}>
+          <legend>개발 담당자 배정 <span>{developerIds.length}명 선택</span></legend>
+          <p>등록된 AI 활성화팀 팀원과 BTS 중 실제 개발 담당자를 선택합니다.</p>
+          <div>{developers.map((account) => (
+            <label key={account.id} className={developerIds.includes(account.id) ? "selected" : ""}>
+              <input type="checkbox" checked={developerIds.includes(account.id)} onChange={() => toggleDeveloper(account.id)} />
+              <span><b>{account.displayName || account.email}</b><small>{account.email} · {account.appRole === "bts" ? "BTS" : "AI 활성화팀 팀원"}</small></span>
+            </label>
+          ))}</div>
+        </fieldset>
+      )}
+      <label className="historical-g1-note"><span>판정 조건·사유 {decision === "CONDITIONAL" ? "· 필수" : "· 선택"}</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={!canApprove || !feaComplete} placeholder="Conditional Go 조건이나 Drop 사유, 착수 시 준수사항을 입력하세요." /></label>
+      <footer><span>{!feaComplete ? "FEA 작성 완료 후 G1 판정이 활성화됩니다." : !canApprove ? "AI 활성화팀 팀장 또는 Admin의 승인이 필요합니다." : "판정과 개발 담당자를 확인한 뒤 승인하세요."}</span><button className="primary" disabled={!canSubmit} onClick={() => onApprove({ values: [reason], status: "complete", decision, authorName: feaRecord?.authorName, approverName, developerIds, reason, updatedAt: new Date().toISOString() }, developerIds)}>G1 판정 확정 · 개발 담당 배정</button></footer>
+    </section>
+  );
+}
+
 function UserDashboard({
   role,
   identity,
@@ -6461,11 +6582,14 @@ function UserDashboard({
       ? isAssignedHistoricalDeveloper
       : role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member);
   const canDeleteCurrent =
-    role === ACCOUNT_ROLES.user && current.journeyStep === 0;
+    role === ACCOUNT_ROLES.admin ||
+    (role === ACCOUNT_ROLES.user && current.journeyStep === 0);
   const deleteCurrentProject = () => {
     if (
       !window.confirm(
-        `'${current.name}' 과제를 삭제하시겠습니까? 요구 접수 단계의 과제만 삭제할 수 있습니다.`,
+        role === ACCOUNT_ROLES.admin
+          ? `'${current.name}' 과제를 삭제하시겠습니까? Admin 삭제는 현재 단계와 관계없이 적용됩니다.`
+          : `'${current.name}' 과제를 삭제하시겠습니까? 요구 접수 단계의 과제만 삭제할 수 있습니다.`,
       )
     )
       return;
@@ -6920,7 +7044,49 @@ function UserDashboard({
               </footer>
             </section>
           ) : current.historicalImport &&
+            selectedJourney === 2 &&
+            (deferredDocumentOpened || deferredDocumentRecord) ? (
+            <HistoricalG1Approval
+              key={deferredDocumentKey}
+              project={current}
+              teamAccounts={teamAccounts}
+              identity={identity}
+              feaRecord={current.historicalDocuments?.["1"]}
+              record={deferredDocumentRecord}
+              canApprove={role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin}
+              onApprove={(record, selectedDeveloperIds) => {
+                const finalDeveloperIds = record.decision === "REJECTED" ? [] : selectedDeveloperIds;
+                const finalDevelopers = teamAccounts.filter((account) => finalDeveloperIds.includes(account.id));
+                const developerNames = finalDevelopers.map((account) => account.displayName || account.email);
+                onUpdateProject(current.no, {
+                  historicalDocuments: {
+                    ...(current.historicalDocuments || {}),
+                    "2": { ...record, developerIds: finalDeveloperIds },
+                  },
+                  developerIds: finalDeveloperIds,
+                  developerNames,
+                  handler: developerNames.join(" · ") || "담당자 배정 없음",
+                  teamOwner: developerNames.join(" · ") || "담당자 배정 없음",
+                });
+                setHomeG1Resolutions((items) => ({
+                  ...items,
+                  [current.no]: {
+                    decision:
+                      record.decision === "CONDITIONAL"
+                        ? "CONDITIONAL"
+                        : record.decision === "REJECTED"
+                          ? "DROP"
+                          : "GO",
+                    assignee: developerNames.join(" · "),
+                    reason: record.reason || "",
+                  },
+                }));
+                notify("G1 착수 판정과 개발 담당자 배정을 확정했습니다.");
+              }}
+            />
+          ) : current.historicalImport &&
             selectedJourney >= 2 &&
+            selectedJourney !== 2 &&
             (deferredDocumentOpened || deferredDocumentRecord) ? (
             <HistoricalStageDocumentEditor
               key={deferredDocumentKey}
@@ -6954,7 +7120,7 @@ function UserDashboard({
             />
           ) : selectedJourney === 0 ? (
             <div
-              className={`intake-result-layout ${intakeComplete ? "complete" : "draft"}`}
+              className={`intake-result-layout ${intakeComplete ? "complete" : "draft"} ${current.historicalImport ? "historical" : ""}`}
             >
               <section
                 className="intake-document"
@@ -7137,12 +7303,29 @@ function UserDashboard({
               }
               role={role}
               projectItem={current}
-              forceDraft={current.documentsDeferred && deferredDocumentOpened}
-              onComplete={() =>
+              forceDraft={
+                current.historicalImport &&
+                (deferredDocumentOpened || Boolean(deferredDocumentRecord))
+              }
+              onComplete={() => {
                 setFeaCompletedProjects((items) =>
                   items.includes(current.no) ? items : [...items, current.no],
-                )
-              }
+                );
+                if (current.historicalImport) {
+                  onUpdateProject(current.no, {
+                    historicalDocuments: {
+                      ...(current.historicalDocuments || {}),
+                      "1": {
+                        values: ["FEA 작성 완료"],
+                        status: "complete",
+                        authorName: identity?.displayName || "FEA 작성 담당자",
+                        updatedAt: new Date().toISOString(),
+                      },
+                    },
+                  });
+                  notify("FEA 작성 완료가 기록되어 G1 착수 판정을 진행할 수 있습니다.");
+                }
+              }}
             />
           ) : (selectedJourney === 2 && isAiTeam) ||
             ((selectedJourney === 2 || selectedJourney === 4) &&
