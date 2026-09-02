@@ -12419,7 +12419,7 @@ body {
 }
 .chat-wizard-grid {
   display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(430px, 1.1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   padding: 0 24px 20px;
   border-top: 1px solid #eceef1;
@@ -13690,7 +13690,7 @@ body {
   line-height: 1.4;
 }
 .chat-wizard-grid {
-  grid-template-columns: minmax(430px, 0.95fr) minmax(480px, 1.05fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   padding: 0 28px 24px;
 }
@@ -13976,6 +13976,45 @@ body {
   resize: vertical;
   font: inherit;
   font-weight: 400;
+}
+.historical-auto-gates {
+  grid-column: 1 / -1;
+  padding: 16px;
+  border: 1px solid #bcdcca;
+  border-radius: 10px;
+  background: #f3fbf6;
+}
+.historical-auto-gates > strong {
+  color: #155a3a;
+  font-size: 14px;
+}
+.historical-auto-gates > p {
+  margin: 5px 0 12px;
+  color: #607568;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.historical-auto-gates > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 12px;
+  border-top: 1px solid #d9e9df;
+}
+.historical-auto-gates > div > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.historical-auto-gates b {
+  color: #244234;
+  font-size: 13px;
+}
+.historical-auto-gates small {
+  color: #68796f;
+  font-size: 11px;
 }
 .historical-developer-field {
   grid-column: 1 / -1;

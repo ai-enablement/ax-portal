@@ -26,7 +26,7 @@ test("lets AI team register an intake on behalf of the requester", () => {
   assert.ok(page.includes("요구자 정보"));
   assert.ok(page.includes("요구자 MS 계정 이메일"));
   assert.ok(page.includes("step === 5 && (!resolvedRequester || !resolvedProjectOwner)"));
-  assert.ok(page.includes("접수 등록자"));
+  assert.ok(!page.includes('className="wizard-document-preview"'));
   assert.ok(page.includes("resolvedRequester"));
 });
 
@@ -134,7 +134,14 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes('["GO", "CONDITIONAL"] as const'));
   assert.ok(page.includes("historicalG1Decision"));
   assert.ok(page.includes("importedG1Record"));
-  assert.ok(page.includes('historicalDocuments: importedG1Record ? { "2": importedG1Record } : undefined'));
+  assert.ok(page.includes("importedG2Record"));
+  assert.ok(page.includes("importedG3Record"));
+  assert.ok(page.includes("importedG4Record"));
+  assert.ok(page.includes('importedG2Record ? { "4": importedG2Record } : {}'));
+  assert.ok(page.includes('importedG3Record ? { "6": importedG3Record } : {}'));
+  assert.ok(page.includes('importedG4Record ? { "8": importedG4Record } : {}'));
+  assert.ok(page.includes("현재 단계 이전 Gate 자동 승인"));
+  assert.ok(page.includes("G2 개발 착수"));
   assert.ok(page.includes("프로세스 진행 이력만 등록된 상태입니다."));
   assert.ok(page.includes("해당 단계에서 문서 추가"));
   assert.ok(!page.includes('min="2026-08-29"'));

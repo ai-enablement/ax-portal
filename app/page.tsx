@@ -1182,6 +1182,42 @@ export default function Home() {
               updatedAt: new Date().toISOString(),
             }
           : null;
+      const importedG2Record =
+        historical && journeyStep >= 5
+          ? {
+              values: ["과거 과제 이관 시 G2 승인 기록"],
+              status: "complete" as const,
+              decision: "APPROVED" as const,
+              approverName: "요구자 · 개발 담당자 · AI 활성화팀 팀장",
+              developerIds: assignedDevelopers.map((account) => account.id),
+              reason: "현재 진행 단계 기준 G2 개발 착수 승인 완료",
+              updatedAt: new Date().toISOString(),
+            }
+          : null;
+      const importedG3Record =
+        historical && journeyStep >= 7
+          ? {
+              values: ["과거 과제 이관 시 G3 승인 기록"],
+              status: "complete" as const,
+              decision: "APPROVED" as const,
+              approverName: "동료 리뷰어 · AI 활성화팀 팀장",
+              developerIds: assignedDevelopers.map((account) => account.id),
+              reason: "현재 진행 단계 기준 G3 배포 승인 완료",
+              updatedAt: new Date().toISOString(),
+            }
+          : null;
+      const importedG4Record =
+        historical && journeyStep >= 9
+          ? {
+              values: ["과거 과제 이관 시 G4 승인 기록"],
+              status: "complete" as const,
+              decision: "APPROVED" as const,
+              approverName: "Project Owner · AI 활성화팀 팀장",
+              developerIds: assignedDevelopers.map((account) => account.id),
+              reason: "현재 진행 단계 기준 G4 확산 승인 완료",
+              updatedAt: new Date().toISOString(),
+            }
+          : null;
       const stageNumber = userJourney
         .slice(0, journeyStep + 1)
         .filter((item) => item.kind === "stage").length;
@@ -1227,7 +1263,15 @@ export default function Home() {
         projectOwner,
         developerIds: assignedDevelopers.map((account) => account.id),
         developerNames,
-        historicalDocuments: importedG1Record ? { "2": importedG1Record } : undefined,
+        historicalDocuments:
+          importedG1Record || importedG2Record || importedG3Record || importedG4Record
+            ? {
+                ...(importedG1Record ? { "2": importedG1Record } : {}),
+                ...(importedG2Record ? { "4": importedG2Record } : {}),
+                ...(importedG3Record ? { "6": importedG3Record } : {}),
+                ...(importedG4Record ? { "8": importedG4Record } : {}),
+              }
+            : undefined,
         historicalImport: historical,
         historicalBaselineStep: historical ? journeyStep : undefined,
         documentsDeferred: historical,
@@ -14584,9 +14628,6 @@ function RequestWizard({
   const eligibleDevelopers = teamAccounts.filter(
     (account) => account.appRole === "team_member" || account.appRole === "bts",
   );
-  const selectedDevelopers = eligibleDevelopers.filter((account) =>
-    historicalDeveloperIds.includes(account.id),
-  );
   const requiresHistoricalG1Record = isHistorical && historicalJourneyStep >= 3;
   const toggleHistoricalDeveloper = (accountId: string) => {
     setHistoricalDeveloperIds((current) =>
@@ -14746,57 +14787,6 @@ function RequestWizard({
           </div>
         )}
         <div className="chat-wizard-grid">
-          <section className="wizard-document-preview">
-            <header>
-              <small>INT · 자동 작성 중</small>
-              <h3>에이전트 요구 접수서</h3>
-            </header>
-            <div>
-              <b>요청 제목</b>
-              <p>{requestTitle}</p>
-            </div>
-            <div className="filled">
-              <b>요구자 / Project Owner</b>
-              <p>요구자 · {resolvedRequester || "오른쪽에서 요청자를 입력해 주세요."}</p>
-              {isAiTeam && <p>접수 등록자 · {role}</p>}
-              <p>
-                Owner · {resolvedProjectOwner || "오른쪽에서 지정해 주세요."}
-              </p>
-              {isHistorical && (
-                <p>
-                  개발 담당 · {selectedDevelopers.length
-                    ? selectedDevelopers.map((account) => account.displayName || account.email).join(" · ")
-                    : "미지정"}
-                </p>
-              )}
-            </div>
-            {labels.map((label, index) => (
-              <div
-                key={label}
-                className={
-                  answers[index]
-                    ? "filled"
-                    : writingMode === "CHAT" && index === step - 1
-                      ? "editing"
-                      : ""
-                }
-              >
-                <b>
-                  {index + 1}. {label}
-                </b>
-                <p>
-                  {answers[index] ||
-                    (index === step - 1
-                      ? "오른쪽 질문에 답변해 주세요."
-                      : "아직 작성되지 않았습니다.")}
-                </p>
-              </div>
-            ))}
-            <footer>
-              <span>{writingMode === "CHAT" ? "대화 내용 자동 반영" : "입력 내용 자동 반영"}</span>
-              <b>{answers.filter(Boolean).length}/5 항목 작성</b>
-            </footer>
-          </section>
           {writingMode === "CHAT" ? (
           <section className="wizard-chat-panel">
             <header>
@@ -14964,6 +14954,28 @@ function RequestWizard({
                     </label>
                     <small>G1 승인자: {teamAccounts.find((account) => account.appRole === "team_leader")?.displayName || "AI 활성화팀 팀장"}</small>
                   </fieldset>
+                )}
+                {isHistorical && historicalJourneyStep >= 5 && (
+                  <section className="historical-auto-gates wide" aria-label="자동 승인 Gate">
+                    <strong>현재 단계 이전 Gate 자동 승인</strong>
+                    <p>선택한 현재 진행 단계에 따라 별도 판정값이 없는 Gate는 승인 완료 이력으로 등록됩니다.</p>
+                    <div>
+                      <span><b>G2 개발 착수</b><small>현재 단계가 설계·개발·평가 이상이므로 승인 완료</small></span>
+                      <Pill tone="green">승인</Pill>
+                    </div>
+                    {historicalJourneyStep >= 7 && (
+                      <div>
+                        <span><b>G3 배포 승인</b><small>현재 단계가 파일럿 이상이므로 승인 완료</small></span>
+                        <Pill tone="green">승인</Pill>
+                      </div>
+                    )}
+                    {historicalJourneyStep >= 9 && (
+                      <div>
+                        <span><b>G4 확산 승인</b><small>현재 단계가 운영·개선이므로 승인 완료</small></span>
+                        <Pill tone="green">승인</Pill>
+                      </div>
+                    )}
+                  </section>
                 )}
                 {isAiTeam && (
                   <fieldset className="wizard-owner-field wizard-requester-field wide">
