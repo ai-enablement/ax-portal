@@ -98,6 +98,21 @@ test("non-user development roles and team workload are persisted and served from
   assert.match(bpMigration, /create or replace view agent_portal\.v_member_workload/);
 });
 
+test("project categories are constrained and returned with team workload", async () => {
+  const [api, schema, migration] = await Promise.all([
+    read("server/database-api.mjs"),
+    read("database/postgresql/agent_governance_portal_schema.sql"),
+    read("database/postgresql/20260902_add_project_category.sql"),
+  ]);
+  for (const category of ["개별 접수", "아이디어톤", "D2B", "RPA(기존 과제)", "기타"]) {
+    assert.match(schema, new RegExp(category.replace(/[()]/g, "\\$&")));
+    assert.match(migration, new RegExp(category.replace(/[()]/g, "\\$&")));
+  }
+  assert.match(api, /p\.project_category as category/);
+  assert.match(migration, /set project_category = '개별 접수'/);
+  assert.match(migration, /projects_project_category_check/);
+});
+
 test("Azure Web App build and Hybrid Connection settings are present", async () => {
   const [packageJson, nextConfig, azureSettings, azureGuide, workflow] = await Promise.all([
     read("package.json"),

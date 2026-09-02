@@ -657,6 +657,7 @@ async function listTeamWorkload(identity) {
     ),
     pool.query(
       `select p.project_code as id, p.project_name as title,
+              p.project_category as category,
               coalesce(rt.team_name, '미지정') as "requestTeam",
               requester.display_name as requester,
               p.project_status as "projectStatus", p.current_stage_code as "stageCode",

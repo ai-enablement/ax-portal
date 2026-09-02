@@ -34,6 +34,35 @@
 .workload-summary {
   gap: 8px;
 }
+.workload-header-tools {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+}
+.workload-view-toggle {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #dfe5ec;
+  border-radius: 8px;
+  background: #f5f7fa;
+}
+.workload-view-toggle button {
+  min-width: 72px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b788b;
+  font-size: 11px;
+  font-weight: 800;
+}
+.workload-view-toggle button.active {
+  background: #315f9d;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(30, 56, 92, 0.18);
+}
 .workload-summary span,
 .compact-priority-panel > header > span {
   padding: 6px 10px;
@@ -57,7 +86,8 @@
   height: 9px;
 }
 .workload-head,
-.workload-table > button {
+.workload-table > button,
+.category-workload-row {
   grid-template-columns:
     minmax(190px, 1.25fr)
     minmax(130px, 0.8fr)
@@ -73,6 +103,45 @@
 }
 .workload-table > button {
   min-height: 58px;
+}
+.category-workload-row {
+  min-height: 58px;
+  border-top: 1px solid #edf0f3;
+  background: #fff;
+  color: #526076;
+}
+.category-workload-row > span:not(:nth-child(-n+3)),
+.category-workload-row > b {
+  text-align: center;
+}
+.workload-category {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.workload-category strong {
+  overflow: hidden;
+  color: #2d405b;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.category-mark {
+  width: 11px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: #5d82b4;
+}
+.category-workload-row > span:not(.workload-category):not(.workload-total):not(.workload-stack),
+.category-workload-row > b {
+  color: #5e6c81;
+  font-size: 12px;
+}
+.category-workload-row .risk-count {
+  color: #d34654 !important;
+  font-weight: 900;
 }
 .workload-person {
   min-width: 0;
@@ -150,5 +219,16 @@
   .workload-head,
   .workload-table {
     min-width: 1030px;
+  }
+  .compact-team-overview article > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .workload-header-tools {
+    width: 100%;
+    align-items: stretch;
+  }
+  .workload-view-toggle button {
+    flex: 1;
   }
 }

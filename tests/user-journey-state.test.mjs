@@ -30,6 +30,15 @@ test("lets AI team register an intake on behalf of the requester", () => {
   assert.ok(page.includes("resolvedRequester"));
 });
 
+test("assigns intake categories by role and keeps general users on individual intake", () => {
+  for (const category of ["개별 접수", "아이디어톤", "D2B", "RPA(기존 과제)", "기타"])
+    assert.ok(page.includes(category));
+  assert.ok(page.includes('role === ACCOUNT_ROLES.user'));
+  assert.ok(page.includes('? "개별 접수"'));
+  assert.ok(page.includes('aria-label="과제 카테고리"'));
+  assert.ok(page.includes("category: project.category || \"개별 접수\""));
+});
+
 test("supports both chat and direct document intake with shared values", () => {
   assert.ok(page.includes('useState<"CHAT" | "FORM">("CHAT")'));
   assert.ok(page.includes("Agent와 대화하며 작성"));

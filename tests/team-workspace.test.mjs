@@ -117,10 +117,18 @@ test("uses the confirmed roster and project-level status", () => {
   for (const label of [
     "프로젝트별 진행 현황",
     "담당자별 업무 분포",
+    "카테고리별 진행 현황",
     "우선 확인 과제",
     "지연 위험",
   ])
     assert.ok(page.includes(label));
+});
+
+test("switches team workload between assignee and project category", () => {
+  assert.ok(page.includes('useState<"member" | "category">("member")'));
+  assert.ok(page.includes("업무 분포 보기 방식"));
+  assert.ok(page.includes("PROJECT_CATEGORIES.map"));
+  assert.ok(page.includes("category-workload-row"));
 });
 
 test("enforces gate separation and autonomy track escalation", () => {

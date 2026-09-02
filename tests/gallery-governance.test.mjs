@@ -86,7 +86,8 @@ test("team dashboard maps registered accounts and database project assignments",
   assert.match(page, /setTeamWorkloadProjects\(payload\.projects \|\| \[\]\)/);
   assert.match(page, /item\.assignedUserIds\?\.includes\(account\.id\)/);
   assert.match(page, /members=\{teamAccounts\}/);
-  assert.match(page, /requirements=\{teamWorkloadProjects\}/);
+  assert.match(page, /requirements=\{teamDashboardRequirements\}/);
+  assert.match(page, /userProjectAsTeamRequirement/);
 });
 
 test("production UI starts without fixture projects or Gallery records", () => {

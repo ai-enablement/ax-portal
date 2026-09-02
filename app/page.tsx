@@ -67,6 +67,14 @@ const ACCOUNT_EMAILS: Record<AccountRole, string> = {
   [ACCOUNT_ROLES.admin]: "admin@example.invalid",
 };
 type DatabaseStatus = "checking" | "connected" | "fallback";
+const PROJECT_CATEGORIES = [
+  "개별 접수",
+  "아이디어톤",
+  "D2B",
+  "RPA(기존 과제)",
+  "기타",
+] as const;
+type ProjectCategory = (typeof PROJECT_CATEGORIES)[number];
 type ProjectRelationship =
   | "REQUESTER"
   | "OWNER"
@@ -165,6 +173,7 @@ const projects: ProjectSummary[] = [];
 type UserProject = {
   no: string;
   name: string;
+  category: ProjectCategory;
   stage: number;
   status: string;
   tone: string;
@@ -212,6 +221,7 @@ const userProjects: UserProject[] = [];
 const emptyProject: UserProject = {
   no: "",
   name: "",
+  category: "개별 접수",
   stage: 0,
   status: "",
   tone: "gray",
@@ -525,6 +535,7 @@ const approvalQueue: ApprovalQueueItem[] = [];
 type TeamRequirement = {
   id: string;
   title: string;
+  category: ProjectCategory;
   requestTeam: string;
   requester: string;
   assignee: string;
@@ -579,6 +590,7 @@ function teamRequirementAsHomeProject(item: TeamRequirement): UserProject {
   return {
     no: item.id,
     name: item.title,
+    category: item.category,
     stage: Math.min(6, Math.max(1, journeyStep || 1)),
     status:
       item.risk === "지연 위험" ? "오늘 조치 필요" : item.status,
@@ -624,6 +636,31 @@ function teamRequirementAsHomeProject(item: TeamRequirement): UserProject {
     route,
     requester: `${item.requester} · ${item.requestTeam}`,
     projectOwner: item.requester,
+  };
+}
+
+function userProjectAsTeamRequirement(item: UserProject): TeamRequirement {
+  const stage = userJourney[item.journeyStep]?.title || "요구 접수";
+  const completed = item.progress >= 100 || stage === "운영·개선";
+  return {
+    id: item.no,
+    title: item.name,
+    category: item.category || "개별 접수",
+    requestTeam: item.requester?.split(" · ")[1] || "미지정",
+    requester: item.requester?.split(" · ")[0] || item.owner,
+    assignee: item.developerNames?.join(" · ") || "미배정",
+    status: completed ? "완료" : item.journeyStep <= 2 ? "신규 접수" : "진행 중",
+    stage: item.journeyStep === 0 ? "접수 검토" : stage,
+    progress: item.progress,
+    startDay: Number((item.receivedDate || "").slice(-2)) || 1,
+    dueDate: /^\d{4}-\d{2}-\d{2}$/.test(item.requestedDate)
+      ? item.requestedDate
+      : undefined,
+    assignedUserIds: item.developerIds || [],
+    priority: "보통",
+    risk: item.tone === "red" ? "지연 위험" : "정상",
+    nextAction: item.nextAction,
+    received: item.receivedDate || item.updated,
   };
 }
 
@@ -750,9 +787,15 @@ export default function Home() {
       const saved = window.localStorage.getItem(
         "agent-portal-submitted-projects",
       );
-      // Restore the browser-local prototype state after hydration.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved) setSubmittedProjects(JSON.parse(saved));
+      if (saved) {
+        const restored = (JSON.parse(saved) as UserProject[]).map((project) => ({
+          ...project,
+          category: project.category || "개별 접수",
+        }));
+        // Restore the browser-local prototype state after hydration.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSubmittedProjects(restored);
+      }
       const deleted = window.localStorage.getItem(
         "agent-portal-deleted-projects",
       );
@@ -868,6 +911,14 @@ export default function Home() {
       new Map(merged.map((project) => [project.no, project])).values(),
     );
   }, [userProjectItems, teamWorkloadProjects, deletedProjectNos, projectOverrides]);
+  const teamDashboardRequirements = useMemo<TeamRequirement[]>(() => {
+    const databaseIds = new Set(teamWorkloadProjects.map((project) => project.id));
+    const browserProjects = submittedProjects
+      .filter((project) => !deletedProjectNos.includes(project.no))
+      .filter((project) => !databaseIds.has(project.no))
+      .map(userProjectAsTeamRequirement);
+    return [...browserProjects, ...teamWorkloadProjects];
+  }, [submittedProjects, teamWorkloadProjects, deletedProjectNos]);
 
   const deleteProject = (projectNo: string) => {
     setDeletedProjectNos((current) => {
@@ -1146,6 +1197,7 @@ export default function Home() {
     requester: string,
     registration?: {
       historical: boolean;
+      category: ProjectCategory;
       receivedDate: string;
       currentJourneyStep: number;
       developerIds: string[];
@@ -1155,6 +1207,10 @@ export default function Home() {
   ) => {
     setSubmittedProjects((current) => {
       const historical = Boolean(registration?.historical);
+      const category: ProjectCategory =
+        role === ACCOUNT_ROLES.user
+          ? "개별 접수"
+          : registration?.category || "개별 접수";
       const journeyStep = historical
         ? Math.max(0, Math.min(userJourney.length - 1, registration?.currentJourneyStep ?? 0))
         : 1;
@@ -1245,6 +1301,7 @@ export default function Home() {
       const project: UserProject = {
         no: `${projectYear}-${sequence}`,
         name: title,
+        category,
         stage: Math.max(stageNumber, 1),
         status: historical ? `${currentStage.title} 진행 중` : "타당성 평가 대기",
         tone: "blue",
@@ -1488,7 +1545,7 @@ export default function Home() {
             identity={identity}
             projectNo={workflowTarget}
             teamAccounts={teamAccounts}
-            teamRequirementItems={teamWorkloadProjects}
+            teamRequirementItems={teamDashboardRequirements}
             onAssignProjectDeveloper={assignProjectDeveloper}
             onDeleteProject={deleteProject}
             onUpdateProject={updateProject}
@@ -1506,12 +1563,12 @@ export default function Home() {
           />
         )}
         {view === "teamboard" && role !== ACCOUNT_ROLES.user &&
-          (teamAccounts.length > 0 || teamWorkloadProjects.length > 0 ? (
+          (teamAccounts.length > 0 || teamDashboardRequirements.length > 0 ? (
             <LegacyTeamWorkspaceDashboard
               setView={go}
               openWorkflow={openWorkflow}
               members={teamAccounts}
-              requirements={teamWorkloadProjects}
+              requirements={teamDashboardRequirements}
             />
           ) : (
             <EmptyDataPage
@@ -2536,6 +2593,7 @@ function TeamPortfolioAnalytics({
   onMember: (memberId: string) => void;
   onProject: (item: TeamRequirement) => void;
 }) {
+  const [workloadView, setWorkloadView] = useState<"member" | "category">("member");
   const members = registeredMembers
     .map((account) => {
       const items = requirements.filter((item) =>
@@ -2557,7 +2615,22 @@ function TeamPortfolioAnalytics({
       };
     })
     .sort((a, b) => b.total - a.total);
+  const categories = PROJECT_CATEGORIES.map((category) => {
+    const items = requirements.filter((item) => item.category === category);
+    return {
+      category,
+      total: items.length,
+      intake: items.filter((item) => item.stage === "접수 검토").length,
+      definition: items.filter(
+        (item) => item.status === "신규 접수" && item.stage !== "접수 검토",
+      ).length,
+      active: items.filter((item) => item.status === "진행 중").length,
+      done: items.filter((item) => item.status === "완료").length,
+      risk: items.filter((item) => item.risk === "지연 위험").length,
+    };
+  }).sort((a, b) => b.total - a.total);
   const maxAssigned = Math.max(...members.map((member) => member.total), 1);
+  const maxCategory = Math.max(...categories.map((category) => category.total), 1);
   const activeProjects = [...requirements]
     .filter((item) => item.status !== "완료")
     .sort(
@@ -2582,22 +2655,35 @@ function TeamPortfolioAnalytics({
         <header>
           <div>
             <small>TEAM WORKLOAD</small>
-            <h2>담당자별 업무 분포</h2>
-            <p>등록 프로젝트 기준 · 총 업무 수가 많은 순서</p>
+            <h2>{workloadView === "member" ? "담당자별 업무 분포" : "카테고리별 진행 현황"}</h2>
+            <p>
+              {workloadView === "member"
+                ? "등록 프로젝트 기준 · 총 업무 수가 많은 순서"
+                : "접수 유형별 프로젝트 단계와 진행 상태"}
+            </p>
           </div>
-          <div className="workload-summary">
-            <span>
-              미배정{" "}
-              <b>
-                {
-                  requirements.filter((item) => item.assignee === "미배정")
-                    .length
-                }
-              </b>
-            </span>
-            <span className="attention">
-              주의 <b>{attentionCount}</b>
-            </span>
+          <div className="workload-header-tools">
+            <div className="workload-view-toggle" aria-label="업무 분포 보기 방식">
+              <button
+                className={workloadView === "member" ? "active" : ""}
+                onClick={() => setWorkloadView("member")}
+                aria-pressed={workloadView === "member"}
+              >담당자별</button>
+              <button
+                className={workloadView === "category" ? "active" : ""}
+                onClick={() => setWorkloadView("category")}
+                aria-pressed={workloadView === "category"}
+              >카테고리별</button>
+            </div>
+            <div className="workload-summary">
+              <span>
+                미배정{" "}
+                <b>{requirements.filter((item) => item.assignee === "미배정").length}</b>
+              </span>
+              <span className="attention">
+                주의 <b>{attentionCount}</b>
+              </span>
+            </div>
           </div>
         </header>
         <div className="workload-legend" aria-label="업무 단계 범례">
@@ -2609,7 +2695,7 @@ function TeamPortfolioAnalytics({
         </div>
         <div className="workload-table">
           <div className="workload-head">
-            <span>담당자</span>
+            <span>{workloadView === "member" ? "담당자" : "과제 카테고리"}</span>
             <span>총 업무 수</span>
             <span>단계별 분포</span>
             <span>접수</span>
@@ -2619,7 +2705,7 @@ function TeamPortfolioAnalytics({
             <span>지연</span>
             <span>합계</span>
           </div>
-          {members.map((member) => (
+          {workloadView === "member" ? members.map((member) => (
             <button key={member.id} onClick={() => onMember(member.id)}>
               <span className="workload-person">
                 <span className="member-avatar">{member.name.slice(0, 1)}</span>
@@ -2678,6 +2764,29 @@ function TeamPortfolioAnalytics({
               </span>
               <b>{member.total}</b>
             </button>
+          )) : categories.map((category) => (
+            <div className="category-workload-row" key={category.category}>
+              <span className="workload-category">
+                <span className="category-mark" />
+                <strong>{category.category}</strong>
+              </span>
+              <span className="workload-total">
+                <b>{category.total}</b>
+                <i><u style={{ width: `${Math.max((category.total / maxCategory) * 100, 8)}%` }} /></i>
+              </span>
+              <span className="workload-stack" aria-label={`${category.category} 단계별 업무 분포`}>
+                {category.intake > 0 && <i className="intake" style={{ flex: category.intake }} />}
+                {category.definition > 0 && <i className="definition" style={{ flex: category.definition }} />}
+                {category.active > 0 && <i className="active" style={{ flex: category.active }} />}
+                {category.done > 0 && <i className="done" style={{ flex: category.done }} />}
+              </span>
+              <span>{category.intake}</span>
+              <span>{category.definition}</span>
+              <span>{category.active}</span>
+              <span>{category.done}</span>
+              <span className={category.risk ? "risk-count" : ""}>{category.risk}</span>
+              <b>{category.total}</b>
+            </div>
           ))}
         </div>
       </article>
@@ -6948,7 +7057,7 @@ function UserDashboard({
                         : "작성 중"}
                 </Pill>
               )}
-              <small>{current.no}</small>
+              <small>{current.no}{hasProjects ? ` · ${current.category}` : ""}</small>
               <h2>{current.name || "\u00a0"}</h2>
               <p>{hasProjects ? (intakeComplete ? "작성된 신청 결과와 생애주기 진행 상태입니다." : "작성하다 멈춘 요구 접수서가 있습니다. 오른쪽 대화에서 이어서 작성할 수 있습니다.") : "\u00a0"}</p>
             </div>
@@ -7261,6 +7370,10 @@ function UserDashboard({
                       <div>
                         <dt>과제명</dt>
                         <dd>{current.name}</dd>
+                      </div>
+                      <div>
+                        <dt>과제 카테고리</dt>
+                        <dd>{current.category}</dd>
                       </div>
                       <div>
                         <dt>요구자</dt>
@@ -14614,6 +14727,7 @@ function RequestWizard({
     requester: string,
     registration?: {
       historical: boolean;
+      category: ProjectCategory;
       receivedDate: string;
       currentJourneyStep: number;
       developerIds: string[];
@@ -14622,8 +14736,7 @@ function RequestWizard({
     },
   ) => void;
 }) {
-  const isAiTeam =
-    role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member || role === ACCOUNT_ROLES.admin;
+  const isAiTeam = role !== ACCOUNT_ROLES.user;
   const labels = [
     "업무 문제",
     "업무량",
@@ -14649,6 +14762,7 @@ function RequestWizard({
   const [submitted, setSubmitted] = useState(false);
   const [writingMode, setWritingMode] = useState<"CHAT" | "FORM">("CHAT");
   const [registrationMode, setRegistrationMode] = useState<"NEW" | "HISTORICAL">("NEW");
+  const [projectCategory, setProjectCategory] = useState<ProjectCategory>("개별 접수");
   const [receivedDate, setReceivedDate] = useState("");
   const [historicalJourneyStep, setHistoricalJourneyStep] = useState(0);
   const [historicalDeveloperIds, setHistoricalDeveloperIds] = useState<string[]>([]);
@@ -14715,6 +14829,7 @@ function RequestWizard({
       resolvedRequester,
       {
         historical: isHistorical,
+        category: role === ACCOUNT_ROLES.user ? "개별 접수" : projectCategory,
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
         developerIds: historicalDeveloperIds,
@@ -14758,6 +14873,31 @@ function RequestWizard({
             <X size={17} />
           </button>
         </header>
+        <div className="request-category-field">
+          <div>
+            <strong>과제 카테고리</strong>
+            <small>
+              {isAiTeam
+                ? "과제의 접수 경로와 유형을 선택하세요."
+                : "일반 User가 요청한 과제는 개별 접수로 자동 등록됩니다."}
+            </small>
+          </div>
+          {isAiTeam ? (
+            <select
+              value={projectCategory}
+              onChange={(event) =>
+                setProjectCategory(event.target.value as ProjectCategory)
+              }
+              aria-label="과제 카테고리"
+            >
+              {PROJECT_CATEGORIES.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          ) : (
+            <Pill tone="blue">개별 접수</Pill>
+          )}
+        </div>
         {isAiTeam && (
           <div className="request-registration-modes" role="tablist" aria-label="Agent 과제 등록 유형">
             <button
