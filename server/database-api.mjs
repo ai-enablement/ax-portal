@@ -1,6 +1,7 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 import { persistStandardDocuments } from "./standard-documents.mjs";
+import {applyImportLifecycle, assertImportTransition} from "../shared/historical-import-policy.mjs";
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -903,6 +904,7 @@ export async function syncProjectArtifacts(client, project, state, actorId, prev
   for (const [index, record] of Object.entries(state.historicalDocuments || {})) {
     const gateCode = gateMap[index];
     if (!gateCode || !record || typeof record !== "object") continue;
+    if (record.status !== "complete" && !(gateCode === "G1" && record.approverName && ["APPROVED","CONDITIONAL","REJECTED"].includes(record.decision))) continue;
     if (JSON.stringify(record) === JSON.stringify(previousState.historicalDocuments?.[index])) continue;
     const rawDecision = String(record.decision || "APPROVED").toLowerCase();
     const finalDecision = rawDecision === "conditional" ? "conditional_go" : rawDecision === "rejected" ? "rejected" : rawDecision === "drop" ? "drop" : gateCode === "G1" ? "go" : "approved";
@@ -999,6 +1001,9 @@ async function syncIntakeConversation(client, projectId, messages, actorId) {
 
 async function createOperationalProject(body, identity) {
   const submittedState = assertPortalProjectState(body.project || body);
+  delete submittedState.historicalImportFinalizedAt;
+  delete submittedState.historicalResumeStep;
+  delete submittedState.finalizeHistoricalImport;
   return withTransaction(async (client) => {
     const actor = await findUser(client, identity);
     if (!actor || !actor.is_active) return { status: 403, body: { error: "Project creation permission is required." } };
@@ -1093,15 +1098,22 @@ async function updateOperationalProject(projectCode, body, identity) {
       [projectCode],
     )).rows[0];
     if (!project) return { status: 404, body: { error: "Project not found." } };
+    const previousState = project.runtime_state || {};
+    const developerIds = (previousState.developerIds || []).map(String);
+    const canWriteImport = actor.app_role === "admin" || (actor.app_role !== "general_user" && (developerIds.length ? developerIds.includes(String(actor.id)) : ["team_leader","team_member"].includes(actor.app_role)));
     const related = project.requester_id === actor.id || project.owner_id === actor.id || (await client.query(
       `select 1 from agent_portal.project_members where project_id=$1 and user_id=$2 and ended_at is null limit 1`,
       [project.id, actor.id],
     )).rows[0];
-    if (!["admin", "team_leader"].includes(actor.app_role) && !related && !(actor.app_role === "team_member" && ["INT", "FEA"].includes(project.current_stage_code))) {
+    if (!["admin", "team_leader"].includes(actor.app_role) && !related && !(previousState.historicalImport && canWriteImport) && !(actor.app_role === "team_member" && ["INT", "FEA"].includes(project.current_stage_code))) {
       return { status: 403, body: { error: "You are not assigned to update this project." } };
     }
-    const previousState = project.runtime_state || {};
     const changedKeys = Object.keys(changes);
+    const changedDocuments = Object.keys(changes.historicalDocuments || {}).filter(key=>JSON.stringify(changes.historicalDocuments[key])!==JSON.stringify(previousState.historicalDocuments?.[key]));
+    if (previousState.historicalImport && !canWriteImport && (changes.finalizeHistoricalImport || "feaDraft" in changes || "intakeAnswers" in changes || changedDocuments.some(key=>![2,4,6,8].includes(Number(key))))) {
+      return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};
+    }
+    if (previousState.historicalImport && changedDocuments.some(key=>Number(key)>portalJourneyStep(project.current_stage_code))) return {status:400,body:{error:"현재 단계 이후 문서는 아직 작성할 수 없습니다."}};
     const generalUserKeys = new Set(["intakeAnswers", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval"]);
     if (actor.app_role === "general_user" && changedKeys.some((key) => !generalUserKeys.has(key))) {
       return { status: 403, body: { error: "General users can only update their own intake content." } };
@@ -1123,7 +1135,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       );
       if (changedGate) return { status: 403, body: { error: "Gate decisions require team leader or admin permission." } };
     }
-    const merged = assertPortalProjectState({ ...previousState, ...changes, no: projectCode, source: "database" });
+    const merged = assertPortalProjectState({ ...applyImportLifecycle(previousState,changes,portalJourneyStep(project.current_stage_code)), no: projectCode, source: "database" });
     if (actor.app_role === "general_user") merged.category = "개별 접수";
     if (changes.g2ReworkState === "resubmitted") {
       const g2Gate = (await client.query(
@@ -1188,6 +1200,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       delete merged.g2Approval;
     }
     const requestedStageCode = portalStageCode(merged.journeyStep);
+    assertImportTransition(previousState, merged, portalJourneyStep(project.current_stage_code));
     if (requestedStageCode !== project.current_stage_code) {
       await client.query(`select agent_portal.change_project_stage($1,$2,$3,$4)`, [project.id, requestedStageCode, actor.id, "포털 화면 진행 상태 저장"]);
     }

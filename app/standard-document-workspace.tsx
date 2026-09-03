@@ -9,9 +9,10 @@ import DocumentContentEditor from "./document-content-editor";
 import { contentText } from "../shared/document-content.mjs";
 import type { OperationsProject } from "../shared/project-classification.mjs";
 
-export default function StandardDocumentWorkspace({ project, stage, record, canEdit, onSave, onGallerySubmit, people = [] }: {
+export default function StandardDocumentWorkspace({ project, stage, record, canEdit, onSave, onGallerySubmit, people = [], allowPartialSave = false }: {
   project: OperationsProject & { no: string; name: string; intakeAnswers?: string[] };
   people?: {id:string;name:string}[];
+  allowPartialSave?: boolean;
   stage: number;
   record?: StandardStageRecord;
   canEdit: boolean;
@@ -52,10 +53,12 @@ export default function StandardDocumentWorkspace({ project, stage, record, canE
   };
   const selectSection = (index: number) => { setActive(active === index ? null : index); setSelectedField(""); setAnswer(""); };
   const save = async (complete: boolean) => {
+    if (allowPartialSave) complete = false;
     if (uploads) { setFeedback("파일 업로드가 끝난 뒤 저장해 주세요."); return; }
     const allValid = definition.sections.every((item) => sectionHasContent(item, document.fields));
     if (complete && !allValid) { setFeedback("각 항목을 모두 입력해 주세요. 해당하지 않는 항목은 ‘해당 없음’과 사유를 적어 주세요."); return; }
     const next = structuredClone(draft);
+    if (allowPartialSave && !allValid) next.documents[code].status = "draft";
     if (complete) { next.documents[code].status = "complete"; next.documents[code].completedSections = definition.sections.map((item) => item.id); }
     next.values = record?.values || [];
     next.status = stageDocumentCodes[stage].every((item) => next.documents[item].status === "complete") ? "complete" : "draft";
@@ -98,6 +101,7 @@ export default function StandardDocumentWorkspace({ project, stage, record, canE
   };
   if (stage === 5 || stage === 7 || stage === 9) return <DirectStageDocuments
     project={project} stage={stage} draft={draft} code={code} canEdit={canEdit}
+    allowPartialSave={allowPartialSave}
     onGallerySubmit={onGallerySubmit}
     saving={saving || uploads > 0} dirty={dirty} feedback={feedback} renderField={renderField}
     onCodeChange={setCode} onSave={save}
@@ -114,7 +118,7 @@ export default function StandardDocumentWorkspace({ project, stage, record, canE
         {draft.legacyValues?.some(Boolean) && <details className="standard-legacy"><summary>기존 간이 양식 입력 내용 · 원본 보존</summary>{draft.legacyValues.map((text, index) => <p key={index}>{text || "미입력"}</p>)}<small>내용을 확인해 알맞은 표준 항목에 옮겨 작성해 주세요.</small></details>}
         <nav className="ard-section-nav" aria-label={`${code} 문서 항목`}>{definition.sections.map((item, index) => { const done = document.completedSections.includes(item.id); return <button type="button" key={item.id} className={active === index ? "active" : ""} aria-expanded={active === index} onClick={() => selectSection(index)}><span className={`section-check ${done ? "complete" : "pending"}`}>{done ? <Check size={14} weight="bold" /> : <FileText size={14} />}</span><div><small>{String(index + 1).padStart(2, "0")}</small><b>{item.title}</b><p>{item.description}</p></div><em>{done ? "작성 완료" : "입력 필요"}</em><ArrowRight size={14} /></button>; })}</nav>
         {section && <section className="standard-active-section" aria-label={section.title}><div className="ard-section-head"><span>{String(active! + 1).padStart(2, "0")}</span><div><b>{section.title}</b><small>{section.description}</small></div></div>{section.fields.map(field => renderField(field))}{canEdit && <button type="button" className="secondary" disabled={!sectionHasContent(section, document.fields) || saving} onClick={() => { setDraft((previous) => ({ ...previous, documents: { ...previous.documents, [code]: { ...previous.documents[code], completedSections: [...new Set([...previous.documents[code].completedSections, section.id])] } } })); setDirty(true); setActive(null); }}>이 항목 작성 완료</button>}</section>}
-        <footer><span role="status">{feedback || (dirty ? "변경사항을 저장해 주세요." : "항목별 입력 내용과 작성 상태를 DB에 저장합니다.")}</span>{canEdit && <div><button type="button" className="secondary" disabled={saving} onClick={() => void save(false)}>{saving ? "저장 중…" : "임시 저장"}</button><button type="button" disabled={saving} onClick={() => void save(true)}>문서 작성 완료 <ArrowRight size={14} /></button></div>}</footer>
+        <footer><span role="status">{feedback || (dirty ? "변경사항을 저장해 주세요." : "항목별 입력 내용과 작성 상태를 DB에 저장합니다.")}</span>{canEdit && <div><button type="button" className="secondary" disabled={saving} onClick={() => void save(false)}>{saving ? "저장 중…" : "임시 저장"}</button><button type="button" disabled={saving} onClick={() => void save(true)}>{allowPartialSave ? "이관 내용 저장" : "문서 작성 완료"} <ArrowRight size={14} /></button></div>}</footer>
       </section>
       <aside className="intake-chat" aria-label="표준 문서 작성 가이드"><header><ChatCircleText size={30} weight="duotone" /><div><strong>{code === "ARD" ? "요구 정의 작성 가이드" : `${code} 작성 가이드`}</strong><small>항목 선택 → 답변 입력 → 문서에 반영</small></div></header><div className="chat-progress"><span style={{ width: `${progress}%` }} /></div><div className="intake-chat-history"><div className="chat-message agent"><small>작성 가이드</small><p>{section ? `${section.title}: ${section.description}. 아래에서 반영할 항목을 선택해 답변해 주세요.` : "왼쪽에서 작성할 항목을 선택해 주세요. 직접 입력하거나 이곳에 답변하면 해당 항목에 반영됩니다. 자동 분석이나 생성이 아닌 항목별 입력 도우미입니다."}</p></div>{document.messages.map((message, index) => <div key={index} className={`chat-message ${message.role === "user" ? "user" : "agent"}`}><small>{message.role === "user" ? "나" : "작성 가이드"}</small><p>{message.text}</p></div>)}{project.intakeAnswers?.some(Boolean) && <details className="standard-intake-reference"><summary>요구 접수서 참고</summary>{project.intakeAnswers.slice(0, 4).map((text, index) => text && <p key={index}>{text}</p>)}</details>}</div><footer><label className="standard-guide-target">반영할 항목<select value={fieldKey} disabled={!canEdit || !section || saving} onChange={(e) => setSelectedField(e.target.value)}>{!guideFields.length && <option value="">왼쪽 문서 항목을 선택하세요</option>}{guideFields.map((field) => <option key={field.id} value={`${section!.id}.${field.id}`}>{field.label}</option>)}</select></label><div><textarea aria-label="문서 항목 답변" value={answer} disabled={!canEdit || !fieldKey || saving} onChange={(e) => setAnswer(e.target.value)} placeholder="답변을 입력하세요" /><button type="button" aria-label="답변 반영" disabled={!canEdit || !fieldKey || !answer.trim() || saving} onClick={sendAnswer}><ArrowRight size={17} /></button></div></footer></aside>
     </div>

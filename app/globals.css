@@ -16720,7 +16720,7 @@ body {
   padding: 10px 12px;
   background: #edf4fd;
 }
-.home-fea-engine > header > span {
+.home-fea-engine > header > span:not(.pill) {
   display: grid;
   width: 27px;
   height: 27px;
@@ -16836,7 +16836,7 @@ body {
   gap: 8px;
   margin-bottom: 9px;
 }
-.home-fea-form-grid > section > header > span {
+.home-fea-form-grid > section > header > span:not(.pill) {
   display: grid;
   width: 24px;
   height: 24px;

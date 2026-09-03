@@ -31,6 +31,14 @@ test("direct design and pilot layouts retain the shared save path without changi
   assert.deepEqual(hydrateStandardDocuments(7, record).documents, record.documents);
 });
 
+test("historical backfill saves incomplete standard documents as drafts", () => {
+  const workspace = readFileSync(new URL("../app/standard-document-workspace.tsx", import.meta.url), "utf8");
+  const direct = readFileSync(new URL("../app/direct-stage-documents.tsx", import.meta.url), "utf8");
+  assert.match(workspace, /if \(allowPartialSave\) complete = false/);
+  assert.match(workspace, /allowPartialSave && !allValid/);
+  assert.match(direct, /props\.allowPartialSave \? "이관 내용 저장"/);
+});
+
 test("later stages keep every document separate and preserve fields", () => {
   assert.equal(standardDocuments.UG.sections.length, 6);
   assert.equal(sectionHasContent(standardDocuments.ARD.sections[4], { "functions.rows": [{}] }), false);

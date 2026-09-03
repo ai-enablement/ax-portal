@@ -1,0 +1,31 @@
+/* Status labels size to their content, independently of numbered section badges. */
+.pill {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  width:auto;
+  height:auto;
+  min-height:24px;
+  max-width:100%;
+  padding:4px 9px;
+  box-sizing:border-box;
+  white-space:normal;
+  word-break:keep-all;
+  overflow-wrap:anywhere;
+  line-height:1.45;
+}
+.home-fea-form-grid > section > header {flex-wrap:wrap;align-items:flex-start;}
+.home-fea-form-grid > section > header > span:not(.pill) {flex:0 0 24px;}
+.home-fea-form-grid > section > header > div {min-width:0;flex:1 1 130px;}
+.home-fea-form-grid > section > header > .pill {
+  display:inline-flex;width:auto;height:auto;min-height:24px;padding:4px 9px;
+  flex:0 0 auto;white-space:normal;word-break:keep-all;font-size:12px;
+}
+.home-fea-engine > header {flex-wrap:wrap;}
+.home-fea-engine > header > span:not(.pill) {flex:0 0 27px;}
+.home-fea-engine > header > div {flex:1 1 200px;min-width:0;}
+.historical-import-banner {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;padding:16px 18px;margin:14px 0;border:1px solid #d9e4f2;border-radius:9px;background:#f3f7fd;}
+.historical-import-banner p {margin:5px 0 0;line-height:1.6;}
+.historical-import-banner > div {flex:1 1 240px;min-width:0;}
+.historical-import-banner button {flex:0 0 auto;white-space:normal;height:auto;}

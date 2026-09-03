@@ -14,6 +14,7 @@ type Props = {
   draft: StandardStageRecord & { documents: Record<string, StandardDocument> };
   code: string;
   canEdit: boolean;
+  allowPartialSave?: boolean;
   saving: boolean;
   dirty: boolean;
   feedback: string;
@@ -38,7 +39,7 @@ export default function DirectStageDocuments(props: Props) {
   const value = (key: string) => contentText(dep?.fields[key]) || "미입력";
   const switchDoc = (key: string) => { onCodeChange(key); setExpanded(standardDocuments[key].sections[0].id); };
   const legacy = draft.legacyValues?.some(Boolean) && <details className="direct-legacy"><summary>기존 입력 내용 보기 · 원본 보존</summary>{draft.legacyValues.map((v, i) => <p key={i}>{v || "미입력"}</p>)}</details>;
-  const footer = <footer className="direct-savebar"><span role="status">{feedback || (dirty ? "변경사항이 있습니다. 저장해 주세요." : canEdit ? "개발 담당자 작성 문서 · 직접 입력 후 저장해 주세요." : "조회 전용 · 개발 담당자 작성 문서")}</span><div>{canEdit && <><button className="secondary" disabled={saving} onClick={() => void onSave(false)}>{saving ? "저장 중…" : "임시 저장"}</button><button className="primary" disabled={saving} onClick={() => void onSave(true)}>문서 작성 완료</button></>}{stage === 7 && <button className="secondary" disabled={saving} onClick={() => releaseDialog.current?.close()}>닫기</button>}</div></footer>;
+  const footer = <footer className="direct-savebar"><span role="status">{feedback || (dirty ? "변경사항이 있습니다. 저장해 주세요." : canEdit ? "개발 담당자 작성 문서 · 직접 입력 후 저장해 주세요." : "조회 전용 · 개발 담당자 작성 문서")}</span><div>{canEdit && <><button className="secondary" disabled={saving} onClick={() => void onSave(false)}>{saving ? "저장 중…" : "임시 저장"}</button><button className="primary" disabled={saving} onClick={() => void onSave(true)}>{props.allowPartialSave ? "이관 내용 저장" : "문서 작성 완료"}</button></>}{stage === 7 && <button className="secondary" disabled={saving} onClick={() => releaseDialog.current?.close()}>닫기</button>}</div></footer>;
   const tabs = <div className="direct-doc-tabs" role="tablist" aria-label={stage === 5 ? "설계·평가 산출문서" : stage === 9 ? "운영·개선 문서" : "배포·파일럿 문서"}>{stageDocumentCodes[stage].map((key, i) => <button key={key} role="tab" aria-selected={code === key} aria-controls={`direct-panel-${project.no}`} disabled={saving} className={key === code ? "active" : ""} onClick={() => switchDoc(key)}><span>{stage === 5 ? i + 1 : `${stage === 9 ? "⑦" : "⑥"}-${i + 1}`}</span><b>{standardDocuments[key].title}[{key}]</b>{stage === 5 && <small>{progress(key)}%</small>}</button>)}</div>;
   const sections = <div className={stage === 5 ? "direct-section-list" : "release-section-list"} id={`direct-panel-${project.no}`} role="tabpanel" aria-label={`${code} 입력 양식`}>
     {definition.sections.filter(section => code !== "OPS" || section.id !== "sunset" || document.fields["owners.status"] === "폐기").filter(section => code !== "CHG" || section.id === "history" || section.fields.some(f => Boolean(document.fields[`${section.id}.${f.id}`]))).map((section, i) => {

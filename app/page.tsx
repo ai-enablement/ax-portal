@@ -4,6 +4,8 @@ import "./release-documents.css";
 import "./operations-documents.css";
 import "./team-dashboard-compact.css";
 import "./team-dashboard-readability.css";
+import "./status-badges.css";
+import {isImportInProgress, canBackfillDocument} from "../shared/historical-import-policy.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
@@ -225,6 +227,9 @@ type UserProject = {
   >;
   historicalImport?: boolean;
   historicalBaselineStep?: number;
+  historicalImportFinalizedAt?: string;
+  historicalResumeStep?: number;
+  finalizeHistoricalImport?: boolean;
   documentsDeferred?: boolean;
   source?: "database";
   intakeDraftCompleted?: boolean;
@@ -3164,6 +3169,7 @@ function HomeFeasibilityEditor({
     setCompletionMessage("작성 내용과 판정 근거가 저장되었습니다.");
   };
   const completeDocument = () => {
+    if (canBackfillDocument(project, 1)) { saveDocument(); return; }
     if (!AGENT_TYPES.includes(agentType)) { setCompletionMessage("Agent 유형을 선택해 주세요."); return; }
     if (!roi.computed) {
       setCompletionMessage(
@@ -3311,7 +3317,7 @@ function HomeFeasibilityEditor({
         <span><CheckCircle size={15} weight="fill" /> {saveState}</span>
         {completionMessage && <p role="status">{completionMessage}</p>}
         <button className="secondary" onClick={saveDocument}>임시 저장</button>
-        <button className="primary" onClick={completeDocument}>FEA 작성 완료 · G1 요청</button>
+        <button className="primary" onClick={completeDocument}>{canBackfillDocument(project, 1) ? "이관 내용 저장" : "FEA 작성 완료 · G1 요청"}</button>
       </footer>}
     </section></fieldset>
   );
@@ -6583,6 +6589,7 @@ function HistoricalStageDocumentEditor({
       items.map((item, itemIndex) => (itemIndex === index ? value : item)),
     );
   const save = (status: "draft" | "complete") => {
+    if (canBackfillDocument(project, journeyIndex) && record?.approvalSource !== "historical_import") status = "draft";
     const nextRecord: HistoricalDocumentRecord = {
       ...record,
       values,
@@ -6663,7 +6670,7 @@ function HistoricalStageDocumentEditor({
         {canEdit && (
           <>
             <button className="secondary" onClick={() => save("draft")}>임시 저장</button>
-            <button className="primary" onClick={() => save("complete")}>작성 완료</button>
+            <button className="primary" onClick={() => save("complete")}>{canBackfillDocument(project, journeyIndex) ? "이관 내용 저장" : "작성 완료"}</button>
           </>
         )}
       </footer>
@@ -6884,6 +6891,16 @@ function UserDashboard({
   const canDeleteCurrent =
     role === ACCOUNT_ROLES.admin ||
     (role === ACCOUNT_ROLES.user && current.journeyStep === 0);
+  const importInProgress = isImportInProgress(current);
+  const [finalizingImport, setFinalizingImport] = useState(false);
+  const finishHistoricalImport = async () => {
+    if (!canAuthorHistoricalDocument || finalizingImport || !window.confirm("먼저 작성 중인 문서를 저장해 주세요. 이관을 완료하면 현재 단계부터 필수 작성·승인 순서를 적용합니다. 이관을 완료하시겠습니까?")) return;
+    setFinalizingImport(true);
+    try {
+      const saved = await onUpdateProject(current.no, {finalizeHistoricalImport:true});
+      if (saved !== false) notify("과거 이관을 완료했습니다. 현재 단계부터 정식 절차를 적용합니다.");
+    } finally { setFinalizingImport(false); }
+  };
   const deleteCurrentProject = () => {
     if (
       !window.confirm(
@@ -6929,6 +6946,7 @@ function UserDashboard({
     (current.journeyStep > 0 || current.intakeDraftCompleted);
   const effectiveJourneyStep = !hasProjects
     ? -1
+    : current.historicalImport ? current.journeyStep
     : current.g2ReworkState === "resubmitted"
       ? Math.max(4, current.journeyStep)
       : current.feaCompleted
@@ -7186,6 +7204,7 @@ function UserDashboard({
             </div>
           </header>
 
+          {current.historicalImport && <section className="historical-import-banner"><div><b>{importInProgress ? "과거 이관 · 내용 보완 중" : "과거 이관 완료"}</b><p>{importInProgress ? "현재 단계까지 확인된 내용만 저장할 수 있습니다. 누락 문서는 지정 개발 담당자가 계속 수정할 수 있습니다." : "현재 진행 단계부터 필수 작성·승인 순서를 적용합니다. 이전 단계 문서는 별도로 보완할 수 있습니다."}</p></div>{importInProgress && canAuthorHistoricalDocument && <button disabled={finalizingImport} onClick={()=>void finishHistoricalImport()}>{finalizingImport ? "처리 중…" : "과거 이관 완료"}</button>}</section>}
           <div className="user-lifecycle-track journey-v2 oneview-journey">
             {userJourney.map((stage, index) => {
               const state =
@@ -7359,7 +7378,7 @@ function UserDashboard({
               record={deferredDocumentRecord}
               canDecide={role === ACCOUNT_ROLES.leader}
               canAssign={role === ACCOUNT_ROLES.admin}
-              allowMissingFea={historicalBaselineStep >= 2}
+              allowMissingFea={canBackfillDocument(current, 2)}
               onApprove={(record, selectedDeveloperIds) => {
                 const assignmentComplete = record.status === "complete";
                 const finalDeveloperIds = record.decision === "REJECTED" || !assignmentComplete ? [] : selectedDeveloperIds;
@@ -7385,7 +7404,7 @@ function UserDashboard({
                     developerNames,
                     handler: developerNames.join(" · ") || "담당자 배정 없음",
                     teamOwner: developerNames.join(" · ") || "담당자 배정 없음",
-                    ...(selectedJourney === effectiveJourneyStep && record.decision !== "REJECTED" ? {
+                    ...(!importInProgress && selectedJourney === effectiveJourneyStep && record.decision !== "REJECTED" ? {
                       journeyStep: Math.min(userJourney.length - 1, selectedJourney + 1),
                       status: `${userJourney[Math.min(userJourney.length - 1, selectedJourney + 1)].title} 진행 중`,
                     } : {}),
@@ -7400,6 +7419,7 @@ function UserDashboard({
               project={current}
               people={teamAccounts.map(account => ({id:account.id,name:account.displayName}))}
               stage={selectedJourney}
+              allowPartialSave={canBackfillDocument(current, selectedJourney)}
               record={deferredDocumentRecord}
               canEdit={canEditSelectedHistoricalDocument}
               onGallerySubmit={current.journeyStep >= 9 && ([ACCOUNT_ROLES.user, ACCOUNT_ROLES.member, ACCOUNT_ROLES.leader, ACCOUNT_ROLES.admin] as string[]).includes(role) ? () => openGallerySubmission({
@@ -7413,7 +7433,7 @@ function UserDashboard({
                   ...(current.historicalDocuments || {}),
                   [String(selectedJourney)]: record,
                 },
-                ...(record.status === "complete" && selectedJourney === effectiveJourneyStep && selectedJourney < 9 ? {
+                ...(!importInProgress && record.status === "complete" && selectedJourney === effectiveJourneyStep && selectedJourney < 9 ? {
                   journeyStep: selectedJourney + 1,
                   status: `${userJourney[selectedJourney + 1].title} 진행 중`,
                 } : {}),
@@ -7436,7 +7456,7 @@ function UserDashboard({
                     ...(current.historicalDocuments || {}),
                     [String(selectedJourney)]: record,
                   },
-                  ...(record.status === "complete" && selectedJourney === effectiveJourneyStep ? {
+                  ...(!importInProgress && record.status === "complete" && selectedJourney === effectiveJourneyStep ? {
                     journeyStep: Math.min(userJourney.length - 1, selectedJourney + 1),
                     status: `${userJourney[Math.min(userJourney.length - 1, selectedJourney + 1)].title} 진행 중`,
                   } : {}),
@@ -7453,7 +7473,7 @@ function UserDashboard({
                 onUpdateProject(current.no, {
                   intakeAnswers: answers,
                   requestedDate: answers[4] || "미입력",
-                  ...(effectiveJourneyStep === 0 ? {
+                  ...(!importInProgress && effectiveJourneyStep === 0 ? {
                     journeyStep: 1,
                     status: `${userJourney[1].title} 진행 중`,
                   } : {}),
@@ -7669,7 +7689,7 @@ function UserDashboard({
                         updatedAt: new Date().toISOString(),
                       },
                     },
-                    ...(effectiveJourneyStep === 1 ? {
+                    ...(!importInProgress && effectiveJourneyStep === 1 ? {
                       journeyStep: 2,
                       status: `${userJourney[2].title} 진행 중`,
                     } : {}),
@@ -15286,7 +15306,7 @@ function RequestWizard({
                         ))}
                       </select>
                     </label>
-                    <p>선택한 단계 이전 문서·승인은 작성하지 않아도 ‘이관 완료’로 처리됩니다. 최종 확인 후에는 선택한 현재 단계부터 순서대로 완료해야 다음 단계가 열립니다.</p>
+                    <p>선택한 단계 이전의 진행·승인 이력을 반영합니다. 등록 후 확인된 내용부터 저장하고, 홈의 ‘과거 이관 완료’를 누르면 현재 단계부터 정식 절차를 시작합니다.</p>
                   </div>
                 )}
                 {requiresHistoricalG1Record && (
@@ -15398,7 +15418,7 @@ function RequestWizard({
               <footer className="wizard-form-actions">
                 <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `${answers.filter(Boolean).length}/5 필수 항목 작성`}</span>
                 <button disabled={!canSubmit} onClick={submitRequest}>
-                  {isHistorical ? "최종 확인 · 과거 과제 이관" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
+                  {isHistorical ? "과거 과제 등록 · 내용 보완 시작" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
                   <ArrowRight size={15} weight="bold" />
                 </button>
               </footer>

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+const databaseApi = await readFile(new URL("../server/database-api.mjs", import.meta.url), "utf8");
 
 const page = await readFile(
   new URL("../app/page.tsx", import.meta.url),
@@ -155,8 +156,8 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes("과거 과제 현재 진행 단계"));
   assert.ok(page.includes("documentsDeferred: historical"));
   assert.ok(page.includes("historicalBaselineStep: historical ? journeyStep : undefined"));
-  assert.ok(page.includes("최종 확인 · 과거 과제 이관"));
-  assert.ok(page.includes("선택한 현재 단계부터 순서대로 완료해야 다음 단계가 열립니다."));
+  assert.ok(page.includes("과거 과제 등록 · 내용 보완 시작"));
+  assert.ok(page.includes("현재 단계부터 정식 절차를 시작합니다."));
   assert.ok(page.includes("current.historicalImport && selectedJourney > effectiveJourneyStep"));
   assert.ok(page.includes("requiresHistoricalG1Record"));
   assert.ok(page.includes("G1 착수 판정 이관"));
@@ -176,6 +177,13 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(!page.includes('min="2026-08-29"'));
   assert.ok(css.includes(".historical-project-fields"));
   assert.ok(css.includes(".deferred-document-card"));
+});
+
+test("separates historical registration from finalization and keeps developers editable", () => {
+  assert.match(page, /과거 과제 등록 · 내용 보완 시작/);
+  assert.match(page, /과거 이관 완료/);
+  assert.match(databaseApi, /applyImportLifecycle/);
+  assert.match(databaseApi, /지정 개발 담당자만 이관 내용을 수정/);
 });
 
 test("stores a newly imported project in PostgreSQL and opens the assigned database number", () => {
@@ -244,7 +252,7 @@ test("uses a full-width historical intake and restores the dedicated G1 approval
   assert.ok(page.includes("개발 담당자 배정 확정"));
   assert.ok(page.includes("canDecide={role === ACCOUNT_ROLES.leader}"));
   assert.ok(page.includes("canAssign={role === ACCOUNT_ROLES.admin}"));
-  assert.ok(page.includes("allowMissingFea={historicalBaselineStep >= 2}"));
+  assert.ok(page.includes("allowMissingFea={canBackfillDocument(current, 2)}"));
   assert.ok(page.includes("과거 과제 이관 기준 · 선행 문서 작성 생략"));
   assert.ok(page.includes('authorName: identity?.displayName || "FEA 작성 담당자"'));
   assert.ok(page.includes('selectedJourney === 2 &&'));
