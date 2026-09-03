@@ -1,0 +1,61 @@
+/* Shared row geometry for real category and member rows. */
+.team-workspace-page { font-size: 15px; }
+.team-workspace-page .team-workspace-hero h1 { font-size: 28px !important; }
+.team-workspace-page .team-workspace-hero > div > p:last-child,
+.team-workspace-page .team-detail-toggle,
+.team-workspace-page .lifecycle-dropdown-trigger p,
+.team-workspace-page .lifecycle-compact-summary > span,
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-milestone strong,
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-detail-panel > p,
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-detail-panel dt,
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-detail-panel dd,
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-detail-title small,
+.team-workspace-page .team-kpi-card small,
+.team-workspace-page .team-kpi-card p { font-size: 14px !important; line-height: 1.6; }
+.team-workspace-page .lifecycle-dropdown-trigger h2 { font-size: 22px !important; }
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-detail-title h3 { font-size: 17px !important; }
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-milestone > span,
+.team-workspace-page .lifecycle-dropdown-content .lifecycle-milestone.gate > span,
+.team-workspace-page .lifecycle-compact-summary > span b { font-size: 14px !important; }
+.team-workspace-page .team-lifecycle-scroll { overflow-x: auto; }
+.team-workspace-page .team-lifecycle-track { min-width: 1050px; }
+.team-workspace-page .lifecycle-detail-panel { line-height: 1.6; }
+.team-workspace-page .team-kpi-card { min-height: 110px !important; }
+.compact-team-overview article > header h2 { font-size: 22px !important; }
+.compact-team-overview article > header p { font-size: 14px !important; }
+.compact-team-overview article > header small { font-size: 12px !important; }
+.compact-team-overview .workload-legend span,
+.compact-team-overview .workload-head,
+.compact-team-overview .compact-priority-head,
+.compact-team-overview .workload-summary span,
+.compact-team-overview .workload-view-toggle button,
+.compact-team-overview .workload-person > span:not(.member-avatar) > small { font-size: 13px !important; }
+.compact-workload-panel { overflow-x: auto !important; }
+.compact-team-overview .workload-table { min-width: 1000px; }
+.compact-team-overview .workload-head,
+.compact-team-overview .workload-table > button,
+.compact-team-overview .category-workload-row {
+  display: grid; align-items: center; grid-template-columns: minmax(180px,1.2fr) 120px minmax(180px,1.6fr) repeat(5,45px) 48px; gap: 12px; padding: 10px 16px;
+}
+.compact-team-overview .workload-table > button > span:not(.workload-stack),
+.compact-team-overview .category-workload-row > span:not(.workload-stack),
+.compact-team-overview .workload-table > button > b,
+.compact-team-overview .category-workload-row > b { min-width: 0; font-size: 14px !important; }
+.compact-team-overview .workload-person strong,.compact-team-overview .workload-category strong { font-size: 15px !important; }
+.compact-team-overview .workload-person strong { white-space: normal; overflow-wrap: anywhere; }
+.compact-team-overview .workload-stack { min-width: 0; }
+.compact-team-overview .compact-priority-head,
+.compact-team-overview .compact-priority-list > button { grid-template-columns: minmax(0,1.4fr) 90px minmax(0,1fr) 54px 18px; gap: 12px; padding: 14px; }
+.compact-team-overview .compact-priority-list > button > * { min-width: 0; }
+.compact-team-overview .compact-priority-list > button > small { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; margin: 0; }
+.compact-team-overview .compact-priority-list strong { white-space: normal; overflow-wrap: anywhere; font-size: 15px !important; }
+.compact-team-overview .compact-priority-list small,
+.compact-team-overview .compact-priority-list .pill,
+.compact-team-overview .compact-priority-list > button > b { font-size: 14px !important; }
+@media (max-width: 1600px) { .compact-team-overview { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  .compact-team-overview .compact-priority-head { display: none; }
+  .compact-team-overview .compact-priority-list > button { grid-template-columns: minmax(0,1fr) 90px 54px; }
+  .compact-team-overview .compact-priority-list > button > small { display: block; grid-column: 1/-1; grid-row: 2; }
+  .compact-team-overview .compact-priority-list > button > svg { display: none; }
+}

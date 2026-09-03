@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { hydrateStandardDocuments, standardDocuments, stageDocumentCodes, sectionHasContent } from "../shared/standard-documents.mjs";
 import { persistStandardDocuments } from "../server/standard-documents.mjs";
 import { syncProjectArtifacts } from "../server/database-api.mjs";
@@ -12,6 +13,22 @@ test("ARD restores all ten sections without sample answers", () => {
   assert.deepEqual(hydrated.documents.ARD.fields, { "overview.name": "실제 과제" });
   assert.equal(legacy.schemaVersion, undefined);
   assert.deepEqual(hydrateStandardDocuments(3, hydrated).documents, hydrated.documents);
+});
+
+test("direct design and pilot layouts retain the shared save path without changing ARD", () => {
+  const workspace = readFileSync(new URL("../app/standard-document-workspace.tsx", import.meta.url), "utf8");
+  const direct = readFileSync(new URL("../app/direct-stage-documents.tsx", import.meta.url), "utf8");
+  assert.match(workspace, /stage === 5 \|\| stage === 7/);
+  assert.match(workspace, /onSave=\{save\}/);
+  assert.match(direct, /renderField\(field, section.id\)/);
+  assert.match(direct, /releaseDialog.current\?\.showModal\(\)/);
+  assert.doesNotMatch(direct, /standard-doc-chat/);
+  const record = hydrateStandardDocuments(7);
+  record.documents.DEP.fields["readiness.checks"] = [true, false, false, true];
+  record.documents.DEP.fields["pilot.pilotAudience"] = "파일럿 대상";
+  record.documents.DEP.fields["results.pilotSatisfaction"] = "4.6 / 5";
+  record.documents.UG.fields["overview.intro"] = "사용자 안내";
+  assert.deepEqual(hydrateStandardDocuments(7, record).documents, record.documents);
 });
 
 test("later stages keep every document separate and preserve fields", () => {

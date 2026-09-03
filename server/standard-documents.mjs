@@ -1,15 +1,28 @@
 import { standardDocuments, stageDocumentCodes, sectionHasContent } from "../shared/standard-documents.mjs";
+import { asBlocks, validateContent } from "../shared/document-content.mjs";
 
 // Called inside the project transaction, after the project row has been locked.
 // Keep each standard document and its versions separate; never replace a legacy version.
-export async function persistStandardDocuments(client, project, stage, record, actorId) {
+export async function persistStandardDocuments(client, project, stage, record, actorId, previousRecord) {
   const allowed = stageDocumentCodes[stage];
   if (!allowed || record.schemaVersion !== 2) return;
   for (const code of allowed) {
     const draft = record.documents?.[code];
     if (!draft) continue;
+    // Schema additions must not invalidate untouched, previously completed sibling documents.
+    if (JSON.stringify(draft) === JSON.stringify(previousRecord?.documents?.[code])) continue;
     const definition = standardDocuments[code];
     if (!draft.fields || typeof draft.fields !== "object" || Array.isArray(draft.fields)) throw new Error("Invalid standard document fields.");
+    const attachmentIds = [];
+    for (const value of Object.values(draft.fields)) {
+      validateContent(value);
+      for (const block of asBlocks(value)) if (block.file) attachmentIds.push(block.file.id);
+    }
+    if (attachmentIds.length) {
+      const ids = [...new Set(attachmentIds)];
+      const files = await client.query(`select id::text from agent_portal.document_files where id=any($1::uuid[]) and project_id=$2 and document_type=$3`,[ids,project.id,code]);
+      if (files.rows.length !== ids.length) throw new Error('Invalid attachment ownership.');
+    }
     if (draft.status === "complete" && !definition.sections.every(section => sectionHasContent(section, draft.fields))) {
       throw new Error(`${code}: required document fields are incomplete.`);
     }

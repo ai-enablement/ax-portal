@@ -105,6 +105,8 @@
   min-height: 58px;
 }
 .category-workload-row {
+  display: grid;
+  align-items: center;
   min-height: 58px;
   border-top: 1px solid #edf0f3;
   background: #fff;

@@ -3,8 +3,10 @@
 import "./release-documents.css";
 import "./operations-documents.css";
 import "./team-dashboard-compact.css";
+import "./team-dashboard-readability.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
+import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
 import {
   ArrowRight,
@@ -243,6 +245,7 @@ type UserProject = {
     scope: string;
     damageFinancial: boolean;
     autonomy: string;
+    agentType?: string;
   };
   g1Resolution?: { decision: "GO" | "CONDITIONAL" | "DROP"; assignee: string; reason: string };
   g2ReworkState?: "editing" | "resubmitted";
@@ -2808,7 +2811,7 @@ function TeamPortfolioAnalytics({
                 <i>
                   <u
                     style={{
-                      width: `${Math.max((member.total / maxAssigned) * 100, 8)}%`,
+                      width: `${(member.total / maxAssigned) * 100}%`,
                     }}
                   />
                 </i>
@@ -2850,7 +2853,7 @@ function TeamPortfolioAnalytics({
               </span>
               <span className="workload-total">
                 <b>{category.total}</b>
-                <i><u style={{ width: `${Math.max((category.total / maxCategory) * 100, 8)}%` }} /></i>
+                <i><u style={{ width: `${(category.total / maxCategory) * 100}%` }} /></i>
               </span>
               <span className="workload-stack" aria-label={`${category.category} 단계별 업무 분포`}>
                 {category.intake > 0 && <i className="intake" style={{ flex: category.intake }} />}
@@ -3084,14 +3087,16 @@ function HomeFeasibilityEditor({
   project,
   role,
   blankStart = false,
+  readOnly = false,
   onSave,
   onComplete,
 }: {
   project: UserProject;
   role: string;
   blankStart?: boolean;
+  readOnly?: boolean;
   onSave?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
-  onComplete?: () => void;
+  onComplete?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
 }) {
   const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
   const author = isLeader ? "AI 활성화팀 팀장" : "AI 활성화팀 담당자";
@@ -3120,6 +3125,7 @@ function HomeFeasibilityEditor({
   const [scope, setScope] = useState(project.feaDraft?.scope || "COMPANY");
   const [damageFinancial, setDamageFinancial] = useState(project.feaDraft?.damageFinancial || false);
   const [autonomy, setAutonomy] = useState(project.feaDraft?.autonomy || "L0");
+  const [agentType, setAgentType] = useState(project.feaDraft?.agentType || "");
   const [saveState, setSaveState] = useState("자동 저장됨");
   const [completionMessage, setCompletionMessage] = useState("");
   const track = useMemo(
@@ -3150,7 +3156,7 @@ function HomeFeasibilityEditor({
   const currentDraft = (): NonNullable<UserProject["feaDraft"]> => ({
     summary, alternatives, conclusion, fitGrades, fitNotes,
     countPerMonth, asIsMinutes, people, toBeMinutes, developmentCost,
-    writeExec, sensitive, scope, damageFinancial, autonomy,
+    writeExec, sensitive, scope, damageFinancial, autonomy, agentType,
   });
   const saveDocument = () => {
     onSave?.(currentDraft());
@@ -3158,6 +3164,7 @@ function HomeFeasibilityEditor({
     setCompletionMessage("작성 내용과 판정 근거가 저장되었습니다.");
   };
   const completeDocument = () => {
+    if (!AGENT_TYPES.includes(agentType)) { setCompletionMessage("Agent 유형을 선택해 주세요."); return; }
     if (!roi.computed) {
       setCompletionMessage(
         "To-Be 시간/건이 미확보 상태입니다. 수치를 확인한 뒤 FEA 작성을 완료해 주세요.",
@@ -3166,8 +3173,8 @@ function HomeFeasibilityEditor({
     }
     setSaveState("작성 완료");
     setCompletionMessage("FEA가 작성 완료되어 G1 착수 승인 대기로 이동했습니다.");
-    onSave?.(currentDraft());
-    onComplete?.();
+    if (onComplete) onComplete(currentDraft());
+    else onSave?.(currentDraft());
   };
   const alternativeLabels = [
     "프로세스·규정 개선",
@@ -3185,17 +3192,17 @@ function HomeFeasibilityEditor({
   const recommendation = roi.computed ? "Go 권고" : "Conditional Go 권고";
 
   return (
-    <section className="home-fea-editor" aria-label="홈 타당성 평가서 작성">
+    <fieldset disabled={readOnly} style={{border:0,padding:0,margin:0,minWidth:0}}><section className="home-fea-editor" aria-label="홈 타당성 평가서 작성">
       <header className="home-fea-editor-head">
         <div>
-          <small>{project.no}-FEA · 작성 중</small>
+          <small>{project.no}-FEA · {project.feaCompleted ? "작성 완료" : "작성 중"}{readOnly ? " · 조회 전용" : ""}</small>
           <h3>타당성 평가서[FEA]</h3>
           <p>접수서와 인터뷰 결과를 읽으면서 대안·적합성·효과·위험을 이 화면에서 함께 작성합니다.</p>
         </div>
         <div>
           <span>작성자 {author}</span>
           <Pill tone={isLeader ? "violet" : "blue"}>{isLeader ? "팀장 작성" : "담당자 작성"}</Pill>
-          <b>72%</b>
+          <b>{project.feaCompleted ? "작성 완료" : "작성 중"}</b>
         </div>
       </header>
 
@@ -3218,8 +3225,8 @@ function HomeFeasibilityEditor({
           </article>
           <article>
             <small>Agent 유형 판정</small>
-            <strong>미확정</strong>
-            <p>인터뷰와 위험 항목 입력 후 확정</p>
+            <strong>{agentType || "미선택"}</strong>
+            <p>FEA 선택값을 운영 대장에 반영합니다.</p>
             <span>표준체계 0.4절</span>
           </article>
           <article>
@@ -3288,9 +3295,9 @@ function HomeFeasibilityEditor({
           <div className="home-fea-risk-grid">
             <label>쓰기·실행 권한<select value={writeExec ? "YES" : "NO"} onChange={(event) => setWriteExec(event.target.value === "YES")}><option value="NO">아니오</option><option value="YES">예</option></select></label>
             <label>개인정보·기밀<select value={sensitive ? "YES" : "NO"} onChange={(event) => setSensitive(event.target.value === "YES")}><option value="NO">아니오</option><option value="YES">예 · 마스킹 필요</option></select></label>
-            <label>사용 범위<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="PERSONAL">개인</option><option value="TEAM">팀</option><option value="DEPT">부서</option><option value="COMPANY">전사</option></select></label>
+            <label>사용 범위<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="PERSONAL">개인</option><option value="TEAM">팀</option><option value="DEPT">부서</option><option value="MULTI_DEPT">3개 부서 이상</option><option value="COMPANY">전사</option></select></label>
             <label>오답 피해<select value={damageFinancial ? "YES" : "NO"} onChange={(event) => setDamageFinancial(event.target.value === "YES")}><option value="NO">회복 가능한 운영 불편</option><option value="YES">금전·법적 피해 가능</option></select></label>
-            <label>Agent 유형<select value="HYBRID" disabled><option value="HYBRID">혼합형 · 규칙+판단</option></select></label>
+            <label>Agent 유형<select value={agentType} onChange={event => setAgentType(event.target.value)}><option value="">선택해 주세요</option>{AGENT_TYPES.map(type => <option key={type}>{type}</option>)}</select></label>
             <label>자율성 초안<select value={autonomy} onChange={(event) => setAutonomy(event.target.value)}><option>L0</option><option>L1</option><option>L2</option><option>L3</option><option>L4</option></select></label>
           </div>
         </section>
@@ -3300,13 +3307,13 @@ function HomeFeasibilityEditor({
         </section>
       </div>
 
-      <footer className="home-fea-actions">
+      {!readOnly && <footer className="home-fea-actions">
         <span><CheckCircle size={15} weight="fill" /> {saveState}</span>
         {completionMessage && <p role="status">{completionMessage}</p>}
         <button className="secondary" onClick={saveDocument}>임시 저장</button>
         <button className="primary" onClick={completeDocument}>FEA 작성 완료 · G1 요청</button>
-      </footer>
-    </section>
+      </footer>}
+    </section></fieldset>
   );
 }
 
@@ -3327,7 +3334,7 @@ function FeasibilityResult({
   projectItem?: UserProject;
   forceDraft?: boolean;
   onSave?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
-  onComplete?: () => void;
+  onComplete?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
 }) {
   const [activeSection, setActiveSection] = useState(0);
   const project =
@@ -3422,12 +3429,13 @@ function FeasibilityResult({
   ];
   const waitingForFea = state === "진행 중";
   const ready = state === "완료";
-  if (editable && (!ready || forceDraft))
+  if (project.source === "database" || project.historicalImport || (editable && (!ready || forceDraft)))
     return (
       <HomeFeasibilityEditor
         project={project}
         role={role}
         blankStart={forceDraft}
+        readOnly={!editable}
         onSave={onSave}
         onComplete={onComplete}
       />
@@ -7390,9 +7398,16 @@ function UserDashboard({
             <StandardDocumentWorkspace
               key={deferredDocumentKey}
               project={current}
+              people={teamAccounts.map(account => ({id:account.id,name:account.displayName}))}
               stage={selectedJourney}
               record={deferredDocumentRecord}
               canEdit={canEditSelectedHistoricalDocument}
+              onGallerySubmit={current.journeyStep >= 9 && ([ACCOUNT_ROLES.user, ACCOUNT_ROLES.member, ACCOUNT_ROLES.leader, ACCOUNT_ROLES.admin] as string[]).includes(role) ? () => openGallerySubmission({
+                source: "OPERATIONS", projectNo: current.no, name: current.name,
+                description: current.description || current.name,
+                supportOwner: current.projectOwner || current.owner,
+                evidence: [`${current.no}-G4`, `${current.no}-DEP`, `${current.no}-UG`, `${current.no}-OPS`],
+              }) : undefined}
               onSave={(record) => onUpdateProject(current.no, {
                 historicalDocuments: {
                   ...(current.historicalDocuments || {}),
@@ -7641,10 +7656,10 @@ function UserDashboard({
                 (deferredDocumentOpened || Boolean(deferredDocumentRecord))
               }
               onSave={(feaDraft) => onUpdateProject(current.no, { feaDraft })}
-              onComplete={() => {
+              onComplete={(feaDraft) => {
                 if (current.historicalImport) {
                   onUpdateProject(current.no, {
-                    feaCompleted: true,
+                    feaDraft, feaCompleted: true,
                     historicalDocuments: {
                       ...(current.historicalDocuments || {}),
                       "1": {
@@ -7660,7 +7675,7 @@ function UserDashboard({
                     } : {}),
                   });
                   notify("FEA 작성 완료가 기록되어 G1 착수 판정을 진행할 수 있습니다.");
-                } else onUpdateProject(current.no, { feaCompleted: true });
+                } else onUpdateProject(current.no, { feaDraft, feaCompleted: true });
               }}
             />
           ) : (selectedJourney === 2 && isAiTeam) ||
@@ -8018,32 +8033,7 @@ function judgeFeasibilityTrack(input: {
   damageFinancial: boolean;
   autonomy: string;
 }) {
-  const highSignals = [
-    input.writeExec && "쓰기·실행 권한",
-    input.sensitive && "개인정보·기밀 취급",
-    input.damageFinancial && "금전·법적 피해 가능성",
-    ["L2", "L3", "L4"].includes(input.autonomy) && "자율성 L2 이상",
-  ].filter(Boolean) as string[];
-  const mediumSignal = ["DEPT", "MULTI_DEPT", "COMPANY"].includes(
-    input.scope,
-  );
-  const track: FeasibilityTrack = highSignals.length
-    ? "HIGH"
-    : mediumSignal
-      ? "MEDIUM"
-      : "LOW";
-
-  return {
-    track,
-    label: track === "HIGH" ? "상" : track === "MEDIUM" ? "중" : "하",
-    signals:
-      highSignals.length > 0
-        ? highSignals
-        : mediumSignal
-          ? ["부서 단위 이상 사용"]
-          : ["개인·팀 내 보조 도구"],
-    citation: "에이전트 개발 표준체계 0.3절",
-  };
+  return classifyProject(input);
 }
 
 function calculateFeasibilityRoi(input: {

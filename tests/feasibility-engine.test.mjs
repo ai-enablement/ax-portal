@@ -39,9 +39,9 @@ test("embeds a writable FEA workspace in AI team home screens", () => {
 });
 
 test("advances an embedded FEA to the separated leader decision and admin assignment", () => {
-  assert.ok(page.includes("onComplete?.()"));
+  assert.ok(page.includes("onComplete(currentDraft())"));
   assert.ok(page.includes("current.feaCompleted"));
-  assert.ok(page.includes("onUpdateProject(current.no, { feaCompleted: true })"));
+  assert.ok(page.includes("onUpdateProject(current.no, { feaDraft, feaCompleted: true })"));
   assert.ok(page.includes("G1 판정 확정"));
   assert.ok(page.includes("Admin 액션"));
   assert.ok(page.includes("개발 담당자 배정 확정"));

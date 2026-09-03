@@ -280,6 +280,12 @@ async function createGalleryApplication(body, identity) {
           where p.project_code = $1
             and p.current_stage_code = 'OPS'
             and p.project_status = 'operating'
+            and p.deleted_at is null
+            and exists (
+              select 1 from agent_portal.gates g
+               where g.project_id=p.id and g.gate_code='G4'
+                 and g.gate_status in ('approved','conditional')
+            )
             and ($3 = true or p.owner_id = $2 or p.requester_id = $2 or exists (
               select 1 from agent_portal.project_members pm
                where pm.project_id = p.id and pm.user_id = $2
@@ -867,7 +873,7 @@ export async function syncProjectArtifacts(client, project, state, actorId, prev
   for (const [index, record] of Object.entries(state.historicalDocuments || {})) {
     if (JSON.stringify(record) === JSON.stringify(previousState.historicalDocuments?.[index])) continue;
     if (record?.schemaVersion === 2) {
-      await persistStandardDocuments(client, project, Number(index), record, actorId);
+      await persistStandardDocuments(client, project, Number(index), record, actorId, previousState.historicalDocuments?.[index]);
       continue;
     }
     const documentType = documentMap[index];
@@ -910,7 +916,7 @@ export async function syncProjectArtifacts(client, project, state, actorId, prev
       [project.id, gateCode, finalDecision === "conditional_go" ? "conditional" : finalDecision === "rejected" || finalDecision === "drop" ? "rejected" : "approved", finalDecision, record.reason || null, actorId],
     );
   }
-  if ((state.feaDraft || state.feaCompleted) && !state.historicalDocuments?.["1"] &&
+  if ((state.feaDraft || state.feaCompleted) &&
     (JSON.stringify(state.feaDraft) !== JSON.stringify(previousState.feaDraft) || state.feaCompleted !== previousState.feaCompleted)) {
     const document = (await client.query(
       `insert into agent_portal.documents
