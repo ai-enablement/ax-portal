@@ -208,6 +208,8 @@ type UserProject = {
       decision?: string;
       authorName?: string;
       approverName?: string;
+      approvalSource?: "historical_import";
+      approvalRoles?: string[];
       developerIds?: string[];
       reason?: string;
       updatedAt: string;
@@ -239,7 +241,7 @@ type UserProject = {
   g1Resolution?: { decision: "GO" | "CONDITIONAL" | "DROP"; assignee: string; reason: string };
   g2ReworkState?: "editing" | "resubmitted";
   g2Approval?: { decision: "APPROVED" | "REWORK"; reason: string };
-  g2Approvals?: Record<string, { decision: "APPROVED" | "REWORK"; reason: string; actorName?: string; updatedAt: string }>;
+  g2Approvals?: Record<string, { decision: "APPROVED" | "REWORK"; reason: string; actorName?: string; updatedAt: string; approvalSource?: "historical_import" }>;
   intakeMessages?: { role: string; text: string }[];
 };
 
@@ -1484,8 +1486,8 @@ export default function Home() {
           <div className="policy-card">
             <span>i</span>
             <div>
-              <strong>Agent 개발 표준체계 v1.0</strong>
-              <small>평가 없이 배포하지 않습니다.</small>
+              <strong>Developed by</strong>
+              <small>AI Enablement Team</small>
             </div>
           </div>
         </div>
@@ -4975,7 +4977,7 @@ function GateApprovalResult({
                     ? "승인"
                     : "대기"
                 : "승인",
-            date: isCompletedG2 ? "2026.08.25" : isRequester ? "내 검토" : "2026.08.25",
+            date: initialG2Approvals?.requester?.approvalSource === "historical_import" ? "과거 이관 · 자동 승인" : project.source === "database" ? "승인 이력 기준" : isCompletedG2 ? "2026.08.25" : isRequester ? "내 검토" : "2026.08.25",
             reason: myG2Vote === "REWORK" && isRequester ? g2Reason : undefined,
           },
           {
@@ -4998,7 +5000,7 @@ function GateApprovalResult({
                 : projectNo === "2026-026"
                   ? "승인"
                   : "대기",
-            date: isCompletedG2 ? "2026.08.25" : isMember ? "내 검토" : "승인 전",
+            date: initialG2Approvals?.developer?.approvalSource === "historical_import" ? "과거 이관 · 자동 승인" : project.source === "database" ? "승인 이력 기준" : isCompletedG2 ? "2026.08.25" : isMember ? "내 검토" : "승인 전",
             reason: myG2Vote === "REWORK" && isMember ? g2Reason : undefined,
           },
           {
@@ -5015,7 +5017,7 @@ function GateApprovalResult({
                     ? "승인"
                     : "대기"
                 : "대기",
-            date: isCompletedG2 ? "2026.08.26" : isLeader ? "내 검토" : "선행 승인 후",
+            date: initialG2Approvals?.team_leader?.approvalSource === "historical_import" ? "과거 이관 · 자동 승인" : project.source === "database" ? "승인 이력 기준" : isCompletedG2 ? "2026.08.26" : isLeader ? "내 검토" : "선행 승인 후",
             reason: myG2Vote === "REWORK" && isLeader ? g2Reason : undefined,
           },
         ];
@@ -6555,21 +6557,38 @@ function HistoricalStageDocumentEditor({
   );
   const [decision, setDecision] = useState(record?.decision || "PENDING");
   const [savedStatus, setSavedStatus] = useState(record?.status || "draft");
+  const [editingImportedEvidence, setEditingImportedEvidence] = useState(false);
   const updateValue = (index: number, value: string) =>
     setValues((items) =>
       items.map((item, itemIndex) => (itemIndex === index ? value : item)),
     );
   const save = (status: "draft" | "complete") => {
     const nextRecord: HistoricalDocumentRecord = {
+      ...record,
       values,
-      status,
+      status: record?.approvalSource === "historical_import" ? "complete" : status,
       decision: isGate ? decision : undefined,
       updatedAt: new Date().toISOString(),
     };
     onSave(nextRecord);
-    setSavedStatus(status);
+    setSavedStatus(nextRecord.status);
+    setEditingImportedEvidence(false);
   };
   const completedFields = values.filter((value) => value.trim()).length;
+  const importedApproval = isGate && record?.approvalSource === "historical_import" && record.status === "complete";
+  if (importedApproval && !editingImportedEvidence) {
+    const roleLabels: Record<string, string> = { requester: "요구자", developer: "개발 담당자", reviewer: "동료 리뷰어", team_leader: "AI 활성화팀 팀장", owner: "Project Owner" };
+    return (
+      <section className="historical-stage-editor" aria-label={`${output.title} 이관 승인 결과`}>
+        <header><div><small>{output.code} · {project.no}</small><h3>{output.title}</h3><p>이관 당시 진행 단계 이전의 Gate는 승인 완료로 반영됩니다.</p></div><Pill tone="green">이관 승인 완료</Pill></header>
+        <div className="historical-stage-permission"><CheckCircle size={18} weight="fill" /><span>{record.decision === "CONDITIONAL" ? "조건부 승인" : "승인 완료"} · 과거 과제 이관에 따른 자동 처리이며 개별 전자서명 기록은 아닙니다.</span></div>
+        <div className="historical-stage-editor-grid">
+          {(record.approvalRoles || []).map((approvalRole) => <div key={approvalRole}><strong>{roleLabels[approvalRole] || approvalRole}</strong><p>승인 완료 · 과거 이관</p></div>)}
+        </div>
+        <footer><span>승인 상태와 별개로 근거 문서는 추후 보완할 수 있습니다.</span>{canEdit && <button className="secondary" onClick={() => setEditingImportedEvidence(true)}>승인 근거 문서 보완</button>}</footer>
+      </section>
+    );
+  }
   return (
     <section className="historical-stage-editor" aria-label={`${output.title} 작성`}>
       <header>
@@ -6579,9 +6598,15 @@ function HistoricalStageDocumentEditor({
           <p>{output.summary}</p>
         </div>
         <Pill tone={savedStatus === "complete" ? "green" : canEdit ? "orange" : "gray"}>
-          {savedStatus === "complete" ? "작성 완료" : canEdit ? "작성 중" : "조회 전용"}
+          {importedApproval ? "이관 승인 완료" : savedStatus === "complete" ? "작성 완료" : canEdit ? "작성 중" : "조회 전용"}
         </Pill>
       </header>
+      {importedApproval && (
+        <div className="historical-stage-permission">
+          <CheckCircle size={18} weight="fill" />
+          <span>이관 당시 현재 단계 이전의 승인으로 반영되었습니다. 개별 전자서명 기록은 아니며, 아래 문서는 나중에 보완할 수 있습니다.</span>
+        </div>
+      )}
       {!canEdit && (
         <div className="historical-stage-permission">
           <Lock size={17} weight="fill" />
@@ -6591,7 +6616,7 @@ function HistoricalStageDocumentEditor({
       {isGate && (
         <label className="historical-stage-decision">
           <span>Gate 판정</span>
-          <select value={decision} onChange={(event) => setDecision(event.target.value)} disabled={!canEdit}>
+          <select value={decision} onChange={(event) => setDecision(event.target.value)} disabled={!canEdit || importedApproval}>
             <option value="PENDING">판정 대기</option>
             <option value="APPROVED">승인</option>
             <option value="CONDITIONAL">조건부 승인</option>

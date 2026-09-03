@@ -1,4 +1,5 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
+import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -1017,7 +1018,7 @@ async function createOperationalProject(body, identity) {
     const category = actor.app_role === "general_user"
       ? "개별 접수"
       : portalProjectCategories.has(submittedState.category) ? submittedState.category : "개별 접수";
-    const state = { ...submittedState, category, no: projectCode, source: "database", receivedDate, createdByUserId: String(actor.id) };
+    const state = completeHistoricalGateApprovals({ ...submittedState, category, no: projectCode, source: "database", receivedDate, createdByUserId: String(actor.id), ...(submittedState.historicalImport ? { historicalBaselineStep: journeyStep } : {}) });
     const project = (await client.query(
       `insert into agent_portal.projects
          (organization_id,request_team_id,project_code,project_name,project_category,project_summary,
@@ -1053,6 +1054,7 @@ async function createOperationalProject(body, identity) {
       [project.id, answers[0] || `과거 과제 이관: ${state.name}`, answers[2] || null, answers[3] || null, JSON.stringify({ answers, portalState: state }), Math.min(100, answers.filter((answer) => String(answer || "").trim()).length * 20), state.historicalImport || answers.length ? "submitted" : "draft", receivedDate],
     );
     await syncProjectArtifacts(client, { id: project.id, project_code: projectCode, project_name: state.name }, state, actor.id);
+    await persistHistoricalGateApprovals(client, project.id, state);
     await syncIntakeConversation(client, project.id, state.intakeMessages, actor.id);
     await client.query(
       `insert into agent_portal.audit_logs
