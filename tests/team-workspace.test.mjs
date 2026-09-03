@@ -53,6 +53,13 @@ test("uses the same one-page home for every account role", () => {
   assert.ok(page.includes('role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin'));
 });
 
+test("hides redundant leader and admin management badges in the home project list", () => {
+  const list = page.slice(page.indexOf('<div className="project-stack">'), page.indexOf('<article className="panel selected-project-status oneview-status">'));
+  assert.ok(list.includes('role !== ACCOUNT_ROLES.leader && role !== ACCOUNT_ROLES.admin && <Pill'));
+  assert.ok(list.includes('<small>{project.no}</small>'));
+  assert.ok(list.includes('<strong>{project.name}</strong>'));
+});
+
 test("keeps gate approvals with the leader and system administration separate", () => {
   assert.ok(page.includes("const approvalQueue: ApprovalQueueItem[] = []"));
   assert.ok(page.includes('code: "G3"'));

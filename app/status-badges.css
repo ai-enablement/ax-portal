@@ -29,3 +29,29 @@
 .historical-import-banner p {margin:5px 0 0;line-height:1.6;}
 .historical-import-banner > div {flex:1 1 240px;min-width:0;}
 .historical-import-banner button {flex:0 0 auto;white-space:normal;height:auto;}
+.historical-import-banner .historical-import-complete {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:44px;
+  max-width:100%;
+  padding:12px 20px;
+  border:1px solid #173b67;
+  border-radius:8px;
+  background:#173b67;
+  color:#fff;
+  font-size:14px;
+  font-weight:700;
+  line-height:1.5;
+  word-break:keep-all;
+  cursor:pointer;
+  box-shadow:0 2px 5px rgb(23 59 103 / 16%);
+}
+.historical-import-complete svg {flex:none;}
+.historical-import-banner .historical-import-complete:hover:not(:disabled) {background:#102b4d;border-color:#102b4d;}
+.historical-import-banner .historical-import-complete:focus-visible {outline:3px solid #598ce4;outline-offset:3px;}
+.historical-import-banner .historical-import-complete:disabled {background:#63758d;border-color:#63758d;cursor:wait;box-shadow:none;}
+@media (max-width:600px) {
+  .historical-import-banner .historical-import-complete {width:100%;}
+}

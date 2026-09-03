@@ -7148,7 +7148,7 @@ function UserDashboard({
                   <div>
                     <p>
                       <small>{project.no}</small>
-                      <Pill
+                      {role !== ACCOUNT_ROLES.leader && role !== ACCOUNT_ROLES.admin && <Pill
                         tone={
                           getProjectRelationships(role, project.no).includes(
                             "REVIEWER",
@@ -7158,7 +7158,7 @@ function UserDashboard({
                         }
                       >
                         {projectRelationshipLabel(role, project.no)}
-                      </Pill>
+                      </Pill>}
                     </p>
                     <strong>{project.name}</strong>
                   </div>
@@ -7204,7 +7204,13 @@ function UserDashboard({
             </div>
           </header>
 
-          {current.historicalImport && <section className="historical-import-banner"><div><b>{importInProgress ? "과거 이관 · 내용 보완 중" : "과거 이관 완료"}</b><p>{importInProgress ? "현재 단계까지 확인된 내용만 저장할 수 있습니다. 누락 문서는 지정 개발 담당자가 계속 수정할 수 있습니다." : "현재 진행 단계부터 필수 작성·승인 순서를 적용합니다. 이전 단계 문서는 별도로 보완할 수 있습니다."}</p></div>{importInProgress && canAuthorHistoricalDocument && <button disabled={finalizingImport} onClick={()=>void finishHistoricalImport()}>{finalizingImport ? "처리 중…" : "과거 이관 완료"}</button>}</section>}
+          {current.historicalImport && <section className="historical-import-banner">
+            <div><b>{importInProgress ? "과거 이관 · 내용 보완 중" : "과거 이관 완료"}</b><p>{importInProgress ? "현재 단계까지 확인된 내용만 저장할 수 있습니다. 누락 문서는 지정 개발 담당자가 계속 수정할 수 있습니다." : "현재 진행 단계부터 필수 작성·승인 순서를 적용합니다. 이전 단계 문서는 별도로 보완할 수 있습니다."}</p></div>
+            {importInProgress && canAuthorHistoricalDocument && <button type="button" className="primary historical-import-complete" disabled={finalizingImport} aria-busy={finalizingImport} onClick={()=>void finishHistoricalImport()}>
+              <CheckCircle size={20} weight="bold" aria-hidden="true" />
+              <span>{finalizingImport ? "이관 완료 처리 중…" : "과거 이관 완료"}</span>
+            </button>}
+          </section>}
           <div className="user-lifecycle-track journey-v2 oneview-journey">
             {userJourney.map((stage, index) => {
               const state =
