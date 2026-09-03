@@ -8,6 +8,7 @@ import "./status-badges.css";
 import {isImportInProgress, canBackfillDocument} from "../shared/historical-import-policy.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
+import ProjectListDrawer from "./project-list-drawer";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
 import {
@@ -7089,7 +7090,8 @@ function UserDashboard({
         </button>
       </section>
 
-      <section className="user-home-grid oneview-grid">
+      <section className="user-home-grid oneview-grid project-drawer-layout">
+        <ProjectListDrawer count={projectItems.length}>
         <article className="panel my-project-list">
           <header>
             <div>
@@ -7140,6 +7142,7 @@ function UserDashboard({
                 <button
                   key={project.no}
                   className={selected === index ? "selected" : ""}
+                  data-project-select
                   onClick={() => selectProject(index)}
                 >
                   <span className={`project-stage-number ${project.tone}`}>
@@ -7172,6 +7175,7 @@ function UserDashboard({
           </div>
         </article>
 
+        </ProjectListDrawer>
         <article className="panel selected-project-status oneview-status">
           <header>
             <div>
