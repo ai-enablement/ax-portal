@@ -2,6 +2,7 @@ import { getPool, withTransaction } from "./db/pool.mjs";
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 import { persistStandardDocuments } from "./standard-documents.mjs";
 import {applyImportLifecycle, assertImportTransition} from "../shared/historical-import-policy.mjs";
+import {missingFields} from "../shared/intake-agent.mjs";
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -1004,6 +1005,7 @@ async function createOperationalProject(body, identity) {
   delete submittedState.historicalImportFinalizedAt;
   delete submittedState.historicalResumeStep;
   delete submittedState.finalizeHistoricalImport;
+  delete submittedState.agentSession;
   return withTransaction(async (client) => {
     const actor = await findUser(client, identity);
     if (!actor || !actor.is_active) return { status: 403, body: { error: "Project creation permission is required." } };
@@ -1109,6 +1111,10 @@ async function updateOperationalProject(projectCode, body, identity) {
       return { status: 403, body: { error: "You are not assigned to update this project." } };
     }
     const changedKeys = Object.keys(changes);
+    if (changedKeys.includes("agentSession")) return {status:403,body:{error:"AI 인터뷰 상태는 전용 서버에서만 변경할 수 있습니다."}};
+    const editsAgentDocument = changedKeys.some(key=>["intakeAnswers","intakeMessages","intakeDetails","feaDraft","feaCompleted","intakeDraftCompleted"].includes(key));
+    if (previousState.agentSession && editsAgentDocument && body.agentRevision !== previousState.agentSession.revision) return {status:409,body:{error:"AI 인터뷰에서 문서가 갱신되었습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요."}};
+    if (previousState.agentSession && changes.intakeMessages) return {status:403,body:{error:"인터뷰 대화는 전용 Agent에서 입력해 주세요."}};
     const changedDocuments = Object.keys(changes.historicalDocuments || {}).filter(key=>JSON.stringify(changes.historicalDocuments[key])!==JSON.stringify(previousState.historicalDocuments?.[key]));
     if (previousState.historicalImport && !canWriteImport && (changes.finalizeHistoricalImport || "feaDraft" in changes || "intakeAnswers" in changes || changedDocuments.some(key=>![2,4,6,8].includes(Number(key))))) {
       return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};
@@ -1136,6 +1142,10 @@ async function updateOperationalProject(projectCode, body, identity) {
       if (changedGate) return { status: 403, body: { error: "Gate decisions require team leader or admin permission." } };
     }
     const merged = assertPortalProjectState({ ...applyImportLifecycle(previousState,changes,portalJourneyStep(project.current_stage_code)), no: projectCode, source: "database" });
+    if (!previousState.historicalImport && previousState.agentSession) {
+      const required = changes.feaCompleted ? missingFields(merged) : changes.intakeDraftCompleted ? missingFields(merged,"int.") : [];
+      if (required.length) return {status:400,body:{error:`미확보 항목은 완료 처리할 수 없습니다: ${required.map(f=>f.label).join(", ")}`}};
+    }
     if (actor.app_role === "general_user") merged.category = "개별 접수";
     if (changes.g2ReworkState === "resubmitted") {
       const g2Gate = (await client.query(

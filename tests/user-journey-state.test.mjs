@@ -52,7 +52,7 @@ test("assigns intake categories by role and keeps general users on individual in
 
 test("supports both chat and direct document intake with shared values", () => {
   assert.ok(page.includes('useState<"CHAT" | "FORM">("CHAT")'));
-  assert.ok(page.includes("Agent와 대화하며 작성"));
+  assert.ok(page.includes("기본정보 입력 후 AI 인터뷰"));
   assert.ok(page.includes("문서 양식 직접 작성"));
   assert.ok(page.includes('aria-label="에이전트 요구 접수서 직접 작성"'));
   assert.ok(page.includes("updateAnswerAt"));

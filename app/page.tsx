@@ -9,6 +9,7 @@ import {isImportInProgress, canBackfillDocument} from "../shared/historical-impo
 import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
+import IntakeAgentPanel from "./intake-agent-panel";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
 import {
@@ -204,6 +205,8 @@ type UserProject = {
   checkpoints: string;
   route: View;
   intakeAnswers?: string[];
+  intakeDetails?: {currentProcess?: string; failureImpact?: string};
+  agentSession?: {revision?: number};
   requester?: string;
   projectOwner?: string;
   developerIds?: string[];
@@ -788,6 +791,19 @@ export default function Home() {
   const [teamAccounts, setTeamAccounts] = useState<TeamAccount[]>([]);
   const [teamWorkloadProjects, setTeamWorkloadProjects] = useState<TeamRequirement[]>(initialTeamRequirements);
   const projectUpdateQueue = useRef(new Map<string, Promise<void>>());
+  useEffect(() => {
+    const refreshAgentProject = () => {
+      void Promise.allSettled([...projectUpdateQueue.current.values()]).then(async () => {
+        const response = await fetch("/api/database/projects", {cache:"no-store"});
+        if (response.ok) {
+          const payload = await response.json();
+          setSubmittedProjects(payload.projects || []);
+        }
+      }).catch(() => undefined);
+    };
+    window.addEventListener("portal-agent-saved", refreshAgentProject);
+    return () => window.removeEventListener("portal-agent-saved", refreshAgentProject);
+  }, []);
 
   const actorEmail = identity?.canSwitchRole
     ? ACCOUNT_EMAILS[role]
@@ -1019,7 +1035,7 @@ export default function Home() {
       const response = await fetch(`/api/database/projects/${encodeURIComponent(projectNo)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ changes }),
+        body: JSON.stringify({ changes, agentRevision: submittedProjects.find(project=>project.no===projectNo)?.agentSession?.revision }),
       });
       const payload = (await response.json()) as { project?: UserProject; error?: string };
       if (!response.ok || !payload.project) {
@@ -1626,7 +1642,7 @@ export default function Home() {
           </div>
         </header>
 
-        {view === "home" && (
+        {(view === "home" || view === "intake") && (
           <Dashboard
             role={role}
             identity={identity}
@@ -1663,14 +1679,6 @@ export default function Home() {
               description="새 Agent 과제가 접수되면 담당자별 진행 현황과 지연 위험이 여기에 표시됩니다."
             />
           ))}
-        {view === "intake" && (
-          <IntakeFeasibility
-            role={role}
-            notify={notify}
-            goDefinition={() => go("definition")}
-            projectNo={workflowTarget}
-          />
-        )}
         {view === "definition" && (
           <RequirementDefinition
             role={role}
@@ -3439,6 +3447,7 @@ function FeasibilityResult({
   if (project.source === "database" || project.historicalImport || (editable && (!ready || forceDraft)))
     return (
       <HomeFeasibilityEditor
+        key={`${project.no}-${JSON.stringify(project.feaDraft)}`}
         project={project}
         role={role}
         blankStart={forceDraft}
@@ -7328,6 +7337,9 @@ function UserDashboard({
             <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
+          {hasProjects && current.source === "database" && !current.historicalImport && current.journeyStep <= 1 && !current.feaCompleted && selectedJourney <= 1 && (
+            <IntakeAgentPanel key={current.no} projectNo={current.no} />
+          )}
           <div
             ref={currentStageDetailRef}
             id="current-stage-detail"
@@ -7551,6 +7563,7 @@ function UserDashboard({
                   </section>
                   <section>
                     <b>3. 현재 처리 방식과 업무량</b>
+                    {current.intakeDetails?.currentProcess && <p>{current.intakeDetails.currentProcess}</p>}
                     <p>
                       {[
                         current.intakeAnswers?.[1]?.trim(),
@@ -7573,6 +7586,7 @@ function UserDashboard({
                   </section>
                   <section>
                     <b>5. 위험 및 고려사항</b>
+                    {current.intakeDetails?.failureImpact && <p>{current.intakeDetails.failureImpact}</p>}
                     <p>{current.historicalImport ? "미입력 · 담당자가 추후 보완할 수 있습니다." : ""}</p>
                   </section>
                   <section>
@@ -7615,7 +7629,7 @@ function UserDashboard({
                 )}
               </section>
 
-              {!intakeComplete && !current.historicalImport && (
+              {!intakeComplete && !current.historicalImport && current.source !== "database" && (
                 <aside
                   className="intake-chat"
                   aria-label="요구 접수 대화 이어쓰기"
@@ -15031,12 +15045,11 @@ function RequestWizard({
     ? requesterName.trim() && requesterDepartment.trim()
       ? `${requesterName.trim()} · ${requesterDepartment.trim()}`
       : ""
-    : "김현우 · 개발1팀";
+    : `${identity?.displayName || "요구자"} · 현업`;
   const resolvedProjectOwner =
     ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim() || suggestedRequestTitle;
-  const allAnswersComplete = answers.every((answer) => answer.trim());
   const updateAnswer = (value: string) =>
     setAnswers((items) =>
       items.map((item, index) => (index === step - 1 ? value : item)),
@@ -15046,7 +15059,7 @@ function RequestWizard({
       items.map((item, index) => (index === targetIndex ? value : item)),
     );
   const canSubmit = Boolean(
-    (isHistorical ? manualTitle.trim() && receivedDate : allAnswersComplete) &&
+    (isHistorical ? manualTitle.trim() && receivedDate : answers[0].trim()) &&
       (!requiresHistoricalG1Record ||
         (historicalDeveloperIds.length > 0 &&
           (historicalG1Decision === "GO" || historicalG1Reason.trim()))) &&
@@ -15078,7 +15091,7 @@ function RequestWizard({
     else setSubmitted(false);
   };
   const advance = () => {
-    if (!answers[step - 1].trim() || submitted) return;
+    if (!answers[0].trim() || submitted) return;
     if (step < 5) setStep(step + 1);
     else void submitRequest();
   };
@@ -15169,7 +15182,7 @@ function RequestWizard({
             onClick={openChatMode}
           >
             <ChatsCircle size={21} weight="duotone" />
-            <span><b>Agent와 대화하며 작성</b><small>질문에 답하면 접수서가 자동으로 정리됩니다.</small></span>
+            <span><b>기본정보 입력 후 AI 인터뷰</b><small>과제를 등록한 뒤 Agent가 INT·FEA의 부족한 내용을 질문합니다.</small></span>
           </button>
           <button
             type="button"
@@ -15204,8 +15217,8 @@ function RequestWizard({
             <header>
               <span className="brand-mark">AX</span>
               <div>
-                <strong>요구 접수 Agent</strong>
-                <small>질문 {step}/5 · 답변은 자동 저장됩니다</small>
+                <strong>접수 기본정보</strong>
+                <small>기본 질문 {step}/5 · 등록 후 AI가 INT·FEA 인터뷰를 이어갑니다</small>
               </div>
             </header>
             <div className="wizard-chat-history">
@@ -15260,13 +15273,13 @@ function RequestWizard({
               )}
               <button
                 disabled={
-                  !answers[step - 1].trim() ||
+                  !answers[0].trim() ||
                   (step === 5 && (!resolvedRequester || !resolvedProjectOwner)) ||
                   submitted
                 }
                 onClick={advance}
               >
-                {step === 5 ? (isAiTeam ? "Agent 과제 등록" : "접수서 제출") : "답변 저장"}
+                {step === 5 ? "등록 후 AI 인터뷰 시작" : "다음 · 모르는 항목은 건너뛰기"}
                 <ArrowRight size={15} weight="bold" />
               </button>
             </div>
@@ -15426,7 +15439,7 @@ function RequestWizard({
                 <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} name="form-project-owner-mode" />
               </div>
               <footer className="wizard-form-actions">
-                <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `${answers.filter(Boolean).length}/5 필수 항목 작성`}</span>
+                <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `업무 문제 · 요구자 · Owner 필수 · 나머지는 AI 인터뷰에서 보완`}</span>
                 <button disabled={!canSubmit} onClick={submitRequest}>
                   {isHistorical ? "과거 과제 등록 · 내용 보완 시작" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
                   <ArrowRight size={15} weight="bold" />
@@ -15450,7 +15463,7 @@ function RequestWizard({
                   : "두 방식에서 입력한 내용은 서로 유지됩니다"
                 : step === 5
                 ? "희망 완료일을 확인한 뒤 접수서를 제출하세요"
-                : "닫아도 작성 이력이 남습니다"}
+                : "등록 전 입력은 이 창에서만 유지됩니다"}
             </span>
           </div>
         </footer>
