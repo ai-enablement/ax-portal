@@ -18697,6 +18697,15 @@ body {
   font: inherit;
   font-weight: 400;
 }
+.chat-wizard .project-owner-details small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.chat-wizard .project-owner-details input[readonly] { background: #f3f6fa; }
+.chat-wizard .project-owner-details input[aria-invalid="true"] { border-color: #c43b42; }
 @media (max-width: 640px) {
   .project-owner-options { grid-template-columns: 1fr; }
 }

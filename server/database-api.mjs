@@ -3,6 +3,7 @@ import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from 
 import { persistStandardDocuments } from "./standard-documents.mjs";
 import {applyImportLifecycle, assertImportTransition} from "../shared/historical-import-policy.mjs";
 import {missingFields} from "../shared/intake-agent.mjs";
+import {ProjectContactError, registrationContacts, resolveContactUser} from "./project-contacts.mjs";
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -750,25 +751,6 @@ async function listRoleHistory(identity) {
   return { status: 200, body: { history: result.rows } };
 }
 
-async function resolveProjectParty(client, label, actor, catalog) {
-  const parts = String(label || "").split("·").map((part) => part.trim()).filter(Boolean);
-  const email = parts.find((part) => part.includes("@"))?.toLowerCase();
-  if (!email) return actor.id;
-  const displayName = parts[0] || email.split("@")[0];
-  const user = (await client.query(
-    `insert into agent_portal.users
-       (organization_id, team_id, email, display_name, app_role, is_active)
-     values ($1,null,$2,$3,'general_user',true)
-     on conflict (lower(email)) where email is not null do update set
-       display_name=coalesce(nullif(excluded.display_name,''),users.display_name),
-       is_active=true,
-       updated_at=now()
-     returning id`,
-    [catalog.organizationId, email, displayName],
-  )).rows[0];
-  return user.id;
-}
-
 function portalProjectFromRow(row) {
   const runtime = row.runtimeState && typeof row.runtimeState === "object" && !Array.isArray(row.runtimeState)
     ? row.runtimeState
@@ -791,6 +773,9 @@ function portalProjectFromRow(row) {
     owner: runtime.owner || row.ownerName || row.requesterName,
     requester: runtime.requester || row.requesterName,
     projectOwner: runtime.projectOwner || row.ownerName || row.requesterName,
+    // A legacy name-only owner may have been linked to the registrant. Do not infer their email.
+    projectOwnerEmail: runtime.projectOwnerEmail ? row.ownerEmail || runtime.projectOwnerEmail : "",
+    requesterEmail: runtime.requesterEmail || "",
     developerIds: developers.map((developer) => String(developer.id)),
     developerNames: developers.map((developer) => developer.name),
     handler: developers.length ? developers.map((developer) => developer.name).join(" · ") : "담당자 배정 필요",
@@ -811,6 +796,7 @@ async function listOperationalProjects(identity) {
             p.requested_completion_date as "requestedCompletionDate",
             p.created_at as "createdAt", p.updated_at as "updatedAt",
             requester.display_name as "requesterName", owner_user.display_name as "ownerName",
+            owner_user.email as "ownerEmail",
             ir.raw_answers->'portalState' as "runtimeState",
             coalesce((
               select jsonb_agg(jsonb_build_object('id',u.id::text,'name',u.display_name) order by pm.assigned_at)
@@ -1028,12 +1014,15 @@ async function createOperationalProject(body, identity) {
         return { status: 200, body: { project: { ...(existing.state || {}), no: existing.projectCode, source: "database" } } };
       }
     }
+    const contacts = registrationContacts(submittedState, actor);
+    if (actor.app_role === "general_user") submittedState.requester = `${actor.display_name} · ${actor.email}`;
+    Object.assign(submittedState, contacts);
     const catalog = await ensurePortalCatalog(client);
     const receivedDate = validIsoDate(submittedState.receivedDate) || new Date().toISOString().slice(0, 10);
     const year = Number(receivedDate.slice(0, 4));
     const projectCode = (await client.query(`select agent_portal.next_project_code($1) as code`, [year])).rows[0].code;
-    const requesterId = await resolveProjectParty(client, submittedState.requester, actor, catalog);
-    const ownerId = await resolveProjectParty(client, submittedState.projectOwner || submittedState.owner, actor, catalog);
+    const requesterId = await resolveContactUser(client, submittedState.requester, contacts.requesterEmail, catalog.organizationId) || actor.id;
+    const ownerId = await resolveContactUser(client, submittedState.projectOwner || submittedState.owner, contacts.projectOwnerEmail, catalog.organizationId);
     const journeyStep = Math.max(0, Math.min(portalJourneyStageCodes.length - 1, Number(submittedState.journeyStep) || 0));
     const stageCode = portalStageCode(journeyStep);
     const category = actor.app_role === "general_user"
@@ -1050,6 +1039,7 @@ async function createOperationalProject(body, identity) {
       [catalog.organizationId, catalog.aiTeamId, projectCode, String(state.name).trim(), category, state.description || null, requesterId, ownerId, stageCode, databaseProjectStatus(journeyStep, state), Math.max(0, Math.min(100, Number(state.progress) || 0)), validIsoDate(state.requestedDate), state.nextAction || null, receivedDate],
     )).rows[0];
     for (const [userId, relationship] of [[requesterId, "requester"], [ownerId, "owner"]]) {
+      if (!userId) continue;
       await client.query(
         `insert into agent_portal.project_members (project_id,user_id,relationship,assigned_by)
          values ($1,$2,$3,$4) on conflict (project_id,user_id,relationship) do update set ended_at=null`,
@@ -1111,6 +1101,9 @@ async function updateOperationalProject(projectCode, body, identity) {
       return { status: 403, body: { error: "You are not assigned to update this project." } };
     }
     const changedKeys = Object.keys(changes);
+    if (changedKeys.some(key => ["projectOwnerEmail", "requesterEmail", "ownerMode"].includes(key))) {
+      return {status:403,body:{error:"연락처는 계정 연결 정보입니다. 일반 문서 저장으로 변경할 수 없습니다."}};
+    }
     if (changedKeys.includes("agentSession")) return {status:403,body:{error:"AI 인터뷰 상태는 전용 서버에서만 변경할 수 있습니다."}};
     const editsAgentDocument = changedKeys.some(key=>["intakeAnswers","intakeMessages","intakeDetails","feaDraft","feaCompleted","intakeDraftCompleted"].includes(key));
     if (previousState.agentSession && editsAgentDocument && body.agentRevision !== previousState.agentSession.revision) return {status:409,body:{error:"AI 인터뷰에서 문서가 갱신되었습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요."}};
@@ -1436,7 +1429,13 @@ async function assignProjectDeveloper(projectCode, body, identity) {
 export async function handleDatabaseRequest({ method, pathname, body = {}, identity }) {
   if (method === "GET" && pathname === "/health") return health();
   if (method === "GET" && pathname === "/projects") return listOperationalProjects(identity);
-  if (method === "POST" && pathname === "/projects") return createOperationalProject(body, identity);
+  if (method === "POST" && pathname === "/projects") {
+    try { return await createOperationalProject(body, identity); }
+    catch (error) {
+      if (error instanceof ProjectContactError) return {status:error.status,body:{error:error.message}};
+      throw error;
+    }
+  }
   if (method === "PATCH" && pathname.startsWith("/projects/")) {
     const projectCode = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "");
     if (!projectCode) return { status: 400, body: { error: "Project code is required." } };

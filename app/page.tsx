@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
+import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
 import {
@@ -209,6 +210,9 @@ type UserProject = {
   agentSession?: {revision?: number};
   requester?: string;
   projectOwner?: string;
+  projectOwnerEmail?: string;
+  requesterEmail?: string;
+  ownerMode?: "SELF" | "OTHER";
   developerIds?: string[];
   developerNames?: string[];
   historicalDocuments?: Record<
@@ -1291,6 +1295,9 @@ export default function Home() {
       historical: boolean;
       category: ProjectCategory;
       receivedDate: string;
+      ownerMode: "SELF" | "OTHER";
+      projectOwnerEmail: string;
+      requesterEmail: string;
       currentJourneyStep: number;
       developerIds: string[];
       clientRequestId?: string;
@@ -1421,6 +1428,9 @@ export default function Home() {
         intakeAnswers: answers,
         requester,
         projectOwner,
+        projectOwnerEmail: registration?.projectOwnerEmail,
+        requesterEmail: registration?.requesterEmail,
+        ownerMode: registration?.ownerMode,
         developerIds: assignedDevelopers.map((account) => account.id),
         developerNames,
         historicalDocuments:
@@ -7544,6 +7554,10 @@ function UserDashboard({
                       <div>
                         <dt>Project Owner</dt>
                         <dd>{current.projectOwner || current.owner}</dd>
+                      </div>
+                      <div>
+                        <dt>Owner 이메일</dt>
+                        <dd style={{overflowWrap: "anywhere"}}>{current.projectOwnerEmail || "미등록"}</dd>
                       </div>
                       <div>
                         <dt>접수일</dt>
@@ -14921,12 +14935,15 @@ function suggestRequestTitle(problem: string) {
   return `${summary || "신규 업무"} Agent`;
 }
 
-function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange, name }: {
+function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange, email, onEmailChange, optionalEmail, name }: {
   mode: "SELF" | "OTHER";
   onModeChange: (mode: "SELF" | "OTHER") => void;
   requester: string;
   owner: string;
   onOwnerChange: (owner: string) => void;
+  email: string;
+  onEmailChange: (email: string) => void;
+  optionalEmail: boolean;
   name: string;
 }) {
   return (
@@ -14949,6 +14966,12 @@ function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange
           <input value={owner} onChange={(event) => onOwnerChange(event.target.value)} placeholder="예: 박서연 · 품질혁신팀" aria-label="Project Owner 이름과 소속" />
         </label>
       )}
+      <label className="project-owner-details">
+        <span>Owner MS 계정 이메일 · {optionalEmail ? "선택" : "필수"}</span>
+        <input type="email" value={email} readOnly={mode === "SELF"} onChange={(event) => onEmailChange(event.target.value)} placeholder={mode === "SELF" ? "요구자 이메일을 먼저 입력해 주세요." : "name@company.com"} aria-label="Project Owner MS 계정 이메일" aria-invalid={Boolean(email && !isContactEmail(email))} required={!optionalEmail} />
+        <small>{email && !isContactEmail(email) ? "이메일 형식을 확인해 주세요." : mode === "SELF" ? "요구자 메일이 자동 반영됩니다. 다른 메일을 쓰려면 ‘다른 Owner 지정’을 선택하세요." : "오너의 MS 로그인 계정과 연결됩니다. 이름과 메일이 같은 담당자인지 확인해 주세요."}</small>
+        <small>승인·작성 요청 알림을 위한 연락처입니다. 현재 메일·Teams 알림은 발송하지 않습니다.{optionalEmail ? " 이관 건은 미입력 상태로 저장할 수 있습니다." : ""}</small>
+      </label>
     </fieldset>
   );
 }
@@ -14977,6 +15000,9 @@ function RequestWizard({
       historical: boolean;
       category: ProjectCategory;
       receivedDate: string;
+      ownerMode: "SELF" | "OTHER";
+      projectOwnerEmail: string;
+      requesterEmail: string;
       currentJourneyStep: number;
       developerIds: string[];
       clientRequestId?: string;
@@ -15023,6 +15049,7 @@ function RequestWizard({
   const [requesterEmail, setRequesterEmail] = useState("");
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
+  const [projectOwnerEmail, setProjectOwnerEmail] = useState("");
   const submissionRequestId = useRef(crypto.randomUUID());
   const isHistorical = isAiTeam && registrationMode === "HISTORICAL";
   const eligibleDevelopers = teamAccounts;
@@ -15040,7 +15067,7 @@ function RequestWizard({
           .filter(Boolean)
           .join(" · ")
       : ""
-    : `${identity?.displayName || "김현우"} · 현업 · ${identity?.email || "kim.hw@changshininc.com"}`;
+    : identity?.email ? `${identity.displayName || "요구자"} · 현업 · ${identity.email}` : "";
   const requesterOwnerLabel = isAiTeam
     ? requesterName.trim() && requesterDepartment.trim()
       ? `${requesterName.trim()} · ${requesterDepartment.trim()}`
@@ -15048,6 +15075,9 @@ function RequestWizard({
     : `${identity?.displayName || "요구자"} · 현업`;
   const resolvedProjectOwner =
     ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
+  const resolvedRequesterEmail = normalizeContactEmail(isAiTeam ? requesterEmail : identity?.email);
+  const resolvedOwnerEmail = ownerMode === "SELF" ? resolvedRequesterEmail : normalizeContactEmail(projectOwnerEmail);
+  const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim() || suggestedRequestTitle;
   const updateAnswer = (value: string) =>
@@ -15064,6 +15094,7 @@ function RequestWizard({
         (historicalDeveloperIds.length > 0 &&
           (historicalG1Decision === "GO" || historicalG1Reason.trim()))) &&
       resolvedProjectOwner &&
+      contactsValid &&
       resolvedRequester &&
       requestTitle.trim() &&
       !submitted,
@@ -15078,6 +15109,9 @@ function RequestWizard({
       resolvedRequester,
       {
         historical: isHistorical,
+        ownerMode,
+        projectOwnerEmail: resolvedOwnerEmail,
+        requesterEmail: resolvedRequesterEmail,
         category: role === ACCOUNT_ROLES.user ? "개별 접수" : projectCategory,
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
@@ -15262,7 +15296,7 @@ function RequestWizard({
                       onChange={(event) => updateAnswer(event.target.value)}
                     />
                   </label>
-                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} name="project-owner-mode" />
+                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={setProjectOwnerEmail} optionalEmail={isHistorical} name="project-owner-mode" />
                 </div>
               ) : (
                 <textarea
@@ -15436,7 +15470,7 @@ function RequestWizard({
                   />
                   {isHistorical && <small>선택 입력 · 과거 날짜도 등록할 수 있습니다.</small>}
                 </label>
-                <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} name="form-project-owner-mode" />
+                <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={setProjectOwnerEmail} optionalEmail={isHistorical} name="form-project-owner-mode" />
               </div>
               <footer className="wizard-form-actions">
                 <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `업무 문제 · 요구자 · Owner 필수 · 나머지는 AI 인터뷰에서 보완`}</span>
