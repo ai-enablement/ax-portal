@@ -1,5 +1,6 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
+import { persistStandardDocuments } from "./standard-documents.mjs";
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -861,9 +862,14 @@ async function syncProjectDevelopers(client, projectId, developerIds, actorId) {
   return valid;
 }
 
-async function syncProjectArtifacts(client, project, state, actorId) {
+export async function syncProjectArtifacts(client, project, state, actorId, previousState = {}) {
   const documentMap = { 0: "INT", 1: "FEA", 3: "ARD", 5: "DES", 7: "DEP", 9: "OPS" };
   for (const [index, record] of Object.entries(state.historicalDocuments || {})) {
+    if (JSON.stringify(record) === JSON.stringify(previousState.historicalDocuments?.[index])) continue;
+    if (record?.schemaVersion === 2) {
+      await persistStandardDocuments(client, project, Number(index), record, actorId);
+      continue;
+    }
     const documentType = documentMap[index];
     if (!documentType || !record || typeof record !== "object") continue;
     const document = (await client.query(
@@ -891,6 +897,7 @@ async function syncProjectArtifacts(client, project, state, actorId) {
   for (const [index, record] of Object.entries(state.historicalDocuments || {})) {
     const gateCode = gateMap[index];
     if (!gateCode || !record || typeof record !== "object") continue;
+    if (JSON.stringify(record) === JSON.stringify(previousState.historicalDocuments?.[index])) continue;
     const rawDecision = String(record.decision || "APPROVED").toLowerCase();
     const finalDecision = rawDecision === "conditional" ? "conditional_go" : rawDecision === "rejected" ? "rejected" : rawDecision === "drop" ? "drop" : gateCode === "G1" ? "go" : "approved";
     await client.query(
@@ -903,7 +910,8 @@ async function syncProjectArtifacts(client, project, state, actorId) {
       [project.id, gateCode, finalDecision === "conditional_go" ? "conditional" : finalDecision === "rejected" || finalDecision === "drop" ? "rejected" : "approved", finalDecision, record.reason || null, actorId],
     );
   }
-  if ((state.feaDraft || state.feaCompleted) && !state.historicalDocuments?.["1"]) {
+  if ((state.feaDraft || state.feaCompleted) && !state.historicalDocuments?.["1"] &&
+    (JSON.stringify(state.feaDraft) !== JSON.stringify(previousState.feaDraft) || state.feaCompleted !== previousState.feaCompleted)) {
     const document = (await client.query(
       `insert into agent_portal.documents
          (project_id,document_type,document_code,document_title,document_status,current_version,author_id)
@@ -920,7 +928,7 @@ async function syncProjectArtifacts(client, project, state, actorId) {
       [document.id, JSON.stringify(state.feaDraft || { completed: true }), state.feaCompleted ? "FEA 작성 완료" : "FEA 임시 저장", actorId],
     );
   }
-  if (state.g1Resolution) {
+  if (state.g1Resolution && JSON.stringify(state.g1Resolution) !== JSON.stringify(previousState.g1Resolution)) {
     const decision = state.g1Resolution.decision === "CONDITIONAL" ? "conditional_go" : state.g1Resolution.decision === "DROP" ? "drop" : "go";
     await client.query(
       `insert into agent_portal.gates
@@ -930,7 +938,7 @@ async function syncProjectArtifacts(client, project, state, actorId) {
       [project.id, decision === "conditional_go" ? "conditional" : decision === "drop" ? "rejected" : "approved", decision, state.g1Resolution.reason || null, actorId],
     );
   }
-  if (state.g2ReworkState && (!state.g2Approvals || Object.keys(state.g2Approvals).length === 0)) {
+  if (state.g2ReworkState && state.g2ReworkState !== previousState.g2ReworkState && (!state.g2Approvals || Object.keys(state.g2Approvals).length === 0)) {
     await client.query(
       `insert into agent_portal.gates (project_id,gate_code,gate_status,opened_at)
        values ($1,'G2',$2,now())
@@ -1201,7 +1209,7 @@ async function updateOperationalProject(projectCode, body, identity) {
        where project_id=$1`,
       [project.id, merged.intakeAnswers?.[0] || `과제: ${merged.name}`, merged.intakeAnswers?.[2] || null, merged.intakeAnswers?.[3] || null, JSON.stringify(merged.intakeAnswers || []), JSON.stringify(merged), Math.min(100, (merged.intakeAnswers || []).filter((answer) => String(answer || "").trim()).length * 20), Boolean(merged.intakeDraftCompleted || merged.historicalImport)],
     );
-    await syncProjectArtifacts(client, project, merged, actor.id);
+    await syncProjectArtifacts(client, project, merged, actor.id, previousState);
     if (Object.prototype.hasOwnProperty.call(changes, "intakeMessages")) {
       await syncIntakeConversation(client, project.id, merged.intakeMessages, actor.id);
     }

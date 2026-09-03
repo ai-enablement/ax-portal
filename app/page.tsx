@@ -4,10 +4,13 @@ import "./release-documents.css";
 import "./operations-documents.css";
 import "./team-dashboard-compact.css";
 import { useEffect, useMemo, useRef, useState } from "react";
+import StandardDocumentWorkspace from "./standard-document-workspace";
+import type { StandardDocument } from "../shared/standard-documents.mjs";
 import {
   ArrowRight,
   ArrowsClockwise,
   Bell,
+  Buildings,
   CalendarBlank,
   ChartBar,
   ChatsCircle,
@@ -204,6 +207,9 @@ type UserProject = {
     string,
     {
       values: string[];
+      schemaVersion?: number;
+      documents?: Record<string, StandardDocument>;
+      legacyValues?: string[];
       status: "draft" | "complete";
       decision?: string;
       authorName?: string;
@@ -999,6 +1005,7 @@ export default function Home() {
   ) => {
     setSubmittedProjects((current) => current.map((project) => project.no === projectNo ? { ...project, ...changes } : project));
     const previous = projectUpdateQueue.current.get(projectNo) || Promise.resolve();
+    let saved = false;
     const request = previous.catch(() => undefined).then(async () => {
       const response = await fetch(`/api/database/projects/${encodeURIComponent(projectNo)}`, {
         method: "PATCH",
@@ -1016,10 +1023,15 @@ export default function Home() {
         return;
       }
       setSubmittedProjects((current) => current.map((project) => project.no === projectNo ? payload.project! : project));
+      saved = true;
     }).finally(() => {
       if (projectUpdateQueue.current.get(projectNo) === request) projectUpdateQueue.current.delete(projectNo);
     });
     projectUpdateQueue.current.set(projectNo, request);
+    return request.then(() => saved).catch(() => {
+      notify("DB 연결을 확인해 주세요. 변경사항을 저장하지 못했습니다.");
+      return false;
+    });
   };
 
   const filteredAgents = useMemo(
@@ -1484,10 +1496,10 @@ export default function Home() {
         </nav>
         <div className="sidebar-bottom">
           <div className="policy-card">
-            <span>i</span>
+            <Buildings size={20} weight="duotone" aria-hidden="true" />
             <div>
               <strong>Developed by</strong>
-              <small>AI Enablement Team</small>
+              <small>AI Enablement Center</small>
             </div>
           </div>
         </div>
@@ -1901,7 +1913,7 @@ function Dashboard({
   teamRequirementItems: TeamRequirement[];
   onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
   onDeleteProject: (projectNo: string) => void;
-  onUpdateProject: (projectNo: string, changes: Partial<UserProject>) => void;
+  onUpdateProject: (projectNo: string, changes: Partial<UserProject>) => Promise<boolean> | void;
   setView: (v: View) => void;
   setRequestOpen: (v: boolean) => void;
   setDetail: (p: (typeof projects)[0]) => void;
@@ -6799,7 +6811,7 @@ function UserDashboard({
   teamAccounts: TeamAccount[];
   onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
   onDeleteProject: (projectNo: string) => void;
-  onUpdateProject: (projectNo: string, changes: Partial<UserProject>) => void;
+  onUpdateProject: (projectNo: string, changes: Partial<UserProject>) => Promise<boolean> | void;
   setView: (v: View) => void;
   openNewRequest: () => void;
   projectItems: UserProject[];
@@ -7373,6 +7385,24 @@ function UserDashboard({
                 });
                 notify(record.status === "complete" ? record.decision === "REJECTED" ? "팀장 G1 Drop 판정을 확정했습니다." : "Admin이 개발 담당자 배정을 확정했습니다." : "팀장 G1 판정을 확정했습니다. Admin 개발 담당자 배정 대기로 이동합니다.");
               }}
+            />
+          ) : (current.historicalImport || current.source === "database") && [3, 5, 7, 9].includes(selectedJourney) ? (
+            <StandardDocumentWorkspace
+              key={deferredDocumentKey}
+              project={current}
+              stage={selectedJourney}
+              record={deferredDocumentRecord}
+              canEdit={canEditSelectedHistoricalDocument}
+              onSave={(record) => onUpdateProject(current.no, {
+                historicalDocuments: {
+                  ...(current.historicalDocuments || {}),
+                  [String(selectedJourney)]: record,
+                },
+                ...(record.status === "complete" && selectedJourney === effectiveJourneyStep && selectedJourney < 9 ? {
+                  journeyStep: selectedJourney + 1,
+                  status: `${userJourney[selectedJourney + 1].title} 진행 중`,
+                } : {}),
+              })}
             />
           ) : (current.historicalImport || current.source === "database") &&
             selectedJourney >= 2 &&

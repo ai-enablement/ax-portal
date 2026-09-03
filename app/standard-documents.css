@@ -1,0 +1,60 @@
+.standard-document-shell { width: 100%; min-width: 0; }
+.standard-document-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.standard-document-tabs button { border: 1px solid #d8e1ee; border-radius: 8px; padding: 10px 14px; background: white; color: #526681; }
+.standard-document-tabs button.active { color: #164b89; background: #edf4ff; border-color: #3274bd; }
+.intake-result-layout.standard-document-workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.standard-document-workspace > .intake-document,
+.standard-document-workspace > .intake-chat { min-width: 0; width: 100%; max-height: 760px; overflow-y: auto; border: 1px solid #d8e1ee; border-radius: 10px; background: #fff; }
+.standard-document-workspace .intake-document > header { display: flex; justify-content: space-between; gap: 20px; padding: 24px; }
+.standard-document-workspace .intake-document > header > div:last-child { min-width: 88px; text-align: right; }
+.standard-document-workspace .intake-document > header strong { display: block; margin-top: 10px; color: #2464d9; }
+.standard-document-workspace .intake-document > header small { font-size: 12px !important; }
+.standard-document-workspace .intake-document > header p { font-size: 14px !important; line-height: 1.6; }
+.standard-document-workspace .chat-message p { font-size: 14px !important; }
+.standard-document-workspace .chat-message small { font-size: 12px !important; }
+.standard-document-workspace .intake-chat header small { font-size: 12px !important; }
+.standard-document-workspace .ard-section-nav { display: block; }
+.standard-document-workspace .ard-section-nav button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 18px; text-align: left; min-height: 72px; background: #fff; border: 0; border-bottom: 1px solid #e2e8f1; color: #183554; }
+.standard-document-workspace .ard-section-nav button.active { background: #edf4ff; }
+.standard-document-workspace .ard-section-nav button > div { flex: 1; min-width: 0; }
+.standard-document-workspace .ard-section-nav b { display: block; font-size: 14px; }
+.standard-document-workspace .ard-section-nav p { margin: 4px 0 0; font-size: 12px; }
+.standard-document-workspace .ard-section-nav em { font-size: 11px; font-style: normal; white-space: nowrap; }
+.standard-document-workspace .standard-active-section { padding: 20px; display: grid; gap: 18px; }
+.standard-document-workspace .ard-section-head { display: flex; gap: 12px; }
+.standard-document-workspace .ard-section-head small { display: block; }
+.standard-field { display: grid; gap: 8px; font-size: 13px; color: #233f60; }
+.standard-field input, .standard-field select, .standard-field textarea,
+.standard-document-workspace table textarea, .standard-document-workspace table select,
+.standard-guide-target select, .standard-document-workspace .intake-chat footer textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #cbd8e8; border-radius: 6px; background: white; font: inherit; color: #253b55; }
+.standard-field textarea { min-height: 100px; resize: vertical; }
+.standard-document-workspace .standard-table-field { min-width: 0; }
+.standard-document-workspace table { width: 100%; table-layout: fixed; }
+.standard-document-workspace table th { font-size: 11px; }
+.standard-document-workspace table td { padding: 4px; }
+.standard-document-workspace table th:last-child { width: 35px; }
+.standard-document-workspace table textarea { min-height: 84px; padding: 6px; resize: vertical; font-size: 12px; }
+.standard-document-workspace .secondary { background: white; border: 1px solid #cedaea; color: #1c3d67; padding: 9px 12px; border-radius: 6px; }
+.standard-document-workspace .intake-document > footer { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; padding: 16px; background: #fff; border-top: 1px solid #e2e8f1; }
+.standard-document-workspace .intake-document > footer > span { font-size: 12px; flex: 1 1 160px; }
+.standard-document-workspace .intake-document > footer > div { display: flex; gap: 8px; }
+.standard-document-workspace .intake-document > footer button { padding: 10px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; }
+.standard-document-workspace .intake-chat { display: flex; flex-direction: column; height: 760px; }
+.standard-document-workspace .intake-chat > header { display: flex; align-items: center; gap: 12px; padding: 18px; border-bottom: 1px solid #e2e8f1; }
+.standard-document-workspace .intake-chat header small { display: block; margin-top: 4px; color: #8090a6; }
+.standard-document-workspace .intake-chat-history { flex: 1; min-height: 150px; overflow: auto; padding: 18px; }
+.standard-document-workspace .chat-message p { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #eef1f5; border-radius: 8px; line-height: 1.7; }
+.standard-document-workspace .chat-message.user p { background: #25282d; color: white; }
+.standard-document-workspace .chat-message.user { margin-left: 20px; }
+.standard-document-workspace .chat-progress { height: 3px; margin: 10px 18px 0; background: #e9edf2; }
+.standard-document-workspace .chat-progress span { display: block; height: 100%; background: #3e7ad6; }
+.standard-document-workspace .intake-chat > footer { padding: 14px; border-top: 1px solid #d8e1ee; display: grid; gap: 10px; }
+.standard-document-workspace .intake-chat footer > div { display: flex; gap: 8px; align-items: stretch; }
+.standard-document-workspace .intake-chat footer button { flex-shrink: 0; width: 42px; border-radius: 6px; background: #183e6b; color: white; }
+.standard-guide-target { display: grid; gap: 6px; font-size: 12px; }
+.standard-legacy, .standard-intake-reference { padding: 15px; font-size: 12px; background: #fffbf1; overflow-wrap: anywhere; }
+.standard-checklist { border: 1px solid #d8e1ee; padding: 12px; border-radius: 8px; }
+.standard-checklist label { display: flex; gap: 8px; align-items: start; margin: 10px 0; }
+.standard-document-workspace button:disabled { opacity: .5; cursor: not-allowed; }
+.standard-document-workspace :is(button,input,textarea,select):focus-visible { outline: 2px solid #2b71c7; outline-offset: 2px; }
+@media (max-width: 900px) { .intake-result-layout.standard-document-workspace { grid-template-columns: minmax(0,1fr); } .standard-document-workspace .intake-chat { height: 460px; } }

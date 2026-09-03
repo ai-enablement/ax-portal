@@ -193,6 +193,10 @@ button {
   display: block;
   font-size: 10px;
 }
+.policy-card > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
 .policy-card small {
   margin-top: 3px;
   color: #63708a;
