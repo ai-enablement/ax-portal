@@ -24,12 +24,22 @@ export function validateMarkdownUpload(name, bytes) {
 }
 
 function safeName(name) { return String(name).replace(/[\r\n\\/]/g, '_').slice(0, 200); }
-function allowedPhase(state, documentType, requestedPhase) {
+function gateHasRework(state, gate) {
+  return Object.values(state.workflowApprovals?.[gate] || {}).some(vote => ['REWORK','REJECTED'].includes(vote?.decision));
+}
+export function markdownReworkGate(state, documentType, phase) {
+  const step=Number(state.journeyStep??0);
+  if(step===6&&gateHasRework(state,'G3')&&((documentType==='DES'&&phase==='design')||(documentType==='EVD'&&phase==='development_evaluation')))return 'G3';
+  if(step===8&&gateHasRework(state,'G4')&&((documentType==='EVD'||documentType==='UG')&&phase==='deployment_rollout'))return 'G4';
+  return null;
+}
+export function allowedPhase(state, documentType, requestedPhase) {
   const step = Number(state.journeyStep ?? 0);
   const importing = state.historicalImport && !state.historicalImportFinalizedAt;
   const phase = documentType === 'DES' ? 'design' : documentType === 'UG' ? 'deployment_rollout' : requestedPhase;
   if (!MARKDOWN_DOCUMENTS[documentType]) return null;
   if (documentType === 'EVD' && !MARKDOWN_DOCUMENTS.EVD.phases.includes(phase)) return null;
+  if(markdownReworkGate(state,documentType,phase))return phase;
   if (importing) {
     if (phase === 'design' && step >= 5) return phase;
     if (phase === 'development_evaluation' && step >= 5) return phase;
@@ -46,6 +56,15 @@ function allowedPhase(state, documentType, requestedPhase) {
 function completionEntry(previous, row) {
   const phases = { ...(previous?.phases || {}), [row.lifecycle_phase]: { id: row.id, version: row.version_number, name: row.original_name, authorName: row.author_name, at: row.created_at } };
   return { ...(previous || {}), latestId: row.id, latestVersion: row.version_number, latestPhase: row.lifecycle_phase, phases };
+}
+export function applyMarkdownCompletion(state, documentType, row) {
+  const next=structuredClone(state||{}),gate=markdownReworkGate(next,documentType,row.lifecycle_phase);
+  if(gate){
+    next.workflowApprovalHistory=[...(next.workflowApprovalHistory||[]),{gate,approvals:structuredClone(next.workflowApprovals?.[gate]||{}),reason:'보완 문서 새 버전 첨부',at:row.created_at}];
+    next.workflowApprovals={...(next.workflowApprovals||{}),[gate]:{}};
+  }
+  next.markdownDocuments={...(next.markdownDocuments||{}),[documentType]:completionEntry(next.markdownDocuments?.[documentType],row)};
+  return {state:next,resetGate:gate};
 }
 
 function markdownValue(value, field) {
@@ -150,9 +169,12 @@ export async function uploadMarkdownDocument(identity, projectCode, documentType
       (id,project_id,document_type,lifecycle_phase,version_number,original_name,mime_type,byte_size,original_content,content_markdown,checksum_sha256,created_by)
       values($1,$2,$3,$4,$5,$6,'text/markdown',$7,$8,$9,$10,$11)`,
       [row.id, access.project.id, documentType, phase, version, row.original_name, bytes.length, bytes, markdown, checksum, access.actor.id]);
-    const state = intake.state || {};
-    state.markdownDocuments = { ...(state.markdownDocuments || {}), [documentType]: completionEntry(state.markdownDocuments?.[documentType], row) };
+    const completion=applyMarkdownCompletion(intake.state||{},documentType,row),state=completion.state;
     await client.query(`update agent_portal.intake_requests set raw_answers=jsonb_set(coalesce(raw_answers,'{}'::jsonb),'{portalState}',$2::jsonb),updated_at=now() where id=$1`, [intake.id, JSON.stringify(state)]);
+    if(completion.resetGate){
+      await client.query(`delete from agent_portal.gate_approvals where gate_id in (select id from agent_portal.gates where project_id=$1 and gate_code=$2)`,[access.project.id,completion.resetGate]);
+      await client.query(`update agent_portal.gates set gate_status='pending',final_decision=null,decided_at=null,decided_by=null,updated_at=now() where project_id=$1 and gate_code=$2`,[access.project.id,completion.resetGate]);
+    }
     await client.query(`insert into agent_portal.audit_logs
       (actor_user_id,project_id,action_code,entity_type,entity_id,after_data)
       values($1,$2,'MARKDOWN_DOCUMENT_UPLOAD','markdown_document',$3,$4::jsonb)`,

@@ -8,6 +8,7 @@ import {intakeRequired} from '../shared/intake-standard.mjs';
 import {applyWorkflow,persistWorkflowApprovals,WorkflowError,sanitizeNewWorkflow} from './workflow-v31.mjs';
 import {isLowRoute,displayStage} from '../shared/workflow-v31.mjs';
 import {ProjectContactError, registrationContacts, resolveContactUser} from "./project-contacts.mjs";
+import {assertGalleryCategory,galleryCodes,primaryGalleryDataClass} from "../shared/gallery-options.mjs";
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -171,13 +172,13 @@ const gallerySelect = `
     p.project_code as "projectNo",
     gs.agent_name as "name",
     gs.summary as "description",
-    case gs.platform
+    coalesce((select string_agg(case value
       when 'vibe_coding' then 'Vibe Coding'
       when 'copilot_studio' then 'Copilot Studio'
       when 'power_automate' then 'Power Automate'
       when 'power_apps' then 'Power Apps'
-      else '기타'
-    end as "platform",
+      else '기타' end, ' · ' order by ordinality)
+      from jsonb_array_elements_text(case when jsonb_array_length(gs.platforms)>0 then gs.platforms else jsonb_build_array(gs.platform) end) with ordinality), '기타') as "platform",
     case gs.artifact_kind
       when 'agent' then 'Agent'
       when 'app' then '업무 App'
@@ -188,12 +189,12 @@ const gallerySelect = `
     gs.category as "category",
     gs.access_url as "accessUrl",
     gs.target_users as "targetUsers",
-    case gs.data_classification
+    coalesce((select string_agg(case value
       when 'public' then '공개'
       when 'internal' then '사내'
       when 'confidential' then '기밀'
-      else '개인정보 포함'
-    end as "dataClass",
+      else '개인정보 포함' end, ' · ' order by ordinality)
+      from jsonb_array_elements_text(case when jsonb_array_length(gs.data_classifications)>0 then gs.data_classifications else jsonb_build_array(gs.data_classification) end) with ordinality), '사내') as "dataClass",
     gs.support_owner as "supportOwner",
     u.display_name || ' · ' ||
       case u.app_role
@@ -227,12 +228,7 @@ async function listGalleryApplications(identity) {
 }
 
 function normalizePlatform(value) {
-  return {
-    "Vibe Coding": "vibe_coding",
-    "Copilot Studio": "copilot_studio",
-    "Power Automate": "power_automate",
-    "Power Apps": "power_apps",
-  }[value] || "other";
+  return galleryCodes(value,'platform')[0];
 }
 
 function normalizeArtifact(value) {
@@ -244,12 +240,7 @@ function normalizeArtifact(value) {
 }
 
 function normalizeDataClass(value) {
-  return {
-    공개: "public",
-    사내: "internal",
-    기밀: "confidential",
-    "개인정보 포함": "personal_data",
-  }[value] || "internal";
+  return primaryGalleryDataClass(value);
 }
 
 function assertSubmission(body) {
@@ -271,6 +262,9 @@ function assertSubmission(body) {
   if (body.source === "OPERATIONS" && !body.projectNo) {
     throw new Error("projectNo is required for an operations submission.");
   }
+  galleryCodes(body.platform,'platform');
+  galleryCodes(body.dataClass,'data');
+  assertGalleryCategory(body.category);
 }
 
 async function createGalleryApplication(body, identity) {
@@ -309,9 +303,9 @@ async function createGalleryApplication(body, identity) {
     await client.query(
       `insert into agent_portal.gallery_submissions (
         submission_number, source_kind, project_id, submitted_by,
-        agent_name, summary, platform, artifact_kind, category, access_url,
-        target_users, data_classification, support_owner, evidence, submission_status
-      ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'submitted')`,
+        agent_name, summary, platform, platforms, artifact_kind, category, access_url,
+        target_users, data_classification, data_classifications, support_owner, evidence, submission_status
+      ) values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb,$15,$16::jsonb,'submitted')`,
       [
         body.id,
         body.source === "OPERATIONS" ? "lifecycle_project" : "personal_build",
@@ -320,11 +314,13 @@ async function createGalleryApplication(body, identity) {
         body.name,
         body.description,
         normalizePlatform(body.platform),
+        JSON.stringify(galleryCodes(body.platform,'platform')),
         normalizeArtifact(body.artifactType),
         body.category,
         body.accessUrl,
         body.targetUsers,
         normalizeDataClass(body.dataClass),
+        JSON.stringify(galleryCodes(body.dataClass,'data')),
         body.supportOwner,
         JSON.stringify(Array.isArray(body.evidence) ? body.evidence : []),
       ],
@@ -360,11 +356,13 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
                 agent_name = coalesce(nullif($2, ''), agent_name),
                 summary = coalesce(nullif($3, ''), summary),
                 platform = coalesce($4, platform),
+                platforms = coalesce($12::jsonb, platforms),
                 artifact_kind = coalesce($5, artifact_kind),
                 category = coalesce(nullif($6, ''), category),
                 access_url = coalesce(nullif($7, ''), access_url),
                 target_users = coalesce(nullif($8, ''), target_users),
                 data_classification = coalesce($9, data_classification),
+                data_classifications = coalesce($13::jsonb, data_classifications),
                 support_owner = coalesce(nullif($10, ''), support_owner),
                 evidence = coalesce($11::jsonb, evidence),
                 reviewer_note = null,
@@ -382,6 +380,8 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
           body.dataClass ? normalizeDataClass(body.dataClass) : null,
           body.supportOwner || "",
           Array.isArray(body.evidence) ? JSON.stringify(body.evidence) : null,
+          body.platform ? JSON.stringify(galleryCodes(body.platform,'platform')) : null,
+          body.dataClass ? JSON.stringify(galleryCodes(body.dataClass,'data')) : null,
         ],
       );
     } else {
@@ -397,11 +397,13 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
               set agent_name = coalesce(nullif($2, ''), agent_name),
                   summary = coalesce(nullif($3, ''), summary),
                   platform = coalesce($4, platform),
+                  platforms = coalesce($12::jsonb, platforms),
                   artifact_kind = coalesce($5, artifact_kind),
                   category = coalesce(nullif($6, ''), category),
                   access_url = coalesce(nullif($7, ''), access_url),
                   target_users = coalesce(nullif($8, ''), target_users),
                   data_classification = coalesce($9, data_classification),
+                  data_classifications = coalesce($13::jsonb, data_classifications),
                   support_owner = coalesce(nullif($10, ''), support_owner),
                   evidence = coalesce($11::jsonb, evidence),
                   updated_at = now()
@@ -418,6 +420,8 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
             body.dataClass ? normalizeDataClass(body.dataClass) : null,
             body.supportOwner || "",
             Array.isArray(body.evidence) ? JSON.stringify(body.evidence) : null,
+            body.platform ? JSON.stringify(galleryCodes(body.platform,'platform')) : null,
+            body.dataClass ? JSON.stringify(galleryCodes(body.dataClass,'data')) : null,
           ],
         );
       }

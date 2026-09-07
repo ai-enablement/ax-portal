@@ -1,12 +1,18 @@
 "use client";
 import {useState} from 'react';
+import {CaretDown,Check,X} from '@phosphor-icons/react';
 import {JOURNEY_V31,requiredApprovers,ROLE_LABELS,gateSummary,gateGaps,isLowRoute,designDocumentComplete,developmentEvdComplete,releaseEvdComplete} from '../shared/workflow-v31.mjs';
 import './workflow-v31.css';
 export function WorkflowJourney({project,selected,onSelect}){
   const low=isLowRoute(project),step=Number(project.journeyStep),phase=project.deliveryPhase||'design';
+  const gateRejected=gate=>gate==='G1'?project.g1Resolution?.decision==='DROP':Object.values(project.workflowApprovals?.[gate]||{}).some(v=>['REWORK','REJECTED'].includes(v?.decision));
+  const currentGate=JOURNEY_V31.find(node=>node.gate&&node.step===step)?.gate;
+  const returning=Boolean(currentGate&&gateRejected(currentGate));
+  const visualStep=returning?step-1:step;
+  const visualPhase=returning&&step===6?'development':phase;
   return <><nav className="workflow-v31-track" aria-label="6단계 개발 진행 및 승인 게이트">{JOURNEY_V31.map((n,i)=>{
-    const excluded=low&&n.step>2,active=n.step===step&&(!n.phase||n.phase===phase),done=n.step<step||(n.phase==='design'&&step===5&&phase==='development');
-    return <button type="button" key={i} className={[n.gate?'gate':'stage',excluded?'excluded':active?'current':done?'done':'',selected===n.step?'selected':''].join(' ')} onClick={()=>onSelect(n.step,n.phase)} aria-current={active?'step':undefined}><span>{n.gate||n.number}</span><b>{n.title}</b><small>{excluded?'하 트랙 적용 제외':active?'현재 단계':done?'완료':'예정'}</small></button>;
+    const excluded=low&&n.step>2,rejected=Boolean(n.gate&&gateRejected(n.gate)),active=!rejected&&n.step===visualStep&&(!n.phase||n.phase===visualPhase),done=!rejected&&(n.step<visualStep||(n.phase==='design'&&visualStep===5&&visualPhase==='development'));
+    return <button type="button" key={i} className={[n.gate?'gate':'stage',excluded?'excluded':rejected?'rejected':active?'current':done?'done':'',selected===n.step?'selected':''].join(' ')} onClick={()=>onSelect(n.step,n.phase)} aria-current={active?'step':undefined} aria-label={`${n.gate||n.number} ${n.title} · ${rejected?'보완 요청':excluded?'하 트랙 적용 제외':active?'현재 단계':done?'완료':'예정'}`}>{active&&<CaretDown className="workflow-current-marker" weight="fill" aria-hidden="true"/>}<span>{rejected?<X size={18} weight="bold" aria-hidden="true"/>:done?<Check size={18} weight="bold" aria-hidden="true"/>:n.gate||n.number}</span><b>{n.title}</b><small>{rejected?'보완 요청':excluded?'하 트랙 적용 제외':active?'현재 단계':done?'완료':'예정'}</small></button>;
   })}</nav><div className="workflow-v31-footer">{low?<span>하 트랙 단축: G1 승인 → 운영대장 등록 → 배포 · G2~G4 승인 이력을 만들지 않습니다.</span>:<span>필수 승인자 전원 승인 후 다음 단계로 이동합니다.</span>}<button type="button" onClick={()=>onSelect(9)}>{low?'운영대장 등록·배포':'운영 이관'} →</button></div></>;
 }
 function useSave(onSave){const [busy,setBusy]=useState(false),[message,setMessage]=useState('');return {busy,message,save:async change=>{setBusy(true);setMessage('');try{const ok=await onSave(change);setMessage(ok===false?'저장하지 못했습니다. 오류 안내를 확인해 주세요.':'저장되었습니다.');}catch(e){setMessage(e.message);}finally{setBusy(false);}}};}
@@ -16,7 +22,11 @@ export function WorkflowGate({project,gate,identity,people,onSave}){
   const mine=r=>r==='team_leader'?leader:r==='requester'?email===(project.requesterEmail||'').toLowerCase():r==='owner'?email===(project.projectOwnerEmail||'').toLowerCase():people.some(p=>String(p.id)===String(project.securityReviewerId)&&p.email?.toLowerCase()===email);
   const expected={G1:2,G2:4,G3:6,G4:8}[gate],active=project.journeyStep===expected,passed=project.journeyStep>expected;
   const gaps=gateGaps(gate,project);
+  const reworkVotes=Object.entries(project.workflowApprovals?.[gate]||{}).filter(([,vote])=>['REWORK','REJECTED'].includes(vote?.decision));
+  const dropped=gate==='G1'&&project.g1Resolution?.decision==='DROP';
+  const supplementStage={G1:'타당성 평가',G2:'요구 정의',G3:'개발·평가',G4:'배포·확산'}[gate];
   return <section className="workflow-v31-panel"><header><div><small>{gate} · 승인 게이트</small><h3>{gate==='G1'?'착수 승인':gate==='G2'?'개발 착수 승인':gate==='G3'?'배포 승인':'확산 승인'}</h3></div><strong>{gate==='G1'?(project.g1Resolution?.decision||'판정 대기'):gateSummary(gate,project)}</strong></header>
+    {(dropped||reworkVotes.length>0)&&<div className="workflow-rework-banner"><b>{dropped?'Drop 판정':'보완 요청'} · {supplementStage} 단계로 돌아가 수정해 주세요.</b><p>{dropped?project.g1Resolution?.reason:reworkVotes.map(([role,vote])=>`${ROLE_LABELS[role]||role}: ${vote.reason||'보완 사유 확인 필요'}`).join(' · ')}</p><small>상단 진행 표시에서 {supplementStage} 단계를 선택하면 담당 개발자 또는 작성 권한자가 내용을 보완할 수 있습니다. 근거가 변경되면 기존 승인 라운드는 이력으로 보존되고 새 승인을 받습니다.</small></div>}
     {passed&&!project.workflowApprovals?.[gate]&&<p>이전 절차의 통과 이력을 보존합니다. 신규 승인으로 대체하지 않습니다.</p>}
     {!active&&!passed&&<p>앞 단계를 완료한 뒤 승인할 수 있습니다.</p>}
     {gate==='G1'&&<div className="workflow-v31-vote"><div><b>FEA 작성 담당</b><p>{project.feaAuthor?.name||project.historicalDocuments?.[1]?.authorName||'작성자 미확인'} · {project.feaCompleted?'작성 완료':'작성 중'}</p></div><div><b>G1 승인자</b><p>{project.workflowApprovals?.G1?.team_leader?.actorName||people.filter(p=>p.appRole==='team_leader').map(p=>p.displayName).join(' · ')||'팀장 판정 대기'}</p></div><div><b>개발 담당</b><p>{project.developerNames?.length?project.developerNames.join(' · '):'미배정'}</p></div></div>}

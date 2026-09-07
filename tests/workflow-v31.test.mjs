@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {JOURNEY_V31,requiredApprovers,gateGaps,documentComplete} from '../shared/workflow-v31.mjs';
 import {applyWorkflow,persistWorkflowApprovals,sanitizeNewWorkflow} from '../server/workflow-v31.mjs';
 import {standardDocuments} from '../shared/standard-documents.mjs';
@@ -60,6 +61,25 @@ test('a rework vote blocks transition until that role approves again',()=>{
  s=run(s,vote('G2','requester'),requester);s=run(s,vote('G2','team_leader'));assert.equal(s.journeyStep,4);
  s=run(s,vote('G2','owner'),owner);assert.equal(s.journeyStep,5);
 });
+test('team leader can request documented rework at every regular gate',()=>{
+ for(const [gate,step] of [['G2',4],['G3',6],['G4',8]]){
+  const s=run(gateState(step),{gateVote:{gate,role:'team_leader',decision:'REWORK',reason:`${gate} 근거 보완`}},leader);
+  assert.equal(s.journeyStep,step);
+  assert.equal(s.workflowApprovals[gate].team_leader.decision,'REWORK');
+  assert.equal(s.workflowApprovals[gate].team_leader.reason,`${gate} 근거 보완`);
+ }
+});
+test('journey keeps rich current, completed Gate and rejection visuals with a rework guide',async()=>{
+ const ui=await readFile(new URL('../app/workflow-v31.jsx',import.meta.url),'utf8');
+ const css=await readFile(new URL('../app/workflow-v31.css',import.meta.url),'utf8');
+ assert.match(ui,/workflow-current-marker/);
+ assert.match(ui,/rejected\?<X/);
+ assert.match(ui,/done\?<Check/);
+ assert.match(ui,/workflow-rework-banner/);
+ assert.match(css,/\.workflow-current-marker/);
+ assert.match(css,/\.workflow-v31-track \.gate\.done span/);
+ assert.match(css,/\.workflow-v31-track \.rejected span/);
+});
 test('basis edits reset current votes and retain history',()=>{
  let s=run(gateState(),vote('G2','requester'),requester);
  const docs=structuredClone(s.historicalDocuments);docs[3].documents.ARD.fields['overview.name']='변경';
@@ -70,8 +90,19 @@ test('basis edits reset current votes and retain history',()=>{
 test('no direct gate jump or fabricated approval; no future documents',()=>{
  assert.throws(()=>run(gateState(),{journeyStep:5}),/전원/);
  assert.throws(()=>run(gateState(),{workflowApprovals:{G2:{}}}),/서버/);
+ assert.throws(()=>run(gateState(),{markdownDocuments:{EVD:{phases:{development_evaluation:{version:99}}}}}),/서버/);
  assert.throws(()=>run(gateState(),{journeyStep:9}),/현재 단계/);
  assert.throws(()=>run(gateState(),{historicalDocuments:{9:{}}},developer),/이후/);
+});
+test('historical registration preserves the split design and development phase only',()=>{
+ const design=sanitizeNewWorkflow({historicalImport:true,journeyStep:5,deliveryPhase:'design'});
+ const development=sanitizeNewWorkflow({historicalImport:true,journeyStep:5,deliveryPhase:'development'});
+ const later=sanitizeNewWorkflow({historicalImport:true,journeyStep:7,deliveryPhase:'design'});
+ const newProject=sanitizeNewWorkflow({historicalImport:false,journeyStep:5,deliveryPhase:'development'});
+ assert.equal(design.deliveryPhase,'design');
+ assert.equal(development.deliveryPhase,'development');
+ assert.equal(later.deliveryPhase,'development');
+ assert.equal(newProject.deliveryPhase,undefined);
 });
 test('only requester records positive UAT count and evidence',()=>{
  assert.throws(()=>run(gateState(5),{uatConfirm:{cases:5,evidence:'확인'}},admin),/요구자/);

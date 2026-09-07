@@ -743,13 +743,18 @@ create table if not exists gallery_submissions (
   summary text not null,
   platform text not null
     check (platform in ('vibe_coding', 'copilot_studio', 'power_automate', 'power_apps', 'other')),
+  platforms jsonb not null
+    check (jsonb_typeof(platforms) = 'array' and jsonb_array_length(platforms) > 0 and platforms <@ '["vibe_coding","copilot_studio","power_automate","power_apps","other"]'::jsonb),
   artifact_kind text not null
     check (artifact_kind in ('agent', 'app', 'flow', 'automation', 'other')),
-  category text not null,
+  category text not null
+    check (category in ('자료검색','데이터분석','업무자동화','교육/가이드','기타')),
   access_url text not null,
   target_users text not null,
   data_classification text not null
     check (data_classification in ('public', 'internal', 'confidential', 'personal_data')),
+  data_classifications jsonb not null
+    check (jsonb_typeof(data_classifications) = 'array' and jsonb_array_length(data_classifications) > 0 and data_classifications <@ '["public","internal","confidential","personal_data"]'::jsonb),
   support_owner text not null,
   evidence jsonb not null default '[]'::jsonb
     check (jsonb_typeof(evidence) = 'array'),

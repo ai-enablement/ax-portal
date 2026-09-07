@@ -14,7 +14,7 @@ const css = await readFile(
 
 test("persists intake and only advances completed INT to FEA waiting", () => {
   assert.ok(page.includes("agent-portal-submitted-projects"));
-  assert.ok(page.includes('status: historical ? `${currentStage.title} 진행 중` : registration?.intakeDraftCompleted ? "타당성 평가 대기" : "요구 접수 작성 중"'));
+  assert.ok(page.includes('status: historical ? `${currentStageTitle} 진행 중` : registration?.intakeDraftCompleted ? "타당성 평가 대기" : "요구 접수 작성 중"'));
   assert.ok(page.includes('registration?.intakeDraftCompleted ? 1 : 0'));
   assert.ok(page.includes("onSubmit("));
   assert.ok(page.includes('ownerMode === "SELF"'));
@@ -159,6 +159,11 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes("과거 과제 이관"));
   assert.ok(page.includes("과거 과제 접수 날짜"));
   assert.ok(page.includes("과거 과제 현재 진행 단계"));
+  assert.ok(page.includes('{ value: "5:design", journeyStep: 5, deliveryPhase: "design" as const, title: "설계" }'));
+  assert.ok(page.includes('{ value: "5:development", journeyStep: 5, deliveryPhase: "development" as const, title: "개발·평가" }'));
+  assert.ok(page.includes('{ value: "7", journeyStep: 7, deliveryPhase: "development" as const, title: "배포·확산" }'));
+  assert.ok(!page.includes('title: "파일럿",'));
+  assert.ok(page.includes('if(current.journeyStep===5)setSelectedDeliveryPhase(current.deliveryPhase||"design")'));
   assert.ok(page.includes("documentsDeferred: historical"));
   assert.ok(page.includes("historicalBaselineStep: historical ? journeyStep : undefined"));
   assert.ok(page.includes("과거 과제 등록 · 내용 보완 시작"));
@@ -176,7 +181,7 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes('importedG3Record ? { "6": importedG3Record } : {}'));
   assert.ok(page.includes('importedG4Record ? { "8": importedG4Record } : {}'));
   assert.ok(page.includes("현재 단계 이전 Gate 자동 승인"));
-  assert.ok(page.includes("G2 개발 착수"));
+  assert.ok(page.includes("G2 개발 착수 승인"));
   assert.ok(page.includes("프로세스 진행 이력만 등록된 상태입니다."));
   assert.ok(page.includes("해당 단계에서 문서 추가"));
   assert.ok(!page.includes('min="2026-08-29"'));

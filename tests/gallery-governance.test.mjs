@@ -8,6 +8,8 @@ const schema = fs.readFileSync(
   new URL("../database/postgresql/agent_governance_portal_schema.sql", import.meta.url),
   "utf8",
 );
+const galleryOptions = fs.readFileSync(new URL("../shared/gallery-options.mjs", import.meta.url), "utf8");
+const galleryMigration = fs.readFileSync(new URL("../database/postgresql/20260907_gallery_multi_select.sql", import.meta.url), "utf8");
 
 test("Gallery supports both governed operation and personal build submissions", () => {
   assert.match(page, /source: "OPERATIONS"/);
@@ -26,6 +28,10 @@ test("Gallery submission covers the requested creation platforms", () => {
   ]) {
     assert.match(page, new RegExp(platform));
   }
+  for (const category of ["자료검색", "데이터분석", "업무자동화", "교육/가이드", "기타"]) assert.match(galleryOptions, new RegExp(category));
+  assert.match(page, /제작 플랫폼 \* · 복수 선택 가능/);
+  assert.match(page, /데이터 분류 \* · 복수 선택 가능/);
+  assert.match(page, /toggleGallerySelection/);
 });
 
 test("role actions separate user submission from AI enablement review", () => {
@@ -146,6 +152,10 @@ test("PostgreSQL schema persists submissions, reviews, and published entries", (
   assert.match(schema, /create table if not exists gallery_submissions/);
   assert.match(schema, /create table if not exists gallery_reviews/);
   assert.match(schema, /create table if not exists gallery_entries/);
+  assert.match(schema, /platforms jsonb not null/);
+  assert.match(schema, /data_classifications jsonb not null/);
+  assert.match(galleryMigration, /add column if not exists platforms jsonb/);
+  assert.match(galleryMigration, /category in \('자료검색','데이터분석','업무자동화','교육\/가이드','기타'\)/);
   assert.match(schema, /'general_user', 'GALLERY_SUBMIT'/);
   assert.match(schema, /'team_member',\s+'GALLERY_REVIEW'/);
   assert.match(schema, /'team_member',\s+'GALLERY_PROXY_SUBMIT'/);

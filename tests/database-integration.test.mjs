@@ -101,6 +101,8 @@ test("gallery database API uses parameterized queries and enforces role boundari
   assert.match(databaseApi, /Only the AI Enablement Team leader can publish/);
   assert.match(databaseApi, /actor\.app_role !== "admin"/);
   assert.match(databaseApi, /delete from agent_portal\.gallery_entries/);
+  assert.match(databaseApi, /platforms = coalesce\(\$12::jsonb, platforms\)/);
+  assert.match(databaseApi, /data_classifications = coalesce\(\$13::jsonb, data_classifications\)/);
   assert.match(databaseApi, /GALLERY_DELETE/);
 });
 

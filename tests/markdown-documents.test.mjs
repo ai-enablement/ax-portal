@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { validateMarkdownUpload, buildCumulativeMarkdown } from '../server/markdown-documents.mjs';
+import { validateMarkdownUpload, buildCumulativeMarkdown, allowedPhase, applyMarkdownCompletion } from '../server/markdown-documents.mjs';
 import { developmentEvdComplete, releaseEvdComplete, gateGaps } from '../shared/workflow-v31.mjs';
 
 test('Markdown uploads require a non-empty UTF-8 .md file within the size limit',()=>{
@@ -17,6 +17,20 @@ test('EVD completion is phase-specific and each gate remains independent',()=>{
   assert.ok(gateGaps('G4',base).some(v=>v.includes('EVD')));
   base.markdownDocuments.EVD.phases.deployment_rollout={version:2};
   assert.equal(releaseEvdComplete(base),true);assert.deepEqual(gateGaps('G4',base),[]);
+});
+
+test('G3 and G4 rework allow a new Markdown version and reopen approvals with history',()=>{
+  const g3={journeyStep:6,workflowApprovals:{G3:{team_leader:{decision:'REWORK',reason:'평가 근거 보완'}}},markdownDocuments:{}};
+  assert.equal(allowedPhase(g3,'EVD','development_evaluation'),'development_evaluation');
+  assert.equal(allowedPhase(g3,'DES','design'),'design');
+  const g3Completion=applyMarkdownCompletion(g3,'EVD',{id:'v2',lifecycle_phase:'development_evaluation',version_number:2,original_name:'evd-v2.md',author_name:'개발자',created_at:'2026-09-08T00:00:00Z'});
+  assert.equal(g3Completion.resetGate,'G3');
+  assert.deepEqual(g3Completion.state.workflowApprovals.G3,{});
+  assert.equal(g3Completion.state.workflowApprovalHistory[0].approvals.team_leader.reason,'평가 근거 보완');
+  const g4={journeyStep:8,workflowApprovals:{G4:{team_leader:{decision:'REWORK',reason:'파일럿 결과 보완'}}},markdownDocuments:{}};
+  assert.equal(allowedPhase(g4,'EVD','deployment_rollout'),'deployment_rollout');
+  assert.equal(allowedPhase(g4,'UG','deployment_rollout'),'deployment_rollout');
+  assert.equal(applyMarkdownCompletion(g4,'UG',{id:'u2',lifecycle_phase:'deployment_rollout',version_number:2,original_name:'ug-v2.md',author_name:'개발자',created_at:'2026-09-08T00:00:00Z'}).resetGate,'G4');
 });
 
 test('UI exposes version history and database DELETE accepts an empty body',async()=>{

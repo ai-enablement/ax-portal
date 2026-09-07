@@ -2,9 +2,11 @@ import {allApproved,requiredApprovers,eligibleRole,gateGaps,gateBasis,projectTra
 import {isImportInProgress} from '../shared/historical-import-policy.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
-const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor'];
+const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments'];
 export function sanitizeNewWorkflow(state){
+  const historicalStep=Number(state.journeyStep??0),historicalPhase=state.deliveryPhase;
   for(const key of [...serverKeys,'securityReviewerId','gateChecks','gateVote','uatConfirm','lowRouteAction','lowKnowledgeOwnerId','deliveryPhase'])delete state[key];
+  if(state.historicalImport&&historicalStep>=5)state.deliveryPhase=historicalStep===5&&historicalPhase==='design'?'design':'development';
   if(!state.historicalImport)for(const key of ['g1Resolution','g2Approvals','g2Approval','feaCompleted','historicalDocuments'])delete state[key];
   return state;
 }

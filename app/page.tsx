@@ -17,6 +17,7 @@ import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
 import {isLowRoute} from '../shared/workflow-v31.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
+import {GALLERY_CATEGORIES,GALLERY_PLATFORMS,GALLERY_DATA_CLASSES,gallerySelections,toggleGallerySelection} from "../shared/gallery-options.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
 import {
   ArrowRight,
@@ -364,18 +365,18 @@ const userJourney = [
     doc: "에이전트 요구사항 정의서[ARD]",
   },
   {
-    title: "개발 착수",
+    title: "개발 착수 승인",
     caption: "승인 대기",
     kind: "gate",
     code: "G2",
     doc: "요구자·개발 담당자·AI활성화팀장 3자 서명",
   },
   {
-    title: "설계·개발·평가",
+    title: "설계",
     caption: "예정",
     kind: "stage",
     display: 4,
-    doc: "DES · EVP · EVR",
+    doc: "에이전트 설계서[DES]",
   },
   {
     title: "배포 승인",
@@ -385,11 +386,11 @@ const userJourney = [
     doc: "평가 기준 전 항목 통과 · 금칙 위반 0건",
   },
   {
-    title: "파일럿",
+    title: "배포·확산",
     caption: "예정",
     kind: "stage",
     display: 5,
-    doc: "DEP · UG",
+    doc: "EVD 후속 버전 · UG(선택)",
   },
   {
     title: "확산 승인",
@@ -405,6 +406,20 @@ const userJourney = [
     display: 6,
     doc: "OPS · CHG",
   },
+];
+
+const historicalJourneyOptions = [
+  { value: "0", journeyStep: 0, title: "요구 접수" },
+  { value: "1", journeyStep: 1, title: "타당성 평가" },
+  { value: "2", journeyStep: 2, title: "G1 · 착수 승인" },
+  { value: "3", journeyStep: 3, title: "요구 정의" },
+  { value: "4", journeyStep: 4, title: "G2 · 개발 착수 승인" },
+  { value: "5:design", journeyStep: 5, deliveryPhase: "design" as const, title: "설계" },
+  { value: "5:development", journeyStep: 5, deliveryPhase: "development" as const, title: "개발·평가" },
+  { value: "6", journeyStep: 6, deliveryPhase: "development" as const, title: "G3 · 배포 승인" },
+  { value: "7", journeyStep: 7, deliveryPhase: "development" as const, title: "배포·확산" },
+  { value: "8", journeyStep: 8, deliveryPhase: "development" as const, title: "G4 · 확산 승인" },
+  { value: "9", journeyStep: 9, deliveryPhase: "development" as const, title: "운영·개선" },
 ];
 
 const memberAdditionalProjects: UserProject[] = [];
@@ -1336,6 +1351,7 @@ export default function Home() {
       projectOwnerEmail: string;
       requesterEmail: string;
       currentJourneyStep: number;
+      currentDeliveryPhase?: "design" | "development";
       developerIds: string[];
       clientRequestId?: string;
       g1Decision?: "GO" | "CONDITIONAL";
@@ -1353,6 +1369,12 @@ export default function Home() {
         : registration?.intakeDraftCompleted ? 1 : 0;
       const receivedDate = registrationReceivedDate;
       const currentStage = userJourney[journeyStep];
+      const deliveryPhase = historical && journeyStep >= 5
+        ? registration?.currentDeliveryPhase === "design" && journeyStep === 5 ? "design" : "development"
+        : undefined;
+      const currentStageTitle = historical && journeyStep === 5
+        ? deliveryPhase === "development" ? "개발·평가" : "설계"
+        : currentStage.title;
       const assignedDevelopers = historical
         ? teamAccounts.filter((account) =>
             (registration?.developerIds ?? []).includes(account.id),
@@ -1437,7 +1459,7 @@ export default function Home() {
         name: title,
         category,
         stage: Math.max(stageNumber, 1),
-        status: historical ? `${currentStage.title} 진행 중` : registration?.intakeDraftCompleted ? "타당성 평가 대기" : "요구 접수 작성 중",
+        status: historical ? `${currentStageTitle} 진행 중` : registration?.intakeDraftCompleted ? "타당성 평가 대기" : "요구 접수 작성 중",
         tone: "blue",
         progress: historical
           ? Math.round((journeyStep / (userJourney.length - 1)) * 100)
@@ -1446,14 +1468,15 @@ export default function Home() {
         handler: developerLabel,
         updated: historical ? receivedDate : "방금",
         nextAction: historical
-          ? `${currentStage.title} 후속 작업과 누락 문서 등록`
+          ? `${currentStageTitle} 후속 작업과 누락 문서 등록`
           : registration?.intakeDraftCompleted ? "AI 인터뷰로 타당성 평가 정보를 보완해 주세요" : "AI 인터뷰 또는 직접 작성으로 필수 정보를 보완해 주세요",
         description:
           historical
             ? "기존 과제를 현재 진행 단계 기준으로 이관했습니다. 단계별 문서는 담당자가 추후 등록합니다."
             : registration?.intakeDraftCompleted ? "요구 접수서[INT]가 완료되었습니다. AI 인터뷰로 FEA 초안을 작성하고 담당자가 확인합니다." : "신규 과제가 등록되었습니다. AI 인터뷰 또는 직접 작성으로 요구 접수서[INT]를 완성해 주세요.",
         journeyStep,
-        nextGate: historical ? currentStage.title : "G1 착수 승인",
+        deliveryPhase,
+        nextGate: historical ? currentStageTitle : "G1 착수 승인",
         teamOwner: developerLabel,
         dueDate: "FEA 작성 후 안내",
         requestedDate: answers[4] || "미입력",
@@ -6333,7 +6356,7 @@ function UserOperationsResult({
                   "구매요청 입력부터 승인선 확인과 담당자 알림까지 자동화합니다.",
                 platform: "Power Automate",
                 artifactType: "자동화 Flow",
-                category: "생산성",
+                category: "업무자동화",
                 targetUsers: "구매 요청자와 승인 담당자",
                 supportOwner: project.owner,
                 evidence: [
@@ -6885,8 +6908,11 @@ function UserDashboard({
   const hasProjects = projectItems.length > 0;
   const current = projectItems[selected] || projectItems[0] || emptyProject;
   useEffect(() => {
-    if(current.source === "database")setSelectedJourney(current.journeyStep);
-  }, [current.no,current.journeyStep,current.source]);
+    if(current.source === "database"){
+      setSelectedJourney(current.journeyStep);
+      if(current.journeyStep===5)setSelectedDeliveryPhase(current.deliveryPhase||"design");
+    }
+  }, [current.no,current.journeyStep,current.source,current.deliveryPhase]);
   useEffect(() => {
     // Synchronize the persisted intake conversation when the selected project changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -13395,7 +13421,7 @@ function OperationsImprovement({
                     "구매요청 입력부터 승인선 확인과 담당자 알림까지 자동화합니다.",
                   platform: "Power Automate",
                   artifactType: "자동화 Flow",
-                  category: "생산성",
+                  category: "업무자동화",
                   targetUsers: "구매 요청자와 승인 담당자",
                   supportOwner: current.owner,
                   evidence: [
@@ -13922,12 +13948,12 @@ function Gallery({
     projectNo: sourceDraft.projectNo || "",
     name: sourceDraft.name || "",
     description: sourceDraft.description || "",
-    platform: sourceDraft.platform || "Copilot Studio",
+    platform: gallerySelections(sourceDraft.platform || "Copilot Studio"),
     artifactType: sourceDraft.artifactType || "Agent",
-    category: sourceDraft.category || "생산성",
+    category: GALLERY_CATEGORIES.includes(sourceDraft.category || "") ? sourceDraft.category! : "기타",
     accessUrl: "",
     targetUsers: sourceDraft.targetUsers || "",
-    dataClass: "사내",
+    dataClass: ["사내"],
     supportOwner: sourceDraft.supportOwner || "",
     evidence: sourceDraft.evidence || [],
     submissionMode: "SELF" as "SELF" | "PROXY",
@@ -13984,12 +14010,12 @@ function Gallery({
       projectNo: "",
       name: "",
       description: "",
-      platform: "Copilot Studio",
+      platform: ["Copilot Studio"],
       artifactType: "Agent",
-      category: "생산성",
+      category: "자료검색",
       accessUrl: "",
       targetUsers: "",
-      dataClass: "사내",
+      dataClass: ["사내"],
       supportOwner: "",
       evidence: [],
       submissionMode: "SELF",
@@ -14016,12 +14042,12 @@ function Gallery({
       projectNo: application.projectNo || "",
       name: application.name,
       description: application.description,
-      platform: application.platform,
+      platform: gallerySelections(application.platform),
       artifactType: application.artifactType,
-      category: application.category,
+      category: GALLERY_CATEGORIES.includes(application.category) ? application.category : "기타",
       accessUrl: application.accessUrl,
       targetUsers: application.targetUsers,
-      dataClass: application.dataClass,
+      dataClass: gallerySelections(application.dataClass),
       supportOwner: application.supportOwner,
       evidence: application.evidence,
       submissionMode: proxyEvidence ? "PROXY" : "SELF",
@@ -14039,6 +14065,8 @@ function Gallery({
     if (
       !form.name.trim() ||
       !form.description.trim() ||
+      form.platform.length === 0 ||
+      form.dataClass.length === 0 ||
       !form.accessUrl.trim() ||
       !form.targetUsers.trim() ||
       !form.supportOwner.trim() ||
@@ -14056,12 +14084,12 @@ function Gallery({
       projectNo: form.projectNo || undefined,
       name: form.name.trim(),
       description: form.description.trim(),
-      platform: form.platform,
+      platform: form.platform.join(" · "),
       artifactType: form.artifactType,
       category: form.category,
       accessUrl: form.accessUrl.trim(),
       targetUsers: form.targetUsers.trim(),
-      dataClass: form.dataClass,
+      dataClass: form.dataClass.join(" · "),
       supportOwner: form.supportOwner.trim(),
       applicant: `${submitterProfile.name} · ${submitterProfile.roleLabel}`,
       submittedAt: "방금",
@@ -14334,12 +14362,12 @@ function Gallery({
                 </>
               )}
               <label><span>Agent 이름 *</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="업무를 알 수 있는 이름" /></label>
-              <label><span>제작 플랫폼 *</span><select value={form.platform} onChange={(event) => setForm({ ...form, platform: event.target.value })}><option>Vibe Coding</option><option>Copilot Studio</option><option>Power Automate</option><option>Power Apps</option><option>기타</option></select></label>
+              <fieldset className="gallery-multi-select wide"><legend>제작 플랫폼 * · 복수 선택 가능</legend><div>{GALLERY_PLATFORMS.map((platform) => <label key={platform}><input type="checkbox" checked={form.platform.includes(platform)} onChange={() => setForm({ ...form, platform: toggleGallerySelection(form.platform, platform) })} /><span>{platform}</span></label>)}</div></fieldset>
               <label><span>산출물 유형 *</span><select value={form.artifactType} onChange={(event) => setForm({ ...form, artifactType: event.target.value })}><option>Agent</option><option>업무 App</option><option>자동화 Flow</option><option>기타</option></select></label>
-              <label><span>업무 카테고리</span><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option>생산성</option><option>품질</option><option>경영지원</option><option>개발</option><option>IT</option></select></label>
+              <label><span>업무 카테고리 *</span><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{GALLERY_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
               <label className="wide"><span>무엇을 해주는 도구인가요? *</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="사용자와 해결하는 업무, 결과의 범위를 적어 주세요." /></label>
               <label><span>사용 대상 *</span><input value={form.targetUsers} onChange={(event) => setForm({ ...form, targetUsers: event.target.value })} placeholder="예: 구매팀 전원" /></label>
-              <label><span>데이터 분류</span><select value={form.dataClass} onChange={(event) => setForm({ ...form, dataClass: event.target.value })}><option>공개</option><option>사내</option><option>기밀</option><option>개인정보 포함</option></select></label>
+              <fieldset className="gallery-multi-select wide"><legend>데이터 분류 * · 복수 선택 가능</legend><div>{GALLERY_DATA_CLASSES.map((dataClass) => <label key={dataClass}><input type="checkbox" checked={form.dataClass.includes(dataClass)} onChange={() => setForm({ ...form, dataClass: toggleGallerySelection(form.dataClass, dataClass) })} /><span>{dataClass}</span></label>)}</div></fieldset>
               <label><span>운영·문의 담당 *</span><input value={form.supportOwner} onChange={(event) => setForm({ ...form, supportOwner: event.target.value })} placeholder="부서와 담당자" /></label>
               <label><span>사용/실행 링크 *</span><input value={form.accessUrl} onChange={(event) => setForm({ ...form, accessUrl: event.target.value })} placeholder="https://" /></label>
               {form.source === "OPERATIONS" && <div className="gallery-linked-evidence wide"><b>자동 연결된 승인 근거</b>{form.evidence.map((item) => <span key={item}><Check size={14} weight="bold" /> {item}</span>)}</div>}
@@ -14984,6 +15012,7 @@ function RequestWizard({
       projectOwnerEmail: string;
       requesterEmail: string;
       currentJourneyStep: number;
+      currentDeliveryPhase?: "design" | "development";
       developerIds: string[];
       clientRequestId?: string;
       g1Decision?: "GO" | "CONDITIONAL";
@@ -15022,6 +15051,7 @@ function RequestWizard({
   const [projectCategory, setProjectCategory] = useState<ProjectCategory>("개별 접수");
   const [receivedDate, setReceivedDate] = useState("");
   const [historicalJourneyStep, setHistoricalJourneyStep] = useState(0);
+  const [historicalDeliveryPhase, setHistoricalDeliveryPhase] = useState<"design" | "development">("design");
   const [historicalDeveloperIds, setHistoricalDeveloperIds] = useState<string[]>([]);
   const [historicalG1Decision, setHistoricalG1Decision] = useState<"GO" | "CONDITIONAL">("GO");
   const [historicalG1Reason, setHistoricalG1Reason] = useState("");
@@ -15102,6 +15132,7 @@ function RequestWizard({
         category: role === ACCOUNT_ROLES.user ? "개별 접수" : projectCategory,
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
+        currentDeliveryPhase: historicalJourneyStep >= 5 ? historicalDeliveryPhase : undefined,
         developerIds: historicalDeveloperIds,
         clientRequestId: submissionRequestId.current,
         g1Decision: requiresHistoricalG1Record ? historicalG1Decision : undefined,
@@ -15347,13 +15378,18 @@ function RequestWizard({
                     <label className="wizard-form-field">
                       <span>현재 진행 단계</span>
                       <select
-                        value={historicalJourneyStep}
-                        onChange={(event) => setHistoricalJourneyStep(Number(event.target.value))}
+                        value={historicalJourneyStep === 5 ? `5:${historicalDeliveryPhase}` : String(historicalJourneyStep)}
+                        onChange={(event) => {
+                          const selectedStage = historicalJourneyOptions.find((item) => item.value === event.target.value);
+                          if (!selectedStage) return;
+                          setHistoricalJourneyStep(selectedStage.journeyStep);
+                          setHistoricalDeliveryPhase(selectedStage.deliveryPhase || "design");
+                        }}
                         aria-label="과거 과제 현재 진행 단계"
                       >
-                        {userJourney.map((item, index) => (
-                          <option key={`${item.title}-${index}`} value={index}>
-                            {item.kind === "gate" ? `${item.code} · ` : ""}{item.title}
+                        {historicalJourneyOptions.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.title}
                           </option>
                         ))}
                       </select>
@@ -15385,12 +15421,12 @@ function RequestWizard({
                     <strong>현재 단계 이전 Gate 자동 승인</strong>
                     <p>선택한 현재 진행 단계에 따라 별도 판정값이 없는 Gate는 승인 완료 이력으로 등록됩니다.</p>
                     <div>
-                      <span><b>G2 개발 착수</b><small>현재 단계가 설계·개발·평가 이상이므로 승인 완료</small></span>
+                      <span><b>G2 개발 착수 승인</b><small>현재 단계가 설계 이상이므로 승인 완료</small></span>
                       <Pill tone="green">승인</Pill>
                     </div>
                     {historicalJourneyStep >= 7 && (
                       <div>
-                        <span><b>G3 배포 승인</b><small>현재 단계가 파일럿 이상이므로 승인 완료</small></span>
+                        <span><b>G3 배포 승인</b><small>현재 단계가 배포·확산 이상이므로 승인 완료</small></span>
                         <Pill tone="green">승인</Pill>
                       </div>
                     )}
