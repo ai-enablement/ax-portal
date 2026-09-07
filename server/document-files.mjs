@@ -20,10 +20,18 @@ export function validateUpload(name, bytes) {
 }
 export async function documentAccess(client, identity, code, write = false, documentType) {
   if (!identity?.email) return null;
-  const actor = (await client.query(`select id,app_role,display_name from agent_portal.users where lower(email)=lower($1) and is_active=true limit 1`,[identity.email])).rows[0];
-  if (!actor) return null;
   const project = (await client.query(`select id,requester_id,owner_id,current_stage_code from agent_portal.projects where project_code=$1 and deleted_at is null`,[code])).rows[0];
   if (!project) return null;
+  const developmentRole = identity.source === 'development' && identity.canSwitchRole ? identity.appRole : null;
+  const actor = developmentRole
+    ? (await client.query(`select u.id,u.app_role,u.display_name from agent_portal.users u
+        where u.app_role=$1 and u.is_active=true
+          and ($1=any($4::text[]) or u.id in ($2,$3) or exists (
+            select 1 from agent_portal.project_members pm where pm.project_id=$5 and pm.user_id=u.id and pm.ended_at is null
+          ))
+        order by case when u.id in ($2,$3) then 0 else 1 end,u.id limit 1`,[developmentRole,project.requester_id,project.owner_id,['admin','team_leader','team_member'],project.id])).rows[0]
+    : (await client.query(`select id,app_role,display_name from agent_portal.users where lower(email)=lower($1) and is_active=true limit 1`,[identity.email])).rows[0];
+  if (!actor) return null;
   const members = (await client.query(`select user_id,relationship from agent_portal.project_members where project_id=$1 and ended_at is null`,[project.id])).rows;
   const same = id => String(id) === String(actor.id);
   const assigned = members.filter(m => m.relationship === 'developer');

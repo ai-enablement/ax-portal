@@ -157,6 +157,21 @@ test("published Gallery cards open details and their registered access URL", () 
   assert.match(css, /\.gallery-agent-detail-modal/);
 });
 
+test("Gallery change requests require a reason and published records stay admin-managed", () => {
+  assert.match(page, /보완 요청 사유/);
+  assert.match(page, /보완 요청 사유를 입력해 주세요/);
+  assert.match(page, /selectedApplication\.status !== "PUBLISHED" && <button onClick=\{requestGalleryChanges\}>보완 요청<\/button>/);
+  assert.match(page, /Admin은 내용 수정과 삭제만 할 수 있으며/);
+  assert.match(css, /\.gallery-change-reason/);
+  assert.match(css, /\.gallery-published-lock/);
+});
+
+test("Gallery action buttons use semantic colors", () => {
+  assert.match(page, /className="gallery-open-agent"/);
+  assert.match(css, /\.agent-body > button\.gallery-open-agent/);
+  assert.match(css, /\.agent-body \.gallery-admin-actions button\.danger/);
+});
+
 test("PostgreSQL schema persists submissions, reviews, and published entries", () => {
   assert.match(schema, /create table if not exists gallery_submissions/);
   assert.match(schema, /create table if not exists gallery_reviews/);

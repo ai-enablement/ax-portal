@@ -37,6 +37,7 @@ test('UI exposes version history and database DELETE accepts an empty body',asyn
   const workspace=await readFile(new URL('../app/markdown-document-workspace.tsx',import.meta.url),'utf8');
   const route=await readFile(new URL('../app/api/database/[...path]/route.js',import.meta.url),'utf8');
   assert.match(workspace,/전체 버전 이력/);assert.match(workspace,/MarkdownView/);assert.match(workspace,/portal-agent-saved/);
+  assert.match(workspace,/x-portal-dev-role/);
   assert.match(route,/\['GET', 'HEAD', 'DELETE'\]/);
 });
 

@@ -65,6 +65,14 @@ const ACCOUNT_ROLES = {
 } as const;
 
 type AccountRole = (typeof ACCOUNT_ROLES)[keyof typeof ACCOUNT_ROLES];
+const ACCOUNT_APP_ROLES: Record<AccountRole, "team_leader" | "team_member" | "bts" | "bp_solution" | "general_user" | "admin"> = {
+  [ACCOUNT_ROLES.leader]: "team_leader",
+  [ACCOUNT_ROLES.member]: "team_member",
+  [ACCOUNT_ROLES.bts]: "bts",
+  [ACCOUNT_ROLES.bpSolution]: "bp_solution",
+  [ACCOUNT_ROLES.user]: "general_user",
+  [ACCOUNT_ROLES.admin]: "admin",
+};
 type PortalIdentity = {
   email: string;
   displayName: string;
@@ -1981,7 +1989,7 @@ function Dashboard({
   openGovernance,
   notify,
 }: {
-  role: string;
+  role: AccountRole;
   identity: PortalIdentity | null;
   projectNo?: string;
   teamAccounts: TeamAccount[];
@@ -6855,7 +6863,7 @@ function UserDashboard({
   notify,
   openGallerySubmission,
 }: {
-  role: string;
+  role: AccountRole;
   identity: PortalIdentity | null;
   projectNo?: string;
   teamAccounts: TeamAccount[];
@@ -7356,6 +7364,14 @@ function UserDashboard({
               title="아직 진행할 수 없는 단계입니다."
               description={`${userJourney[effectiveJourneyStep].title} 단계를 완료하면 다음 단계의 작성과 승인이 활성화됩니다.`}
             />
+          ) : (current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney) ? (
+            <MarkdownDocumentWorkspace
+              key={`${deferredDocumentKey}:markdown:${selectedDeliveryPhase}`}
+              project={{no:current.no,name:current.name}}
+              phase={selectedJourney === 7 ? "deployment_rollout" : selectedDeliveryPhase === "development" ? "development_evaluation" : "design"}
+              canEdit={canEditSelectedHistoricalDocument}
+              devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined}
+            />
           ) : current.documentsDeferred &&
             selectedJourney !== 0 &&
             selectedJourney <= effectiveJourneyStep &&
@@ -7434,13 +7450,6 @@ function UserDashboard({
                 });
                 notify(record.status === "complete" ? record.decision === "REJECTED" ? "팀장 G1 Drop 판정을 확정했습니다." : "Admin이 개발 담당자 배정을 확정했습니다." : "팀장 G1 판정을 확정했습니다. Admin 개발 담당자 배정 대기로 이동합니다.");
               }}
-            />
-          ) : (current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney) ? (
-            <MarkdownDocumentWorkspace
-              key={`${deferredDocumentKey}:markdown:${selectedDeliveryPhase}`}
-              project={{no:current.no,name:current.name}}
-              phase={selectedJourney === 7 ? "deployment_rollout" : selectedDeliveryPhase === "development" ? "development_evaluation" : "design"}
-              canEdit={canEditSelectedHistoricalDocument}
             />
           ) : (current.historicalImport || current.source === "database") && [3, 9].includes(selectedJourney) ? (
             <StandardDocumentWorkspace
@@ -13938,6 +13947,7 @@ function Gallery({
   const [editingApplicationId, setEditingApplicationId] = useState<string | null>(null);
   const [catalogCategory, setCatalogCategory] = useState("전체");
   const [catalogDetailId, setCatalogDetailId] = useState<string | null>(null);
+  const [reviewReason, setReviewReason] = useState("");
   const [selectedApplicationId, setSelectedApplicationId] = useState(
     applications.find((application) => application.status !== "PUBLISHED")?.id ||
       applications[0]?.id ||
@@ -14160,6 +14170,15 @@ function Gallery({
     onUpdateApplication(selectedApplication.id, { status, reviewerNote });
     notify(message);
   };
+  const requestGalleryChanges = () => {
+    const reason = reviewReason.trim();
+    if (!reason) {
+      notify("보완 요청 사유를 입력해 주세요.");
+      return;
+    }
+    review("CHANGES_REQUESTED", "신청자에게 보완 요청 사유를 전달했습니다.", reason);
+    setReviewReason("");
+  };
 
   return (
     <div className="page gallery-page">
@@ -14273,7 +14292,7 @@ function Gallery({
                 <div className="agent-body">
                   <Pill>{a.category}</Pill><h3>{a.name}</h3><p>{a.desc}</p>
                   <div className="agent-stats"><span>★ {a.rating}</span><span>사용자 {a.users}</span><span>검토 완료</span></div>
-                  <button onClick={(event) => { event.stopPropagation(); openAgent(a.name, a.accessUrl); }}>Agent 보기 <span>→</span></button>
+                  <button className="gallery-open-agent" onClick={(event) => { event.stopPropagation(); openAgent(a.name, a.accessUrl); }}>Agent 보기 <span>→</span></button>
                   {role === ACCOUNT_ROLES.admin && a.applicationId && (
                     <div className="gallery-admin-actions" onClick={(event) => event.stopPropagation()}>
                       <button
@@ -14337,7 +14356,7 @@ function Gallery({
               </div>
             )}
             {applications.map((application) => (
-              <button key={application.id} className={selectedApplication?.id === application.id ? "active" : ""} onClick={() => setSelectedApplicationId(application.id)}>
+              <button key={application.id} className={selectedApplication?.id === application.id ? "active" : ""} onClick={() => { setSelectedApplicationId(application.id); setReviewReason(application.status === "CHANGES_REQUESTED" ? application.reviewerNote || "" : ""); }}>
                 <span><Pill tone={application.source === "OPERATIONS" ? "green" : "blue"}>{application.source === "OPERATIONS" ? "운영" : "개인"}</Pill><small>{application.id}</small></span>
                 <b>{application.name}</b><em>{application.platform} · {statusLabel[application.status]}</em>
               </button>
@@ -14359,12 +14378,22 @@ function Gallery({
               <section className="gallery-evidence"><h3>제출 근거</h3>{selectedApplication.evidence.map((item) => <span key={item}><CheckCircle size={15} weight="fill" /> {item}</span>)}</section>
               <section className="gallery-review-checklist"><h3>AI 활성화팀 검토</h3><label><input type="checkbox" defaultChecked /> 접근 링크와 사용자 권한 확인</label><label><input type="checkbox" defaultChecked={selectedApplication.source === "OPERATIONS"} /> 데이터 분류와 입력 금지 정보 확인</label><label><input type="checkbox" /> 한계 고지·오류 신고·운영 담당 확인</label></section>
               {selectedApplication.reviewerNote && <div className="gallery-review-note"><b>검토 의견</b><p>{selectedApplication.reviewerNote}</p></div>}
+              {selectedApplication.status !== "PUBLISHED" && (
+                <label className="gallery-change-reason">
+                  <span>보완 요청 사유</span>
+                  <textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="신청자가 수정해야 할 내용과 이유를 구체적으로 입력해 주세요." />
+                  <small>보완 요청 시 이 내용이 신청 내역에 함께 전달됩니다.</small>
+                </label>
+              )}
+              {selectedApplication.status === "PUBLISHED" && (
+                <div className="gallery-published-lock"><CheckCircle size={17} weight="fill" /><span><b>최종 승인된 Agent입니다.</b><small>Admin은 내용 수정과 삭제만 할 수 있으며, 보완 요청이나 재상신 상태로 되돌릴 수 없습니다.</small></span></div>
+              )}
               <footer>
                 {role === ACCOUNT_ROLES.admin && <button onClick={() => startResubmission(selectedApplication)}><PencilSimple size={14} /> Agent 수정</button>}
                 {role === ACCOUNT_ROLES.admin && <button className="danger" onClick={() => onDeleteApplication(selectedApplication.id)}><Trash size={14} /> Agent 삭제</button>}
-                <button onClick={() => review("CHANGES_REQUESTED", "신청자에게 보완 요청을 전송했습니다.", "한계 고지와 오류 신고 경로를 보완한 뒤 재상신해 주세요.")}>보완 요청</button>
-                {!isLeader && <button className="secondary" onClick={() => review("RECOMMENDED", "팀장에게 등록 권고를 전달했습니다.", "동료 검토 완료 · 최종 등록 권고")}>검토 완료 · 등록 권고</button>}
-                {isLeader && <button className="primary" onClick={() => review("PUBLISHED", "최종 승인되어 Agent Gallery에 등록되었습니다.", "AI 활성화팀장 최종 등록 승인")}>최종 승인 · Gallery 등록</button>}
+                {selectedApplication.status !== "PUBLISHED" && <button onClick={requestGalleryChanges}>보완 요청</button>}
+                {selectedApplication.status !== "PUBLISHED" && !isLeader && <button className="secondary" onClick={() => review("RECOMMENDED", "팀장에게 등록 권고를 전달했습니다.", "동료 검토 완료 · 최종 등록 권고")}>검토 완료 · 등록 권고</button>}
+                {selectedApplication.status !== "PUBLISHED" && isLeader && <button className="primary" onClick={() => review("PUBLISHED", "최종 승인되어 Agent Gallery에 등록되었습니다.", "AI 활성화팀장 최종 등록 승인")}>최종 승인 · Gallery 등록</button>}
               </footer>
             </article>
           )}

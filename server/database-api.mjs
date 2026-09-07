@@ -338,15 +338,24 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
   if (!databaseStatus) throw new Error("Invalid review status.");
   return withTransaction(async (client) => {
     const existing = await client.query(
-      `select id, agent_name, submitted_by from agent_portal.gallery_submissions
+      `select id, agent_name, submitted_by, submission_status from agent_portal.gallery_submissions
         where submission_number = $1 for update`,
       [submissionNumber],
     );
     if (!existing.rows[0]) return { status: 404, body: { error: "Submission not found." } };
     const actor = await findUser(client, identity);
     if (!actor) return { status: 403, body: { error: "Active portal user not found." } };
+    if (existing.rows[0].submission_status === "published" && (actor.app_role !== "admin" || databaseStatus !== "published")) {
+      return { status: 403, body: { error: "Published Gallery agents can only be edited in place or deleted by an admin." } };
+    }
+    if (databaseStatus === "changes_requested" && !String(body.reviewerNote || "").trim()) {
+      return { status: 400, body: { error: "A change-request reason is required." } };
+    }
 
     if (databaseStatus === "submitted") {
+      if (actor.app_role !== "admin" && existing.rows[0].submission_status !== "changes_requested") {
+        return { status: 403, body: { error: "Only change-requested applications can be resubmitted." } };
+      }
       if (actor.app_role !== "admin" && (actor.app_role !== "general_user" || actor.id !== existing.rows[0].submitted_by)) {
         return { status: 403, body: { error: "Only the original applicant can resubmit." } };
       }

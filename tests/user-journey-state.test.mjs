@@ -230,6 +230,14 @@ test("opens deferred documents in the selected project and restores intake value
   assert.ok(!page.includes('onClick={() => setView(current.route)}>\n                  해당 단계에서 문서 추가'));
 });
 
+test("database Markdown history takes priority over the historical missing-document placeholder", () => {
+  const markdownBranch = page.indexOf('(current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney)');
+  const deferredPlaceholder = page.indexOf('current.documentsDeferred &&', markdownBranch);
+  assert.ok(markdownBranch >= 0);
+  assert.ok(deferredPlaceholder > markdownBranch);
+  assert.match(page, /devRole=\{identity\?\.canSwitchRole \? ACCOUNT_APP_ROLES\[role\] : undefined\}/);
+});
+
 test("starts historical FEA as a real draft and lets contributors complete intake", () => {
   assert.ok(page.includes("deferredDocumentOpened || Boolean(deferredDocumentRecord)"));
   assert.ok(page.includes("editable && (!ready || forceDraft)"));

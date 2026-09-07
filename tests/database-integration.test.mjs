@@ -103,6 +103,9 @@ test("gallery database API uses parameterized queries and enforces role boundari
   assert.match(databaseApi, /delete from agent_portal\.gallery_entries/);
   assert.match(databaseApi, /platforms = coalesce\(\$12::jsonb, platforms\)/);
   assert.match(databaseApi, /data_classifications = coalesce\(\$13::jsonb, data_classifications\)/);
+  assert.match(databaseApi, /submission_status === "published"/);
+  assert.match(databaseApi, /databaseStatus !== "published"/);
+  assert.match(databaseApi, /A change-request reason is required/);
   assert.match(databaseApi, /GALLERY_DELETE/);
 });
 

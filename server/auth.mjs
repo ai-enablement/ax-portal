@@ -6,6 +6,7 @@ const UI_ROLES = {
   general_user: "일반 User",
   admin: "admin",
 };
+const DEVELOPMENT_ROLES = new Set(Object.keys(UI_ROLES));
 
 function readHeader(headers, name) {
   if (!headers) return "";
@@ -91,7 +92,11 @@ export function resolvePortalIdentity(headers, env = process.env) {
     const developmentEmail = (
       env.PORTAL_DEV_USER_EMAIL || "kim.hw@changshininc.com"
     ).toLowerCase();
-    const developmentRole = resolveBootstrapRole(developmentEmail, env);
+    const canSwitchRole = env.PORTAL_DEV_ROLE_SWITCHER === "true";
+    const requestedRole = readHeader(headers, "x-portal-dev-role");
+    const developmentRole = canSwitchRole && DEVELOPMENT_ROLES.has(requestedRole)
+      ? requestedRole
+      : resolveBootstrapRole(developmentEmail, env);
     return {
       email: developmentEmail,
       displayName: env.PORTAL_DEV_USER_NAME || "김현우",
@@ -100,7 +105,7 @@ export function resolvePortalIdentity(headers, env = process.env) {
       accountRole: UI_ROLES[developmentRole],
       entraRoles: [],
       source: "development",
-      canSwitchRole: env.PORTAL_DEV_ROLE_SWITCHER === "true",
+      canSwitchRole,
     };
   }
 

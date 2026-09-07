@@ -82,6 +82,18 @@ test("fails closed without Easy Auth identity in production", () => {
   assert.equal(resolvePortalIdentity(new Headers(), { NODE_ENV: "production" }), null);
 });
 
+test("local role switching can select a document-view role but production ignores the development header", () => {
+  const headers = new Headers({ "x-portal-dev-role": "admin" });
+  const development = resolvePortalIdentity(headers, {
+    NODE_ENV: "development",
+    PORTAL_DEV_ROLE_SWITCHER: "true",
+    PORTAL_DEV_USER_EMAIL: "developer@changshininc.com",
+  });
+  assert.equal(development.appRole, "admin");
+  assert.equal(development.canSwitchRole, true);
+  assert.equal(resolvePortalIdentity(headers, { NODE_ENV: "production", PORTAL_DEV_ROLE_SWITCHER: "true" }), null);
+});
+
 test("client and database routes use the server-authenticated identity", async () => {
   const [page, sessionRoute, databaseRoute] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),

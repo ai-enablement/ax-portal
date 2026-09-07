@@ -1490,6 +1490,70 @@ button {
   margin-top: 5px;
   color: #826431;
 }
+.gallery-change-reason {
+  display: block;
+  margin: 14px 20px 0;
+  padding: 14px;
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+.gallery-change-reason > span,
+.gallery-change-reason > small {
+  display: block;
+}
+.gallery-change-reason > span {
+  margin-bottom: 7px;
+  color: #374458;
+  font-size: 12px;
+  font-weight: 800;
+}
+.gallery-change-reason textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  border: 1px solid #d6dde7;
+  border-radius: 7px;
+  padding: 10px 11px;
+  background: #fff;
+  color: #263448;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.gallery-change-reason > small {
+  margin-top: 6px;
+  color: #7b8593;
+  font-size: 10px;
+}
+.gallery-published-lock {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 14px 20px 0;
+  padding: 13px 14px;
+  border: 1px solid #bfe3ce;
+  border-radius: 8px;
+  background: #edf9f2;
+  color: #16734d;
+}
+.gallery-published-lock svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.gallery-published-lock b,
+.gallery-published-lock small {
+  display: block;
+}
+.gallery-published-lock b {
+  font-size: 12px;
+}
+.gallery-published-lock small {
+  margin-top: 3px;
+  color: #47715e;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .gallery-review-detail > footer {
   display: flex;
   justify-content: flex-end;
@@ -4230,6 +4294,29 @@ body {
 }
 .agent-body button:hover {
   background: #44403c;
+}
+.agent-body > button.gallery-open-agent {
+  background: #173f70;
+  color: #fff;
+}
+.agent-body > button.gallery-open-agent:hover {
+  background: #24598f;
+}
+.agent-body .gallery-admin-actions button {
+  border: 1px solid #cfd8e5;
+  background: #fff;
+  color: #285889;
+}
+.agent-body .gallery-admin-actions button:hover {
+  background: #f1f6fb;
+}
+.agent-body .gallery-admin-actions button.danger {
+  border-color: #f1b7b2;
+  background: #fff7f6;
+  color: #b42318;
+}
+.agent-body .gallery-admin-actions button.danger:hover {
+  background: #feecea;
 }
 .admin-tabs {
   border-color: #e7e5e4;
