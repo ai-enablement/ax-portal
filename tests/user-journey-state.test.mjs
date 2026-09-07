@@ -12,9 +12,10 @@ const css = await readFile(
   "utf8",
 );
 
-test("persists submitted intake and advances to FEA waiting", () => {
+test("persists intake and only advances completed INT to FEA waiting", () => {
   assert.ok(page.includes("agent-portal-submitted-projects"));
-  assert.ok(page.includes('status: historical ? `${currentStage.title} 진행 중` : "타당성 평가 대기"'));
+  assert.ok(page.includes('status: historical ? `${currentStage.title} 진행 중` : registration?.intakeDraftCompleted ? "타당성 평가 대기" : "요구 접수 작성 중"'));
+  assert.ok(page.includes('registration?.intakeDraftCompleted ? 1 : 0'));
   assert.ok(page.includes("onSubmit("));
   assert.ok(page.includes('ownerMode === "SELF"'));
   assert.ok(page.includes("과제를 책임질 Owner를 선택해 주세요."));

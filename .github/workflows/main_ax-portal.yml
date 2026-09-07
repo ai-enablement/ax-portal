@@ -52,6 +52,16 @@ jobs:
       contents: read #This is required for actions/checkout
 
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install isolated AI preflight dependencies
+        run: npm ci --ignore-scripts
+
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
@@ -64,6 +74,9 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5F7C278FB4FB48ADABD0F81AE9CE1DD9 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_CDBA0EB0AD4045C092409F6919E2846C }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_4EBB9B2D96B142DDB91AF3F2B6E9D067 }}
+
+      - name: Live Azure INT and FEA preflight
+        run: node scripts/azure-intake-preflight.mjs
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp

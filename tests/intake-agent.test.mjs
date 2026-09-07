@@ -64,15 +64,15 @@ test('manual changes during generation and review are never silently overwritten
 });
 test('re-asking has bounded counts and held slots accept later answers',()=>{
   let state=blank();
-  for(let i=0;i<2;i++) state=acceptModelTurn(state,{reply:'수치 확인 필요',target:'fea.countPerMonth',question:'월 몇 건인가요?',proposals:[]},'모릅니다').state;
-  assert.ok(state.agentSession.held.includes('fea.countPerMonth'));
-  state=acceptModelTurn(state,{reply:'확인',target:'',question:'',proposals:[{key:'fea.countPerMonth',value:'20',kind:'extracted',evidence:'월 20건'}]},'월 20건').state;
-  state=applyProposals(state,['fea.countPerMonth'],'1').state;
-  assert.ok(!state.agentSession.held.includes('fea.countPerMonth'));
+  for(let i=0;i<2;i++) state=acceptModelTurn(state,{reply:'수치 확인 필요',target:'int.countPerMonth',question:'월 몇 건인가요?',proposals:[]},'모릅니다').state;
+  assert.ok(state.agentSession.held.includes('int.countPerMonth'));
+  state=acceptModelTurn(state,{reply:'확인',target:'',question:'',proposals:[{key:'int.countPerMonth',value:'20',kind:'extracted',evidence:'월 20건'}]},'월 20건').state;
+  state=applyProposals(state,['int.countPerMonth'],'1').state;
+  assert.ok(!state.agentSession.held.includes('int.countPerMonth'));
 });
 test('classification and ROI are deterministic with confirmed inputs, not model verdicts',()=>{
-  const state=blank();for(const [key,value] of Object.entries({countPerMonth:'20',asIsMinutes:'45',people:'2',toBeMinutes:'15',writeExec:'false',sensitive:'false',damageFinancial:'false',scope:'TEAM',autonomy:'L2',agentType:'혼합형'})) {setField(state,`fea.${key}`,value);state.agentSession.confirmed[`fea.${key}`]={value};}
-  assert.equal(deterministicSummary(state).roi.monthlyHours,20);assert.equal(deterministicSummary(state).classification.label,'상');
+  const state=blank();for(const [key,value] of Object.entries({countPerMonth:'20',asIsMinutes:'45',people:'2',savedMinutes:'30',effectBasis:'실측한 처리 시간 차이',businessIdentity:'false',writeExec:'false',sensitive:'false',damageFinancial:'false',scope:'TEAM',autonomy:'L2',agentType:'혼합형'})) {setField(state,`fea.${key}`,value);state.agentSession.confirmed[`fea.${key}`]={value};}
+  assert.equal(deterministicSummary(state).roi.monthlyHours,10);assert.equal(deterministicSummary(state).classification.label,'상');
   assert.equal(state.g1Resolution,undefined);
 });
 test('sensitive input is blocked before persistence and transmission',()=>{
@@ -82,5 +82,5 @@ test('portal wiring guards server state, revisions and completion; original data
   const api=await readFile(new URL('../server/database-api.mjs',import.meta.url),'utf8');
   assert.match(api,/changedKeys.includes\("agentSession"\)/);assert.match(api,/body.agentRevision/);assert.match(api,/missingFields\(merged/);
   const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<IntakeAgentPanel/);assert.match(page,/portal-agent-saved/);
-  assert.equal(AGENT_FIELDS.filter(f=>f.key.startsWith('fea.fitNotes')).length,5);
+  assert.equal(AGENT_FIELDS.filter(f=>f.key.startsWith('fea.fitNotes')).length,0);
 });

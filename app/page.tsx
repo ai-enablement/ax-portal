@@ -10,6 +10,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
+import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
+import { intakeRequired, feaRequired } from '../shared/intake-standard.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
@@ -206,7 +208,8 @@ type UserProject = {
   checkpoints: string;
   route: View;
   intakeAnswers?: string[];
-  intakeDetails?: {currentProcess?: string; failureImpact?: string};
+  intakeStandardVersion?: string;
+  intakeDetails?: {department?: string; currentProcess?: string; failureImpact?: string; performer?: string; countPerMonth?: string; asIsMinutes?: string; people?: string; quantityBasis?: string; timingReason?: string};
   agentSession?: {revision?: number};
   requester?: string;
   projectOwner?: string;
@@ -243,6 +246,16 @@ type UserProject = {
   intakeDraftCompleted?: boolean;
   feaCompleted?: boolean;
   feaDraft?: {
+    standardVersion?: string;
+    businessIdentity?: boolean;
+    maximumDamage?: string;
+    expectedEffect?: string;
+    savedMinutes?: string;
+    effectBasis?: string;
+    recommendation?: string;
+    targetDate?: string;
+    decisionReason?: string;
+    dropAlternative?: string;
     summary: string;
     alternatives: string[];
     conclusion: string;
@@ -1293,6 +1306,9 @@ export default function Home() {
     requester: string,
     registration?: {
       historical: boolean;
+      intakeDetails?: UserProject["intakeDetails"];
+      feaDraft?: UserProject["feaDraft"];
+      intakeDraftCompleted?: boolean;
       category: ProjectCategory;
       receivedDate: string;
       ownerMode: "SELF" | "OTHER";
@@ -1313,7 +1329,7 @@ export default function Home() {
           : registration?.category || "개별 접수";
       const journeyStep = historical
         ? Math.max(0, Math.min(userJourney.length - 1, registration?.currentJourneyStep ?? 0))
-        : 1;
+        : registration?.intakeDraftCompleted ? 1 : 0;
       const receivedDate = registrationReceivedDate;
       const currentStage = userJourney[journeyStep];
       const assignedDevelopers = historical
@@ -1400,21 +1416,21 @@ export default function Home() {
         name: title,
         category,
         stage: Math.max(stageNumber, 1),
-        status: historical ? `${currentStage.title} 진행 중` : "타당성 평가 대기",
+        status: historical ? `${currentStage.title} 진행 중` : registration?.intakeDraftCompleted ? "타당성 평가 대기" : "요구 접수 작성 중",
         tone: "blue",
         progress: historical
           ? Math.round((journeyStep / (userJourney.length - 1)) * 100)
-          : 22,
+          : registration?.intakeDraftCompleted ? 22 : 10,
         owner: projectOwner,
         handler: developerLabel,
         updated: historical ? receivedDate : "방금",
         nextAction: historical
           ? `${currentStage.title} 후속 작업과 누락 문서 등록`
-          : "타당성 평가 결과를 기다리고 있습니다",
+          : registration?.intakeDraftCompleted ? "AI 인터뷰로 타당성 평가 정보를 보완해 주세요" : "AI 인터뷰 또는 직접 작성으로 필수 정보를 보완해 주세요",
         description:
           historical
             ? "기존 과제를 현재 진행 단계 기준으로 이관했습니다. 단계별 문서는 담당자가 추후 등록합니다."
-            : "에이전트 요구 접수서[INT] 제출이 완료되어 AI활성화팀의 타당성 평가를 기다리고 있습니다.",
+            : registration?.intakeDraftCompleted ? "요구 접수서[INT]가 완료되었습니다. AI 인터뷰로 FEA 초안을 작성하고 담당자가 확인합니다." : "신규 과제가 등록되었습니다. AI 인터뷰 또는 직접 작성으로 요구 접수서[INT]를 완성해 주세요.",
         journeyStep,
         nextGate: historical ? currentStage.title : "G1 착수 승인",
         teamOwner: developerLabel,
@@ -1422,10 +1438,14 @@ export default function Home() {
         requestedDate: answers[4] || "미입력",
         receivedDate,
         committedDate: "G2 승인 후 확정",
-        scheduleState: historical ? "과거 과제 이관" : "타당성 평가 대기",
+        scheduleState: historical ? "과거 과제 이관" : registration?.intakeDraftCompleted ? "타당성 평가 대기" : "요구 접수 작성 중",
         checkpoints: historical ? `${journeyStep}/${userJourney.length - 1}` : "3/11",
         route,
         intakeAnswers: answers,
+        intakeStandardVersion: "3.0",
+        intakeDetails: registration?.intakeDetails || {},
+        feaDraft: registration?.feaDraft,
+        intakeDraftCompleted: registration?.intakeDraftCompleted || false,
         requester,
         projectOwner,
         projectOwnerEmail: registration?.projectOwnerEmail,
@@ -1469,9 +1489,9 @@ export default function Home() {
     notify(
       registration?.historical
         ? "과거 Agent 과제를 최소 정보로 등록했습니다. 현재 단계 이전 문서는 미등록 상태로 남겨 담당자가 추후 작성할 수 있습니다."
-        : role === ACCOUNT_ROLES.user
-        ? "에이전트 요구 접수서[INT]가 제출되었습니다. 신규 과제가 타당성 평가 대기로 등록되었습니다."
-        : "요청자를 대신해 에이전트 요구 접수서[INT]를 등록했습니다. 신규 과제가 타당성 평가 대기로 이동했습니다.",
+        : registration?.intakeDraftCompleted
+        ? "요구 접수서[INT]가 완료되었습니다. AI 인터뷰로 타당성 평가 정보를 보완할 수 있습니다."
+        : "신규 과제가 등록되었습니다. AI 인터뷰 또는 직접 작성으로 INT·FEA 정보를 보완해 주세요.",
     );
     return true;
   };
@@ -3108,6 +3128,25 @@ const travelFeasibility = {
 };
 
 function HomeFeasibilityEditor({
+  project,
+  role,
+  blankStart = false,
+  readOnly = false,
+  onSave,
+  onComplete,
+}: {
+  project: UserProject;
+  role: string;
+  blankStart?: boolean;
+  readOnly?: boolean;
+  onSave?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
+  onComplete?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
+}) {
+  if (project.feaCompleted && !project.feaDraft?.standardVersion && readOnly) return <HomeFeasibilityEditorLegacy project={project} role={role} readOnly={readOnly} onSave={onSave} onComplete={onComplete} />;
+  return <FeaV3Editor project={project} role={role} readOnly={readOnly} onSave={onSave} onComplete={onComplete} />;
+}
+
+function HomeFeasibilityEditorLegacy({
   project,
   role,
   blankStart = false,
@@ -6520,66 +6559,19 @@ function UserOperationsResult({
   );
 }
 
-function HistoricalIntakeEditor({
-  project,
-  onSave,
-  onCancel,
-}: {
+function HistoricalIntakeEditor({project,onSave,onCancel}: {
   project: UserProject;
-  onSave: (answers: string[]) => void;
-  onCancel: () => void;
+  onSave: (answers:string[],details:NonNullable<UserProject["intakeDetails"]>,complete:boolean)=>void;
+  onCancel:()=>void;
 }) {
-  const [answers, setAnswers] = useState(() =>
-    Array.from({ length: 5 }, (_, index) => project.intakeAnswers?.[index] || ""),
-  );
-  const fields = [
-    ["해결하려는 업무 문제", "기존에 파악된 문제와 추가로 확인한 내용을 입력하세요."],
-    ["현재 처리 방식과 업무량", "발생 건수, 처리 시간, 담당 인원 등을 입력하세요."],
-    ["사용 자료 · 데이터", "업무에 사용하는 시스템, 문서와 데이터 출처를 입력하세요."],
-    ["기대 결과", "목표 처리 방식, 시간 절감과 품질 목표를 입력하세요."],
-  ];
-  const updateAnswer = (index: number, value: string) =>
-    setAnswers((items) =>
-      items.map((item, itemIndex) => (itemIndex === index ? value : item)),
-    );
-  return (
-    <section className="historical-intake-editor" aria-label="과거 과제 요구 접수서 보완 작성">
-      <header>
-        <div>
-          <small>INT · {project.no} · 보완 작성</small>
-          <h3>에이전트 요구 접수서</h3>
-          <p>이관할 때 입력한 내용을 불러왔습니다. 확인된 항목부터 보완해 저장할 수 있습니다.</p>
-        </div>
-        <Pill tone="orange">보완 중</Pill>
-      </header>
-      <div className="historical-intake-editor-grid">
-        {fields.map(([label, placeholder], index) => (
-          <label key={label}>
-            <span>{index + 1}. {label}</span>
-            <textarea
-              value={answers[index]}
-              onChange={(event) => updateAnswer(index, event.target.value)}
-              placeholder={placeholder}
-            />
-          </label>
-        ))}
-        <label>
-          <span>5. 희망 완료일</span>
-          <input
-            type="date"
-            value={answers[4]}
-            onChange={(event) => updateAnswer(4, event.target.value)}
-          />
-        </label>
-      </div>
-      <footer>
-        <span>{answers.filter((answer) => answer.trim()).length}/5 항목 입력</span>
-        <button className="secondary" onClick={onCancel}>취소</button>
-        <button className="primary" onClick={() => onSave(answers)}>보완 내용 저장</button>
-      </footer>
-    </section>
-  );
+  const [answers,setAnswers]=useState(Array.from({length:5},(_,i)=>project.intakeAnswers?.[i]||""));
+  const [details,setDetails]=useState(project.intakeDetails||{});
+  const [message,setMessage]=useState("");
+  const canComplete=!canBackfillDocument(project,0)&&project.journeyStep===0;
+  const save=(complete:boolean)=>{const gaps=intakeRequired({...project,intakeAnswers:answers,intakeDetails:details});if(complete&&gaps.length){setMessage("필수 항목을 확인해 주세요: "+gaps.map(f=>f.label).join(", "));return;}onSave(answers,details,complete);};
+  return <section className="historical-intake-editor"><header><div><small>INT · {project.no} · v3.0</small><h3>에이전트 요구 접수서</h3><p>확인된 내용부터 저장합니다. 작성 완료 시 필수 항목을 확인합니다.</p></div></header><IntakeV3Fields answers={answers} details={details} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setDetails(d);}}/>{message&&<p role="alert">{message}</p>}<footer><button className="secondary" onClick={onCancel}>취소</button><button className="primary" onClick={()=>save(false)}>보완 내용 저장</button>{canComplete&&<button className="primary" onClick={()=>save(true)}>INT 작성 완료</button>}</footer></section>;
 }
+
 
 type HistoricalDocumentRecord = NonNullable<UserProject["historicalDocuments"]>[string];
 
@@ -6963,7 +6955,7 @@ function UserDashboard({
   const intakeComplete =
     hasProjects &&
     !current.documentsDeferred &&
-    (current.journeyStep > 0 || current.intakeDraftCompleted);
+    (current.intakeStandardVersion==='3.0' ? Boolean(current.intakeDraftCompleted) : current.journeyStep > 0 || current.intakeDraftCompleted);
   const effectiveJourneyStep = !hasProjects
     ? -1
     : current.historicalImport ? current.journeyStep
@@ -7496,16 +7488,19 @@ function UserDashboard({
                 notify(`${selectedOutput.title} ${record.status === "complete" ? "작성을 완료" : "초안을 저장"}했습니다.`);
               }}
             />
-          ) : selectedJourney === 0 && current.historicalImport && historicalIntakeEditing ? (
+          ) : selectedJourney === 0 && historicalIntakeEditing ? (
             <HistoricalIntakeEditor
               key={current.no}
               project={current}
               onCancel={() => setHistoricalIntakeEditing(false)}
-              onSave={(answers) => {
+              onSave={(answers,details,complete) => {
                 onUpdateProject(current.no, {
                   intakeAnswers: answers,
+                  intakeDetails: details,
+                  intakeStandardVersion: "3.0",
+                  ...(complete ? {intakeDraftCompleted:true} : {}),
                   requestedDate: answers[4] || "미입력",
-                  ...(!importInProgress && effectiveJourneyStep === 0 ? {
+                  ...(complete && current.historicalImport && !importInProgress && effectiveJourneyStep === 0 ? {
                     journeyStep: 1,
                     status: `${userJourney[1].title} 진행 중`,
                   } : {}),
@@ -7535,7 +7530,7 @@ function UserDashboard({
                         : "작성 중 · 자동 저장"}
                   </Pill>
                 </header>
-                <div className="intake-document-body">
+                {current.intakeStandardVersion==='3.0' ? <IntakeV3Summary project={current}/> : <div className="intake-document-body">
                   <section>
                     <b>1. 기본 정보</b>
                     <dl>
@@ -7625,6 +7620,7 @@ function UserDashboard({
                     </dl>
                   </section>
                 </div>
+                }
                 {!intakeComplete && !current.historicalImport && (
                   <footer>
                     <button onClick={() => onUpdateProject(current.no, { intakeDraftCompleted: true })}>
@@ -7633,7 +7629,7 @@ function UserDashboard({
                     </button>
                   </footer>
                 )}
-                {current.historicalImport && canAuthorHistoricalDocument && (
+                {(current.historicalImport ? canAuthorHistoricalDocument : current.source==='database' && !current.feaCompleted) && (
                   <footer>
                     <span>이관 당시 입력한 내용을 유지한 채 보완할 수 있습니다.</span>
                     <button onClick={() => setHistoricalIntakeEditing(true)}>
@@ -14998,6 +14994,9 @@ function RequestWizard({
     requester: string,
     registration?: {
       historical: boolean;
+      intakeDetails?: UserProject["intakeDetails"];
+      feaDraft?: UserProject["feaDraft"];
+      intakeDraftCompleted?: boolean;
       category: ProjectCategory;
       receivedDate: string;
       ownerMode: "SELF" | "OTHER";
@@ -15016,24 +15015,26 @@ function RequestWizard({
     "업무 문제",
     "업무량",
     "자료 · 데이터",
-    "기대 결과",
+    "실패 시 피해",
     "희망 완료일",
   ];
   const prompts = [
     "먼저 어떤 업무가 가장 힘들거나 실수가 잦은지 알려주세요.",
     "좋습니다. 이 업무가 얼마나 자주 발생하고 시간이 얼마나 드는지 확인할게요.",
     "현재 업무에 사용하는 시스템과 참고 자료를 알려주세요.",
-    "원하는 결과와 잘못됐을 때의 위험을 확인할게요.",
+    "잘못 처리되면 어떤 피해가 생기나요? 영향을 구체적으로 알려주세요.",
     "마지막으로 언제까지 개발되었으면 좋겠는지 희망 완료일을 알려주세요. G2에서 실현 가능한 프로젝트 마감일로 확정합니다.",
   ];
   const examples = [
     "예: 개발 BOM 변경 시 관련 부품과 품질 문서를 수작업으로 확인합니다.",
     "예: 월 20건, 건당 45분, 담당자 2명이 처리합니다.",
     "예: SAP BOM, Excel 변경 목록, QMS 품질 문서를 사용합니다.",
-    "예: 영향 범위를 10분 안에 파악하고 누락 위험을 줄이고 싶습니다.",
+    "예: 검토 누락 시 재작업 비용과 납기 지연이 발생합니다.",
     "2026-10-30",
   ];
   const [answers, setAnswers] = useState(["", "", "", "", ""]);
+  const [intakeDetails,setIntakeDetails]=useState<NonNullable<UserProject["intakeDetails"]>>({});
+  const [historicalFea,setHistoricalFea]=useState<UserProject["feaDraft"]>();
   const [submitted, setSubmitted] = useState(false);
   const [writingMode, setWritingMode] = useState<"CHAT" | "FORM">("CHAT");
   const [registrationMode, setRegistrationMode] = useState<"NEW" | "HISTORICAL">("NEW");
@@ -15067,12 +15068,12 @@ function RequestWizard({
           .filter(Boolean)
           .join(" · ")
       : ""
-    : identity?.email ? `${identity.displayName || "요구자"} · 현업 · ${identity.email}` : "";
+    : identity?.email ? `${identity.displayName || "요구자"} · ${requesterDepartment.trim() || "부서 미입력"} · ${identity.email}` : "";
   const requesterOwnerLabel = isAiTeam
     ? requesterName.trim() && requesterDepartment.trim()
       ? `${requesterName.trim()} · ${requesterDepartment.trim()}`
       : ""
-    : `${identity?.displayName || "요구자"} · 현업`;
+    : `${identity?.displayName || "요구자"} · ${requesterDepartment.trim() || "부서 미입력"}`;
   const resolvedProjectOwner =
     ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
   const resolvedRequesterEmail = normalizeContactEmail(isAiTeam ? requesterEmail : identity?.email);
@@ -15080,10 +15081,7 @@ function RequestWizard({
   const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim() || suggestedRequestTitle;
-  const updateAnswer = (value: string) =>
-    setAnswers((items) =>
-      items.map((item, index) => (index === step - 1 ? value : item)),
-    );
+  const updateAnswer = (value: string) => { if(step===4)setIntakeDetails(d=>({...d,failureImpact:value}));else setAnswers(items=>items.map((item,index)=>index===step-1?value:item)); };
   const updateAnswerAt = (targetIndex: number, value: string) =>
     setAnswers((items) =>
       items.map((item, index) => (index === targetIndex ? value : item)),
@@ -15095,6 +15093,7 @@ function RequestWizard({
           (historicalG1Decision === "GO" || historicalG1Reason.trim()))) &&
       resolvedProjectOwner &&
       contactsValid &&
+      (isHistorical || Boolean(requesterDepartment.trim())) &&
       resolvedRequester &&
       requestTitle.trim() &&
       !submitted,
@@ -15109,6 +15108,9 @@ function RequestWizard({
       resolvedRequester,
       {
         historical: isHistorical,
+        intakeDetails: {...intakeDetails,department:requesterDepartment.trim()},
+        feaDraft: isHistorical ? historicalFea : undefined,
+        intakeDraftCompleted: !isHistorical && writingMode==="FORM" && intakeRequired({intakeAnswers:answers,intakeDetails}).length===0,
         ownerMode,
         projectOwnerEmail: resolvedOwnerEmail,
         requesterEmail: resolvedRequesterEmail,
@@ -15256,7 +15258,7 @@ function RequestWizard({
               </div>
             </header>
             <div className="wizard-chat-history">
-              {answers.slice(0, step - 1).map((answer, index) => (
+              {[...answers.slice(0,3),intakeDetails.failureImpact||"",answers[4]].slice(0, step - 1).map((answer, index) => (
                 <div className="wizard-answer-pair" key={`${answer}-${index}`}>
                   <div className="chat-message agent">
                     <small>요구 접수 Agent</small>
@@ -15274,7 +15276,7 @@ function RequestWizard({
               </div>
             </div>
             <div className="wizard-chat-input">
-              {step === 5 ? (
+              {step===2 ? <IntakeV3Fields answers={answers} details={intakeDetails} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setIntakeDetails(d);}} /> : step === 5 ? (
                 <div className="wizard-final-fields">
                   {isAiTeam && (
                     <fieldset className="wizard-owner-field wizard-requester-field">
@@ -15285,6 +15287,7 @@ function RequestWizard({
                       <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" />
                     </fieldset>
                   )}
+                  {!isAiTeam&&<label className="wizard-form-field"><span>요구자 소속 부서 · 필수</span><input value={requesterDepartment} onChange={e=>setRequesterDepartment(e.target.value)}/></label>}
                   <label className="wizard-date-input">
                     <span>희망 완료일</span>
                     <input
@@ -15296,11 +15299,12 @@ function RequestWizard({
                       onChange={(event) => updateAnswer(event.target.value)}
                     />
                   </label>
+                  <label className="wizard-form-field"><span>희망 시점의 이유</span><textarea value={intakeDetails.timingReason||""} onChange={e=>setIntakeDetails(d=>({...d,timingReason:e.target.value}))}/></label>
                   <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={setProjectOwnerEmail} optionalEmail={isHistorical} name="project-owner-mode" />
                 </div>
               ) : (
                 <textarea
-                  value={answers[step - 1]}
+                  value={step===4?intakeDetails.failureImpact||"":answers[step - 1]}
                   onChange={(event) => updateAnswer(event.target.value)}
                   placeholder={examples[step - 1]}
                 />
@@ -15447,29 +15451,9 @@ function RequestWizard({
                     )}
                   </fieldset>
                 )}
-                {labels.slice(0, 4).map((label, index) => (
-                  <label className="wizard-form-field wide" key={label}>
-                    <span>{index + 1}. {label}</span>
-                    <textarea
-                      value={answers[index]}
-                      onChange={(event) => updateAnswerAt(index, event.target.value)}
-                      placeholder={examples[index]}
-                      aria-label={`${label} 작성`}
-                    />
-                    {isHistorical && <small>선택 입력 · 담당자가 나중에 보완할 수 있습니다.</small>}
-                  </label>
-                ))}
-                <label className="wizard-date-input">
-                  <span>5. 희망 완료일</span>
-                  <input
-                    type="date"
-                    value={answers[4]}
-                    onInput={(event) => updateAnswerAt(4, (event.target as HTMLInputElement).value)}
-                    onChange={(event) => updateAnswerAt(4, event.target.value)}
-                    aria-label="희망 완료일"
-                  />
-                  {isHistorical && <small>선택 입력 · 과거 날짜도 등록할 수 있습니다.</small>}
-                </label>
+                {!isAiTeam&&<label className="wizard-form-field wide"><span>요구자 소속 부서 · 필수</span><input value={requesterDepartment} onChange={e=>setRequesterDepartment(e.target.value)}/></label>}
+                <div className="wide"><IntakeV3Fields answers={answers} details={intakeDetails} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setIntakeDetails(d);}} /></div>
+                {isHistorical&&<details className="wide"><summary>타당성 평가서[FEA] v3.0 입력 · 선택 / 나중에 보완 가능</summary><FeaV3Fields project={{intakeAnswers:answers,intakeDetails}} draft={historicalFea||{standardVersion:"3.0"}} onChange={setHistoricalFea}/></details>}
                 <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={setProjectOwnerEmail} optionalEmail={isHistorical} name="form-project-owner-mode" />
               </div>
               <footer className="wizard-form-actions">

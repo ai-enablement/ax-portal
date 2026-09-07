@@ -2,7 +2,9 @@ import { getPool, withTransaction } from "./db/pool.mjs";
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 import { persistStandardDocuments } from "./standard-documents.mjs";
 import {applyImportLifecycle, assertImportTransition} from "../shared/historical-import-policy.mjs";
-import {missingFields} from "../shared/intake-agent.mjs";
+import {missingFields, AGENT_FIELDS, fieldValue} from "../shared/intake-agent.mjs";
+import {completionGaps,persistIntakeFeaV3} from './intake-standard.mjs';
+import {intakeRequired} from '../shared/intake-standard.mjs';
 import {ProjectContactError, registrationContacts, resolveContactUser} from "./project-contacts.mjs";
 
 const statusToDatabase = {
@@ -857,6 +859,7 @@ async function syncProjectDevelopers(client, projectId, developerIds, actorId) {
 }
 
 export async function syncProjectArtifacts(client, project, state, actorId, previousState = {}) {
+  await persistIntakeFeaV3(client,project,state,actorId,previousState);
   const documentMap = { 0: "INT", 1: "FEA", 3: "ARD", 5: "DES", 7: "DEP", 9: "OPS" };
   for (const [index, record] of Object.entries(state.historicalDocuments || {})) {
     if (JSON.stringify(record) === JSON.stringify(previousState.historicalDocuments?.[index])) continue;
@@ -865,6 +868,7 @@ export async function syncProjectArtifacts(client, project, state, actorId, prev
       continue;
     }
     const documentType = documentMap[index];
+    if((documentType==='INT'&&state.intakeStandardVersion==='3.0')||(documentType==='FEA'&&state.feaDraft?.standardVersion==='3.0'))continue;
     if (!documentType || !record || typeof record !== "object") continue;
     const document = (await client.query(
       `insert into agent_portal.documents
@@ -905,7 +909,7 @@ export async function syncProjectArtifacts(client, project, state, actorId, prev
       [project.id, gateCode, finalDecision === "conditional_go" ? "conditional" : finalDecision === "rejected" || finalDecision === "drop" ? "rejected" : "approved", finalDecision, record.reason || null, actorId],
     );
   }
-  if ((state.feaDraft || state.feaCompleted) &&
+  if (state.feaDraft?.standardVersion !== '3.0' && (state.feaDraft || state.feaCompleted) &&
     (JSON.stringify(state.feaDraft) !== JSON.stringify(previousState.feaDraft) || state.feaCompleted !== previousState.feaCompleted)) {
     const document = (await client.query(
       `insert into agent_portal.documents
@@ -1015,7 +1019,10 @@ async function createOperationalProject(body, identity) {
       }
     }
     const contacts = registrationContacts(submittedState, actor);
-    if (actor.app_role === "general_user") submittedState.requester = `${actor.display_name} · ${actor.email}`;
+    submittedState.intakeStandardVersion='3.0';
+    if(!submittedState.historicalImport && submittedState.intakeDraftCompleted && intakeRequired(submittedState).length)return {status:400,body:{error:'INT 필수 항목을 입력한 뒤 작성 완료해 주세요.'}};
+    if(!submittedState.historicalImport)submittedState.journeyStep=submittedState.intakeDraftCompleted?1:0;
+    if (actor.app_role === "general_user") submittedState.requester = [actor.display_name,submittedState.intakeDetails?.department,actor.email].filter(Boolean).join(' · ');
     Object.assign(submittedState, contacts);
     const catalog = await ensurePortalCatalog(client);
     const receivedDate = validIsoDate(submittedState.receivedDate) || new Date().toISOString().slice(0, 10);
@@ -1113,7 +1120,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};
     }
     if (previousState.historicalImport && changedDocuments.some(key=>Number(key)>portalJourneyStep(project.current_stage_code))) return {status:400,body:{error:"현재 단계 이후 문서는 아직 작성할 수 없습니다."}};
-    const generalUserKeys = new Set(["intakeAnswers", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval"]);
+    const generalUserKeys = new Set(["intakeAnswers", "intakeDetails", "intakeStandardVersion", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval"]);
     if (actor.app_role === "general_user" && changedKeys.some((key) => !generalUserKeys.has(key))) {
       return { status: 403, body: { error: "General users can only update their own intake content." } };
     }
@@ -1135,6 +1142,22 @@ async function updateOperationalProject(projectCode, body, identity) {
       if (changedGate) return { status: 403, body: { error: "Gate decisions require team leader or admin permission." } };
     }
     const merged = assertPortalProjectState({ ...applyImportLifecycle(previousState,changes,portalJourneyStep(project.current_stage_code)), no: projectCode, source: "database" });
+    if(changes.intakeDetails || changes.intakeAnswers)merged.intakeStandardVersion='3.0';
+    if(merged.agentSession && (changes.intakeDetails || changes.intakeAnswers || changes.feaDraft)) {
+      merged.agentSession=structuredClone(merged.agentSession);
+      merged.agentSession.confirmed||={};
+      for(const field of AGENT_FIELDS) {
+        const [,name]=field.key.split('.');
+        const supplied=field.key.startsWith('int.') ? (/^\d$/.test(name)?changes.intakeAnswers?.[Number(name)]!==undefined:changes.intakeDetails?.[name]!==undefined) : changes.feaDraft?.[name]!==undefined;
+        if(supplied)merged.agentSession.confirmed[field.key]={value:fieldValue(merged,field.key),kind:'manual',actorId:String(actor.id),at:new Date().toISOString()};
+      }
+    }
+    const v3Gaps=completionGaps(previousState,changes,merged);
+    if(v3Gaps.length)return {status:400,body:{error:`필수 항목을 확인해 주세요: ${v3Gaps.map(f=>f.label).join(', ')}`}};
+    if(!previousState.historicalImport) {
+      if(changes.feaCompleted===true && Number(previousState.journeyStep)<=1){merged.journeyStep=2;merged.intakeDraftCompleted=true;}
+      else if(changes.intakeDraftCompleted===true && Number(previousState.journeyStep)===0)merged.journeyStep=1;
+    }
     if (!previousState.historicalImport && previousState.agentSession) {
       const required = changes.feaCompleted ? missingFields(merged) : changes.intakeDraftCompleted ? missingFields(merged,"int.") : [];
       if (required.length) return {status:400,body:{error:`미확보 항목은 완료 처리할 수 없습니다: ${required.map(f=>f.label).join(", ")}`}};
