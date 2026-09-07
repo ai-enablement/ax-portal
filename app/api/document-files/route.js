@@ -1,10 +1,11 @@
 import { resolvePortalIdentity } from '../../../server/auth.mjs';
 import { uploadDocumentFile } from '../../../server/document-files.mjs';
+import { isSameOriginRequest } from '../../../server/request-origin.mjs';
 export const runtime='nodejs';
 export async function POST(request) {
   const identity=resolvePortalIdentity(request.headers);
   if(!identity) return Response.json({error:'로그인이 필요합니다.'},{status:401});
-  if(request.headers.get('origin') && request.headers.get('origin')!==new URL(request.url).origin) return Response.json({error:'Invalid origin.'},{status:403});
+  if(!isSameOriginRequest(request)) return Response.json({error:'Invalid origin.'},{status:403});
   try {
     // Bound the stream before parsing multipart; Content-Length alone is untrusted.
     const reader=request.body?.getReader(); const chunks=[]; let size=0;

@@ -1,5 +1,6 @@
 import { resolvePortalIdentity } from '../../../server/auth.mjs';
 import { listMarkdownDocuments, uploadMarkdownDocument } from '../../../server/markdown-documents.mjs';
+import { isSameOriginRequest } from '../../../server/request-origin.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ export async function GET(request) {
 export async function POST(request) {
   const identity = resolvePortalIdentity(request.headers);
   if (!identity) return Response.json({ error: '로그인이 필요합니다.' }, { status: 401 });
-  if (request.headers.get('origin') && request.headers.get('origin') !== new URL(request.url).origin) return Response.json({ error: 'Invalid origin.' }, { status: 403 });
+  if (!isSameOriginRequest(request)) return Response.json({ error: 'Invalid origin.' }, { status: 403 });
   try {
     const reader = request.body?.getReader(); const chunks = []; let size = 0;
     if (!reader) return Response.json({ error: '파일을 선택해 주세요.' }, { status: 400 });
