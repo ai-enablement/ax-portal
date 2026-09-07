@@ -1,6 +1,33 @@
 import { standardDocuments, stageDocumentCodes, sectionHasContent } from "../shared/standard-documents.mjs";
 import { asBlocks, validateContent } from "../shared/document-content.mjs";
 
+const standardDocumentStage = Object.fromEntries(
+  Object.entries(stageDocumentCodes).flatMap(([stage, codes]) => codes.map((code) => [code, stage])),
+);
+
+// The normalized document tables are the source of truth for authored content.
+// Merge their current versions over the workflow snapshot used by the home screen.
+export function mergeStoredStandardDocuments(state = {}, storedDocuments = {}) {
+  const result = structuredClone(state && typeof state === "object" && !Array.isArray(state) ? state : {});
+  result.historicalDocuments ||= {};
+  for (const [code, payload] of Object.entries(storedDocuments || {})) {
+    const stage = standardDocumentStage[code];
+    if (!stage || payload?.schemaVersion !== 2 || !payload.fields || typeof payload.fields !== "object" || Array.isArray(payload.fields)) continue;
+    const current = result.historicalDocuments[stage] || {};
+    result.historicalDocuments[stage] = {
+      ...current,
+      schemaVersion: 2,
+      documents: { ...(current.documents || {}), [code]: payload },
+    };
+  }
+  for (const [stage, codes] of Object.entries(stageDocumentCodes)) {
+    const record = result.historicalDocuments[stage];
+    if (!record?.documents) continue;
+    record.status = codes.every((code) => record.documents[code]?.status === "complete") ? "complete" : "draft";
+  }
+  return result;
+}
+
 // Called inside the project transaction, after the project row has been locked.
 // Keep each standard document and its versions separate; never replace a legacy version.
 export async function persistStandardDocuments(client, project, stage, record, actorId, previousRecord) {

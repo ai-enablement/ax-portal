@@ -71,6 +71,7 @@ test("project history dates have explicit types and helper functions have a fixe
   const schema = await read("database/postgresql/agent_governance_portal_schema.sql");
   const migration = await read("database/postgresql/20260903_fix_project_function_search_path.sql");
   assert.ok(api.includes("values ($1,$2,$3,$4::timestamptz,case when $3='completed' then $4::timestamptz else null end,$5,$6)"));
+  assert.ok(api.includes("jsonb_build_object('stageCode',$4::text)"));
   for (const name of ["next_project_code", "change_project_stage"]) {
     assert.match(schema, new RegExp(`create or replace function ${name}\\([\\s\\S]*?language plpgsql\\s+set search_path = pg_catalog, agent_portal, pg_temp`));
     assert.ok(migration.includes(`alter function agent_portal.${name}(`));

@@ -14,13 +14,16 @@
 .standard-document-workspace .chat-message small { font-size: 12px !important; }
 .standard-document-workspace .intake-chat header small { font-size: 12px !important; }
 .standard-document-workspace .ard-section-nav { display: block; }
+.standard-document-workspace .ard-section-item { border-bottom: 1px solid #e2e8f1; }
 .standard-document-workspace .ard-section-nav button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 18px; text-align: left; min-height: 72px; background: #fff; border: 0; border-bottom: 1px solid #e2e8f1; color: #183554; }
+.standard-document-workspace .ard-section-item > button { border-bottom: 0; }
 .standard-document-workspace .ard-section-nav button.active { background: #edf4ff; }
 .standard-document-workspace .ard-section-nav button > div { flex: 1; min-width: 0; }
 .standard-document-workspace .ard-section-nav b { display: block; font-size: 14px; }
 .standard-document-workspace .ard-section-nav p { margin: 4px 0 0; font-size: 12px; }
 .standard-document-workspace .ard-section-nav em { font-size: 11px; font-style: normal; white-space: nowrap; }
-.standard-document-workspace .standard-active-section { padding: 20px; display: grid; gap: 18px; }
+.standard-document-workspace .section-check.started { color: #2563a6; background: #eaf3ff; }
+.standard-document-workspace .standard-active-section { padding: 20px; display: grid; gap: 18px; background: #f8fbff; border-top: 1px solid #d7e5f5; }
 .standard-document-workspace .ard-section-head { display: flex; gap: 12px; }
 .standard-document-workspace .ard-section-head small { display: block; }
 .standard-field { display: grid; gap: 8px; font-size: 13px; color: #233f60; }

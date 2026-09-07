@@ -1,6 +1,6 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
-import { persistStandardDocuments } from "./standard-documents.mjs";
+import { mergeStoredStandardDocuments, persistStandardDocuments } from "./standard-documents.mjs";
 import {applyImportLifecycle, assertImportTransition} from "../shared/historical-import-policy.mjs";
 import {missingFields, AGENT_FIELDS, fieldValue} from "../shared/intake-agent.mjs";
 import {completionGaps,persistIntakeFeaV3} from './intake-standard.mjs';
@@ -757,9 +757,10 @@ async function listRoleHistory(identity) {
 }
 
 function portalProjectFromRow(row) {
-  const runtime = row.runtimeState && typeof row.runtimeState === "object" && !Array.isArray(row.runtimeState)
+  const snapshot = row.runtimeState && typeof row.runtimeState === "object" && !Array.isArray(row.runtimeState)
     ? row.runtimeState
     : {};
+  const runtime = mergeStoredStandardDocuments(snapshot, row.standardDocuments);
   const journeyStep = portalJourneyStep(row.stageCode);
   const developers = Array.isArray(row.developers) ? row.developers : [];
   const receivedDate = row.createdAt ? new Date(row.createdAt).toISOString().slice(0, 10) : "";
@@ -804,6 +805,15 @@ async function listOperationalProjects(identity) {
             requester.display_name as "requesterName", owner_user.display_name as "ownerName",
             owner_user.email as "ownerEmail", requester.email as "requesterEmail",
             ir.raw_answers->'portalState' as "runtimeState",
+            coalesce((
+              select jsonb_object_agg(d.document_type, dv.structured_content)
+                from agent_portal.documents d
+                join agent_portal.document_versions dv
+                  on dv.document_id=d.id and dv.version_number=d.current_version
+               where d.project_id=p.id
+                 and d.document_type in ('ARD','OPS','CHG')
+                 and dv.structured_content->>'schemaVersion'='2'
+            ),'{}'::jsonb) as "standardDocuments",
             (select jsonb_build_object('id',u.id::text,'name',u.display_name,'at',d.updated_at)
                from agent_portal.documents d join agent_portal.users u on u.id=d.author_id
               where d.project_id=p.id and d.document_type='FEA' limit 1) as "feaAuthor",
@@ -1245,8 +1255,8 @@ async function deleteOperationalProject(projectCode, identity) {
     await client.query(`update agent_portal.projects set deleted_at=now(),deleted_by=$2,updated_at=now() where id=$1`, [project.id, actor.id]);
     await client.query(
       `insert into agent_portal.audit_logs
-         (actor_user_id,project_id,action_code,entity_type,entity_id,before_data)
-       values ($1,$2,'PROJECT_DELETE','project',$3,jsonb_build_object('stageCode',$4))`,
+       (actor_user_id,project_id,action_code,entity_type,entity_id,before_data)
+       values ($1,$2,'PROJECT_DELETE','project',$3,jsonb_build_object('stageCode',$4::text))`,
       [actor.id, project.id, projectCode, project.current_stage_code],
     );
     return { status: 200, body: { deleted: true, projectCode } };
