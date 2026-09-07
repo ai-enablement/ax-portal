@@ -36,3 +36,14 @@ test('live Azure INT/FEA v3 structured interview and human-confirmed extraction'
   assert.equal(confirmed.g1Resolution,undefined);
   console.log('Live Azure interview passed; durationMs='+String(Date.now()-started));
 });
+
+test('live Azure FEA generates summary without requesting writer Go or Drop',{skip:process.env.PORTAL_TEST_AZURE_AI!=='1',timeout:75000},async()=>{
+  const state={journeyStep:1,intakeStandardVersion:'3.0',intakeAnswers:['문서를 수동 대조하며 누락 여부를 확인합니다.','','','',''],intakeDetails:{performer:'가상 품질 담당자',countPerMonth:'20',asIsMinutes:'30',people:'2',failureImpact:'문서 재작업'},agentSession:{confirmed:{},proposals:[],held:[],attempts:{}}};
+  const message='확인한 접수서를 바탕으로 요구 요약을 작성하고 FEA 보완 질문을 해 주세요.';
+  const result=await generateTurn(state,message);
+  const next=acceptModelTurn(state,result,message).state;
+  assert.ok(next.feaDraft?.summary?.trim(),'AI summary must be populated');
+  assert.ok(next.agentSession.generatedSummary);
+  assert.ok(!result.proposals.some(p=>/recommendation|decisionReason|dropAlternative/.test(p.key)));
+  assert.equal(next.g1Resolution,undefined);
+});

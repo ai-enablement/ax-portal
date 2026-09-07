@@ -30,7 +30,8 @@ export async function generateTurn(state,message,{env=process.env,fetcher=fetch}
   const context={fields:AGENT_FIELDS,values:Object.fromEntries(AGENT_FIELDS.map(f=>[f.key,fieldValue(state,f.key)])),held:state.agentSession?.held||[],attempts:state.agentSession?.attempts||{},missing:progress(state).missing,computed:deterministicSummary(state),history:(state.intakeMessages||[]).slice(-16).map(m=>({role:m.role,text:m.text})),message};
   if(!safeMessage(JSON.stringify(context))) throw new AgentError(400,'기존 접수 내용에 민감정보가 감지되었습니다. 직접 입력 화면에서 제거한 뒤 다시 시도해 주세요.');
   let response;
-  try {response=await fetcher(config.url,{method:'POST',redirect:'error',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json','api-key':config.key},body:JSON.stringify({model:config.deployment,messages:[{role:'system',content:SYSTEM_PROMPT},{role:'user',content:JSON.stringify(context)}],max_completion_tokens:6000,response_format:{type:'json_schema',json_schema:{name:'intake_feasibility_turn',strict:true,schema:OUTPUT_SCHEMA}}})});}
+  const phasePrompt=Number(state.journeyStep||0)===0?'현재 INT 요구 접수 단계다. int.* 항목만 수집·추출한다. FEA 질문과 제안은 아직 하지 않는다. INT 필수 답변이 확인되면 AI 검토 완료 버튼으로 FEA에 넘어가도록 안내한다.':'현재 FEA 단계다. 기존 INT와 대화에서 요구 요약 3줄을 직접 정리해 fea.summary에 제안한다. 사용자에게 요약 작성을 요구하지 않는다. 미확보 사실은 만들지 않는다. 대안·효과·위험을 수집한다. 작성자에게 Go/Drop 판정안을 묻지 않으며 이와 관련한 이전 지침은 적용하지 않는다. FEA 검토·보완 후 작성 완료로 G1을 요청하고 팀장이 판정한다.';
+  try {response=await fetcher(config.url,{method:'POST',redirect:'error',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json','api-key':config.key},body:JSON.stringify({model:config.deployment,messages:[{role:'system',content:SYSTEM_PROMPT+'\n'+phasePrompt},{role:'user',content:JSON.stringify(context)}],max_completion_tokens:6000,response_format:{type:'json_schema',json_schema:{name:'intake_feasibility_turn',strict:true,schema:OUTPUT_SCHEMA}}})});}
   catch {throw new AgentError(502,'AI 응답을 받지 못했습니다. 답변은 DB에 보관되어 있으니 잠시 후 다시 시도해 주세요.');}
   if(!response.ok) throw new AgentError(response.status===429?429:502,response.status===429?'AI 사용량 제한입니다. 잠시 후 다시 시도해 주세요.':'AI 연결에 실패했습니다. Azure 모델 배포·접근 권한·구조화 출력 지원을 확인해 주세요.');
   let data;
@@ -52,7 +53,7 @@ export function assertAgentAccess(actor,project,state,related) {
 }
 async function load(client,identity,code,lock=false) {
   if(!identity?.email) throw new AgentError(401,'MS 로그인이 필요합니다.');
-  const actor=(await client.query('select id,app_role,is_active from agent_portal.users where lower(email)=lower($1) limit 1',[identity.email])).rows[0];
+  const actor=(await client.query('select id,app_role,is_active,display_name from agent_portal.users where lower(email)=lower($1) limit 1',[identity.email])).rows[0];
   const project=(await client.query(`select p.*,ir.raw_answers->'portalState' as state from agent_portal.projects p join agent_portal.intake_requests ir on ir.project_id=p.id where p.project_code=$1 and p.deleted_at is null ${lock?'for update of p':''}`,[code])).rows[0];
   const state=project?.state || {};
   const related=actor && project && (await client.query("select 1 from agent_portal.project_members where project_id=$1 and user_id=$2 and relationship='developer' and ended_at is null",[project.id,actor.id])).rowCount>0;
@@ -81,18 +82,30 @@ function publicState(state) {
   let configured=true;try {azureConfiguration();} catch {configured=false;}
   return {configured,project:state,progress:progress(state),computed:deterministicSummary(state),fields:AGENT_FIELDS.map(f=>({key:f.key,label:f.label,choices:f.choices})),session:state.agentSession||{},messages:state.intakeMessages||[]};
 }
+export function completeIntakeReview(state,actor){
+  if(Number(state.journeyStep)!==0||!progress(state).ready||state.agentSession?.request?.status!=='complete')throw new AgentError(400,'요구 접수 필수 답변 확인과 AI 검토를 먼저 완료해 주세요.');
+  if(state.agentSession?.proposals?.some(p=>p.key.startsWith('int.')))throw new AgentError(400,'접수서 반영 대기 항목을 먼저 확인해 주세요.');
+  return {...structuredClone(state),intakeReview:{actorId:String(actor.id),actorName:actor.display_name,at:new Date().toISOString()},intakeDraftCompleted:true,journeyStep:1,stage:'타당성 평가',status:'타당성 평가 작성 중'};
+}
 export async function handleAgentRequest({method,identity,code,body={},generate=generateTurn,pool=getPool(),transaction=withTransaction}) {
   if(!/^\d{4}-\d{3,}$/.test(code)) throw new AgentError(400,'과제 번호가 올바르지 않습니다.');
   if(method==='GET') return publicState((await load(pool,identity,code)).state);
-  if(!['message','confirm','resume'].includes(body.action)) throw new AgentError(400,'잘못된 요청입니다.');
+  if(!['message','confirm','resume','review_intake'].includes(body.action)) throw new AgentError(400,'잘못된 요청입니다.');
   if(body.action!=='message') return transaction(async client=>{
     const {actor,project,state}=await load(client,identity,code,true);
     if(body.revision!==(state.agentSession?.revision||0)) throw new AgentError(409,'다른 변경사항이 있습니다. 새로고침 후 확인해 주세요.');
     if(!Array.isArray(body.keys) || body.keys.length>AGENT_FIELDS.length || !body.keys.every(k=>AGENT_FIELDS.some(f=>f.key===k))) throw new AgentError(400,'확인할 항목을 선택해 주세요.');
     let next=structuredClone(state),conflicts=[];
-    if(body.action==='confirm') ({state:next,conflicts}=applyProposals(state,body.keys,actor.id));
+    if(body.action==='review_intake'){
+      next=completeIntakeReview(state,actor);
+      await client.query("select agent_portal.change_project_stage($1,'FEA',$2,'요구 접수 AI 검토 완료')",[project.id,actor.id]);
+      next.nextAction='AI가 정리한 FEA 초안을 검토·보완해 주세요.';next.progress=22;
+      await client.query("update agent_portal.projects set next_action=$2,progress_percent=22,updated_at=now() where id=$1",[project.id,next.nextAction]);
+    }
+    else if(body.action==='confirm') ({state:next,conflicts}=applyProposals(state,body.keys,actor.id));
     else {next.agentSession||={};next.agentSession.held=(next.agentSession.held||[]).filter(k=>!body.keys.includes(k));next.agentSession.attempts||={};for(const key of body.keys) next.agentSession.attempts[key]=0;}
     next.agentSession.revision=(state.agentSession?.revision||0)+1;
+    if(JSON.stringify(next.feaDraft)!==JSON.stringify(state.feaDraft))next.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
     await persistAgentState(client,project,next,actor.id,state);
     return {...publicState(next),conflicts};
   });
@@ -125,6 +138,7 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
       const {actor,project,state}=await load(client,identity,code,true);
       if(state.agentSession?.request?.token!==reservation.token) throw new AgentError(409,'다른 요청이 처리되었습니다. 새로고침해 주세요.');
       const {state:next,reply}=acceptModelTurn(state,result,body.message.trim(),reservation.state);
+      if(JSON.stringify(next.feaDraft)!==JSON.stringify(state.feaDraft))next.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
       next.agentSession.request.status='complete';
       delete next.agentSession.request.token;
       next.agentSession.revision++;

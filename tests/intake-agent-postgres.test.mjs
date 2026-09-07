@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import pg from 'pg';
+import {readFile} from 'node:fs/promises';
 import {handleAgentRequest,AgentError} from '../server/intake-agent.mjs';
 
 // Real SQL against session-local clones only; no business records are read or written.
@@ -12,7 +13,7 @@ test('Agent PostgreSQL integration: request/reply, confirmation, conflict, retry
   Object.assign(process.env,{AZURE_OPENAI_ENDPOINT:'https://test.openai.azure.com/',AZURE_OPENAI_API_KEY:'test-only',AZURE_OPENAI_DEPLOYMENT:'test-only'});
   const tables=['users','projects','project_members','intake_requests','intake_conversations','intake_messages','documents','document_versions','audit_logs'];
   const adapter={query:(sql,params)=>{
-    for(const match of sql.matchAll(/agent_portal\.(\w+)/g)) assert.ok(tables.includes(match[1]),`Unexpected production object: ${match[1]}`);
+    for(const match of sql.matchAll(/agent_portal\.(\w+)/g)) assert.ok(tables.includes(match[1])||match[1]==='change_project_stage',`Unexpected production object: ${match[1]}`);
     return client.query(sql.replaceAll('agent_portal.','pg_temp.'),params);
   }};
   let transactionActive=false;
@@ -53,6 +54,22 @@ test('Agent PostgreSQL integration: request/reply, confirmation, conflict, retry
     assert.equal(result.messages.filter(m=>m.requestId===second.requestId&&m.role==='user').length,1);
     await client.query("update pg_temp.intake_requests set raw_answers=jsonb_set(raw_answers,'{portalState,historicalImport}','true'::jsonb)");
     await assert.rejects(handleAgentRequest({...args,method:'GET'}),e=>e.status===403);
+    // Exercise INT review and the real stage-change function against temporary objects only.
+    for(const table of ['project_stage_history','lifecycle_stages'])await client.query(`create temporary table ${table} (like agent_portal.${table} including defaults including identity including constraints including indexes) on commit drop`);
+    await client.query("insert into pg_temp.lifecycle_stages select * from agent_portal.lifecycle_stages where stage_code='FEA'");
+    const schema=await readFile(new URL('../database/postgresql/agent_governance_portal_schema.sql',import.meta.url),'utf8');
+    const fn=schema.match(/create or replace function change_project_stage\([\s\S]*?\$\$;/)[0]
+      .replace('function change_project_stage','function pg_temp.change_project_stage')
+      .replace('pg_catalog, agent_portal, pg_temp','pg_catalog, pg_temp');
+    assert.ok(!fn.includes('agent_portal'));await client.query(fn);
+    const intake={...result.project,historicalImport:false,journeyStep:0,intakeStandardVersion:'3.0',intakeDetails:{performer:'실제 테스트 사용자',countPerMonth:'20',asIsMinutes:'30',people:'2',failureImpact:'누락 시 재작업'},agentSession:{revision:0,request:{status:'complete'},proposals:[],confirmed:{}}};
+    await client.query("update pg_temp.projects set current_stage_code='INT' where id=$1",[project.id]);
+    await client.query("update pg_temp.intake_requests set raw_answers=$2::jsonb where project_id=$1",[project.id,JSON.stringify({portalState:intake})]);
+    result=await handleAgentRequest({...args,method:'POST',body:{action:'review_intake',keys:[],revision:0}});
+    assert.equal(result.project.journeyStep,1);assert.equal(result.project.intakeReview.actorName,'테스트 사용자');
+    assert.equal((await client.query('select current_stage_code from pg_temp.projects')).rows[0].current_stage_code,'FEA');
+    assert.equal((await client.query("select count(*)::int as n from pg_temp.project_stage_history where stage_code='FEA'")).rows[0].n,1);
+    assert.equal((await handleAgentRequest({...args,method:'GET'})).project.intakeReview.actorId,String(actor.id));
   } finally {
     await client.query('rollback').catch(()=>{});await client.end();
     keys.forEach((key,i)=>{if(previous[i]===undefined) delete process.env[key];else process.env[key]=previous[i];});

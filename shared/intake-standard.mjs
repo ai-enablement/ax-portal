@@ -18,7 +18,7 @@ export const INT_FIELDS = [
   text('int.timingReason','희망 시점의 이유'),
 ];
 export const FEA_FIELDS = [
-  text('fea.summary','요구 요약 · 3줄'),
+  text('fea.summary','AI 요구 요약 · 3줄',true),
   ...ALTERNATIVE_LABELS.map((label,i)=>text(`fea.alternatives.${i}`,label+' · 검토 결과',true)),
   text('fea.conclusion','왜 에이전트가 필요한가요? / 대안이 충분한 이유',true),
   text('fea.expectedEffect','기대 효과 · 한 줄'),
@@ -33,10 +33,6 @@ export const FEA_FIELDS = [
   text('fea.maximumDamage','오답 최대 피해',true),
   select('fea.agentType','유형',['AI Agent (판단형)','업무지원 Agent (규칙형)','혼합형']),
   select('fea.autonomy','자율성 초안',['L0','L1','L2','L3','L4']),
-  select('fea.recommendation','작성자 판정안 · 팀장 승인 전',['GO','CONDITIONAL','DROP']),
-  {key:'fea.targetDate',label:'Go 목표 일정',type:'date'},
-  text('fea.decisionReason','조건 또는 Drop 사유'),
-  text('fea.dropAlternative','Drop 시 대안 안내'),
 ];
 export function standardValue(state,key) {
   const [,name,index]=key.split('.');
@@ -57,10 +53,6 @@ export function fieldComplete(field,value) {
 export function intakeRequired(state) {return INT_FIELDS.filter(f=>f.required&&!fieldComplete(f,standardValue(state,f.key)));}
 export function feaRequired(state) {
   const missing=FEA_FIELDS.filter(f=>f.required&&!fieldComplete(f,standardValue(state,f.key)));
-  const f=state.feaDraft||{};
-  for(const key of f.recommendation==='GO'?['targetDate']:f.recommendation==='CONDITIONAL'?['decisionReason']:f.recommendation==='DROP'?['decisionReason','dropAlternative']:[]) {
-    const field=FEA_FIELDS.find(f=>f.key===`fea.${key}`);if(!fieldComplete(field,f[key]))missing.push(field);
-  }
   return missing;
 }
 export function intakeFeasibilityMetrics(state) {

@@ -765,6 +765,7 @@ function portalProjectFromRow(row) {
   const receivedDate = row.createdAt ? new Date(row.createdAt).toISOString().slice(0, 10) : "";
   return {
     ...runtime,
+    feaAuthor:row.feaAuthor||runtime.feaAuthor,
     no: row.projectCode,
     name: row.projectName,
     category: row.projectCategory || "개별 접수",
@@ -803,6 +804,9 @@ async function listOperationalProjects(identity) {
             requester.display_name as "requesterName", owner_user.display_name as "ownerName",
             owner_user.email as "ownerEmail", requester.email as "requesterEmail",
             ir.raw_answers->'portalState' as "runtimeState",
+            (select jsonb_build_object('id',u.id::text,'name',u.display_name,'at',d.updated_at)
+               from agent_portal.documents d join agent_portal.users u on u.id=d.author_id
+              where d.project_id=p.id and d.document_type='FEA' limit 1) as "feaAuthor",
             coalesce((
               select jsonb_agg(jsonb_build_object('id',u.id::text,'name',u.display_name) order by pm.assigned_at)
                 from agent_portal.project_members pm
@@ -1026,7 +1030,7 @@ async function createOperationalProject(body, identity) {
     const contacts = registrationContacts(submittedState, actor);
     submittedState.intakeStandardVersion='3.0';
     if(!submittedState.historicalImport && submittedState.intakeDraftCompleted && intakeRequired(submittedState).length)return {status:400,body:{error:'INT 필수 항목을 입력한 뒤 작성 완료해 주세요.'}};
-    if(!submittedState.historicalImport)submittedState.journeyStep=submittedState.intakeDraftCompleted?1:0;
+    if(!submittedState.historicalImport){submittedState.journeyStep=0;submittedState.status='요구 접수 AI 검토 대기';submittedState.nextAction='요구 접수 내용을 확인하고 AI 검토를 완료해 주세요.';}
     if (actor.app_role === "general_user") submittedState.requester = [actor.display_name,submittedState.intakeDetails?.department,actor.email].filter(Boolean).join(' · ');
     Object.assign(submittedState, contacts);
     const catalog = await ensurePortalCatalog(client);
@@ -1162,7 +1166,7 @@ async function updateOperationalProject(projectCode, body, identity) {
     if(v3Gaps.length)return {status:400,body:{error:`필수 항목을 확인해 주세요: ${v3Gaps.map(f=>f.label).join(', ')}`}};
     if(!previousState.historicalImport) {
       if(changes.feaCompleted===true && Number(previousState.journeyStep)<=1){merged.journeyStep=2;merged.intakeDraftCompleted=true;}
-      else if(changes.intakeDraftCompleted===true && Number(previousState.journeyStep)===0)merged.journeyStep=1;
+      else if(changes.intakeDraftCompleted===true && Number(previousState.journeyStep)===0)merged.journeyStep=0;
     }
     if (!previousState.historicalImport && previousState.agentSession) {
       const required = changes.feaCompleted ? missingFields(merged) : changes.intakeDraftCompleted ? missingFields(merged,"int.") : [];
@@ -1180,6 +1184,7 @@ async function updateOperationalProject(projectCode, body, identity) {
     }
     try {Object.assign(merged,applyWorkflow(previousState,changes,merged,actor,project));}
     catch(error){if(error instanceof WorkflowError)return {status:error.status,body:{error:error.message}};throw error;}
+    if(changes.feaDraft||changes.feaCompleted)merged.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
     // Approval roles and transitions are validated by applyWorkflow under this row lock.
     const requestedStageCode = portalStageCode(merged.journeyStep);
     if(!isLowRoute(merged)&&merged.workflowVersion!=='3.1')assertImportTransition(previousState, merged, portalJourneyStep(project.current_stage_code));

@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {AGENT_FIELDS,FIELD_MAP,validField,fieldValue,missingFields,progress,safeMessage,applyProposals,acceptModelTurn,deterministicSummary,setField} from '../shared/intake-agent.mjs';
 import {azureConfiguration,generateTurn,assertAgentAccess,AgentError} from '../server/intake-agent.mjs';
 const configured={AZURE_OPENAI_ENDPOINT:'https://test.openai.azure.com/',AZURE_OPENAI_API_KEY:'test-only',AZURE_OPENAI_DEPLOYMENT:'test-deployment'};
-const blank=()=>({name:'테스트 과제',intakeAnswers:['','','','',''],agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}});
+const blank=()=>({journeyStep:1,name:'테스트 과제',intakeAnswers:['','','','',''],agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}});
 test('Azure configuration fails closed and never accepts key exfiltration destinations',()=>{
   assert.throws(()=>azureConfiguration({}),e=>e.status===503);
   for(const endpoint of ['http://test.openai.azure.com','https://evil.example','https://test.openai.azure.com.evil.example','https://test.openai.azure.com/?key=x','https://user:pass@test.openai.azure.com']) assert.throws(()=>azureConfiguration({...configured,AZURE_OPENAI_ENDPOINT:endpoint}));
@@ -63,7 +63,7 @@ test('manual changes during generation and review are never silently overwritten
   const saved=applyProposals(state,['fea.countPerMonth'],'1');assert.equal(saved.state.feaDraft.countPerMonth,'30');assert.equal(saved.conflicts.length,1);
 });
 test('re-asking has bounded counts and held slots accept later answers',()=>{
-  let state=blank();
+  let state={...blank(),journeyStep:0};
   for(let i=0;i<2;i++) state=acceptModelTurn(state,{reply:'수치 확인 필요',target:'int.countPerMonth',question:'월 몇 건인가요?',proposals:[]},'모릅니다').state;
   assert.ok(state.agentSession.held.includes('int.countPerMonth'));
   state=acceptModelTurn(state,{reply:'확인',target:'',question:'',proposals:[{key:'int.countPerMonth',value:'20',kind:'extracted',evidence:'월 20건'}]},'월 20건').state;

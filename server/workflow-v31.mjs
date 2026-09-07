@@ -2,7 +2,7 @@ import {allApproved,requiredApprovers,eligibleRole,gateGaps,gateBasis,projectTra
 import {isImportInProgress} from '../shared/historical-import-policy.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
-const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord'];
+const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor'];
 export function sanitizeNewWorkflow(state){
   for(const key of [...serverKeys,'securityReviewerId','gateChecks','gateVote','uatConfirm','lowRouteAction','lowKnowledgeOwnerId','deliveryPhase'])delete state[key];
   if(!state.historicalImport)for(const key of ['g1Resolution','g2Approvals','g2Approval','feaCompleted','historicalDocuments'])delete state[key];
@@ -12,6 +12,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   for(const key of serverKeys)if(key in changes)deny('승인·단축 경로 상태는 서버에서만 변경할 수 있습니다.',403);
   if('g2Approvals' in changes)deny('승인 결과를 직접 수정할 수 없습니다.',403);
   const step=Number(previous.journeyStep??0);
+  if(!previous.historicalImport&&step===0&&(changes.feaDraft||changes.feaCompleted||Number(merged.journeyStep)>0))deny('요구 접수 Agent 검토를 완료한 뒤 FEA를 작성해 주세요.');
   const author=actor.app_role==='admin'||(previous.developerIds||[]).map(String).includes(String(actor.id));
   const importOpen=isImportInProgress(previous);
   if(importOpen){

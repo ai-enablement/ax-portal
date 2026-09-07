@@ -41,9 +41,10 @@ export function missingFields(state, prefix = '') {
   return required;
 }
 export function progress(state) {
-  const missing = missingFields(state);
+  const prefix=Number(state.journeyStep||0)===0?'int.':'fea.';
+  const missing = missingFields(state,prefix);
   const held = state.agentSession?.held || [];
-  return {total:AGENT_FIELDS.filter(f=>!f.optional).length, missing:missing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})), ready:missing.length===0};
+  return {phase:prefix==='int.'?'INT':'FEA',total:AGENT_FIELDS.filter(f=>!f.optional&&f.key.startsWith(prefix)).length, missing:missing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})), ready:missing.length===0};
 }
 export function safeMessage(text) {
   return !/(?:\d{6}[- ]?[1-8]\d{6}|\b(?:sk-|AIza)[A-Za-z0-9_-]{20,}|-----BEGIN .*PRIVATE KEY-----|(?:api[_ -]?key|비밀키)\s*[:=：]\s*[A-Za-z0-9_-]{16,}|(?:계좌|카드)\s*(?:번호)?\s*[:：]?\s*[\d -]{10,})/i.test(text);
@@ -56,6 +57,7 @@ export function applyProposals(state, keys, actorId) {
   for(const key of keys) {
     const item = session.proposals?.find(p=>p.key===key);
     const field = FIELD_MAP.get(key);
+    if(Number(state.journeyStep||0)===0&&!key.startsWith('int.'))continue;
     if(!item || !field || !validField(field,item.value)) continue;
     if(fieldValue(next,key) !== item.baseValue) {conflicts.push(field.label); continue;}
     setField(next,key,item.value);
@@ -84,6 +86,7 @@ export function acceptModelTurn(state, result, message, snapshot=state) {
   for(const proposal of result.proposals.slice(0,AGENT_FIELDS.length)) {
     const item={...proposal,evidence:sourceEvidence(proposal?.evidence,sources)};
     const field = FIELD_MAP.get(item?.key);
+    if(Number(state.journeyStep||0)===0&&!item.key?.startsWith('int.'))continue;
     if(!field || !validField(field,item.value) || !safeMessage(item.value) || typeof item.evidence!=='string' || item.evidence.length>1200 || !safeMessage(item.evidence)) continue;
     if(!['extracted','suggested'].includes(item.kind)) continue;
     // Numbers must come verbatim from an actual answer, not from model-generated estimates.
@@ -97,7 +100,13 @@ export function acceptModelTurn(state, result, message, snapshot=state) {
     accepted.set(item.key,{key:item.key,value:item.value,evidence:item.evidence,kind:item.kind,baseValue:fieldValue(snapshot,item.key)});
   }
   session.proposals = [...accepted.values()];
-  const missing = missingFields(next).filter(f=>!(session.held||[]).includes(f.key) && !accepted.has(f.key));
+  const summary=accepted.get('fea.summary');
+  if(Number(state.journeyStep)===1&&summary&&!fieldValue(state,'fea.summary')){
+    setField(next,'fea.summary',summary.value);
+    session.generatedSummary={kind:'AI 초안 · 담당자 검토 필요',evidence:summary.evidence,at:new Date().toISOString()};
+    accepted.delete('fea.summary');session.proposals=[...accepted.values()];
+  }
+  const missing = missingFields(next,Number(state.journeyStep||0)===0?'int.':'fea.').filter(f=>f.key!=='fea.summary'&&!(session.held||[]).includes(f.key) && !accepted.has(f.key));
   const target = missing.find(f=>f.key===result.target) || missing[0];
   let question = '';
   if(target) {

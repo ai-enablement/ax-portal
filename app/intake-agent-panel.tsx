@@ -29,7 +29,7 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
     const timer=setInterval(()=>void refresh(),5000);
     return()=>clearInterval(timer);
   },[serverRunning,busy,refresh]);
-  async function send(action:'message'|'confirm'|'resume',keys:string[]=[],retryTurn?:{id:string;message:string}) {
+  async function send(action:'message'|'confirm'|'resume'|'review_intake',keys:string[]=[],retryTurn?:{id:string;message:string}) {
     if(inFlight.current) return;
     const turn=retryTurn || {id:crypto.randomUUID(),message:input.trim()};
     if(action==='message' && !turn.message) return;
@@ -48,8 +48,9 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
     finally {inFlight.current=false;if(mounted.current)setBusy(false);}
   }
   const proposals=data?.session.proposals||[];
+  const phase=(data?.progress as Snapshot['progress'] & {phase?:string})?.phase||'INT';
   return <section className="portal-intake-agent" aria-label="신규 과제 INT FEA 자동 인터뷰">
-    <header><div><small>INT + FEA · 신규 과제 전용</small><h3>요구 접수 · 타당성 평가 Agent</h3><p>답변을 바탕으로 두 문서를 정리합니다. 미확보 정보는 보류하고, 확인한 내용만 초안에 반영합니다.</p></div><button type="button" onClick={()=>void refresh()} disabled={busy}>대화 새로고침</button></header>
+    <header><div><small>{phase} · 신규 과제 전용</small><h3>{phase==='INT'?'① 요구 접수 Agent 검토':'② 타당성 평가 Agent 작성'}</h3><p>요구 접수 검토를 완료한 후 FEA를 작성합니다. 확인한 내용만 문서에 반영하며 AI 요약은 담당자가 검토합니다.</p></div><button type="button" onClick={()=>void refresh()} disabled={busy}>대화 새로고침</button></header>
     {error && <p className="agent-error" role="alert">{error}</p>}
     {notice && <p className="agent-notice" role="status">{notice}</p>}
     {data && <>
@@ -75,7 +76,9 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
           {!proposals.length&&<p>대화를 시작하면 확인할 초안이 여기에 표시됩니다.</p>}
           <button type="button" disabled={busy||!selected.length} onClick={()=>void send('confirm',selected)}>선택한 {selected.length}개 확인 · 문서 반영</button>
           <details><summary>미확보·보완 필요 {data.progress.missing.length} / {data.progress.total}개</summary><ul>{data.progress.missing.map(f=><li key={f.key}>{f.label}{f.held&&<><span>보류</span><button type="button" disabled={busy} onClick={()=>void send('resume',[f.key])}>다시 보완</button></>}</li>)}</ul></details>
-          {data.progress.ready&&<p className="agent-notice">필수 정보가 확보되었습니다. 담당자가 FEA를 검토한 뒤 작성 완료를 진행해 주세요.</p>}
+          {phase==='INT'&&<button type="button" disabled={busy||!data.progress.ready||data.session.request?.status!=='complete'||proposals.some(p=>p.key.startsWith('int.'))} onClick={()=>void send('review_intake')}>요구 접수 AI 검토 완료 → FEA 작성</button>}
+          {phase==='FEA'&&<button type="button" disabled={busy||serverRunning||!data.configured} onClick={()=>void send('message',[],{id:crypto.randomUUID(),message:'지금까지 확인한 요구 접수 내용으로 요구 요약 3줄을 자동 작성하고 FEA에 부족한 정보를 질문해 주세요.'})}>AI 요구 요약 작성 · FEA 인터뷰 계속</button>}
+          {data.progress.ready&&<p className="agent-notice">{phase==='INT'?'접수 내용을 확인하고 AI 검토 완료 버튼을 눌러 주세요.':'필수 정보가 확보되었습니다. FEA를 검토·보완한 뒤 작성 완료 · G1 요청을 눌러 주세요.'}</p>}
           <p>트랙: {data.computed.classification?`${data.computed.classification.label} · 표준체계 0.3절`:'위험 응답 확인 필요'}<br/>월 절감 시간: {data.computed.roi?`${data.computed.roi.monthlyHours.toFixed(1)}시간`:'정량 정보 미확보'}</p>
           <small>G1 판정 확정은 팀장님만 가능합니다. 이 Agent는 승인하지 않습니다.</small>
         </div>

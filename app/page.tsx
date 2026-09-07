@@ -246,6 +246,7 @@ type UserProject = {
   documentsDeferred?: boolean;
   source?: "database";
   workflowVersion?: string;
+  feaAuthor?: {id?:string;name?:string;at?:string};
   workflowTrack?: string;
   workflowApprovals?: Record<string, Record<string, {decision:string;actorName?:string}>>;
   deliveryPhase?: "design" | "development";
@@ -1017,7 +1018,7 @@ export default function Home() {
         .filter((project) => submittedProjectNos.has(project.no) || !deletedProjectNos.includes(project.no))
         .map((project) => ({
           ...project,
-          ...(projectOverrides[project.no] || {}),
+          ...(project.source === "database" ? {} : projectOverrides[project.no] || {}),
         }));
     },
     [submittedProjects, deletedProjectNos, projectOverrides],
@@ -1059,7 +1060,6 @@ export default function Home() {
     projectNo: string,
     changes: Partial<UserProject>,
   ) => {
-    setSubmittedProjects((current) => current.map((project) => project.no === projectNo ? { ...project, ...changes } : project));
     const previous = projectUpdateQueue.current.get(projectNo) || Promise.resolve();
     let saved = false;
     const request = previous.catch(() => undefined).then(async () => {
@@ -1686,7 +1686,7 @@ export default function Home() {
           </div>
         </header>
 
-        {(view === "home" || view === "intake") && (
+        {(view === "home" || view === "intake" || view === "definition" || view === "delivery") && (
           <Dashboard
             role={role}
             identity={identity}
@@ -1723,22 +1723,6 @@ export default function Home() {
               description="새 Agent 과제가 접수되면 담당자별 진행 현황과 지연 위험이 여기에 표시됩니다."
             />
           ))}
-        {view === "definition" && (
-          <RequirementDefinition
-            role={role}
-            notify={notify}
-            goDelivery={() => go("delivery")}
-            projectNo={workflowTarget}
-          />
-        )}
-        {view === "delivery" && (
-          <DeliveryWorkplace
-            role={role}
-            openHub={() => openHub()}
-            notify={notify}
-            projectNo={workflowTarget}
-          />
-        )}
         {view === "operations" &&
           (adminProjectItems.some((project) => project.journeyStep >= 9) ? (
             <OperationsImprovement
@@ -1990,11 +1974,7 @@ function Dashboard({
   const targetRequirement = teamRequirementItems.find(
     (project) => project.id === projectNo,
   );
-  const homeProjectItems =
-    targetRequirement &&
-    !baseProjectItems.some((project) => project.no === targetRequirement.id)
-      ? [teamRequirementAsHomeProject(targetRequirement), ...baseProjectItems]
-      : baseProjectItems;
+  const homeProjectItems = baseProjectItems;
 
   if (
     role === ACCOUNT_ROLES.leader ||
@@ -3175,7 +3155,7 @@ function HomeFeasibilityEditorLegacy({
   onComplete?: (draft: NonNullable<UserProject["feaDraft"]>) => void;
 }) {
   const isLeader = role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.admin;
-  const author = isLeader ? "AI 활성화팀 팀장" : "AI 활성화팀 담당자";
+  const author = project.feaAuthor?.name || "작성자 미확인";
   const [summary, setSummary] = useState(() => {
     if (project.feaDraft?.summary !== undefined) return project.feaDraft.summary;
     if (blankStart) {
@@ -6898,6 +6878,9 @@ function UserDashboard({
   const hasProjects = projectItems.length > 0;
   const current = projectItems[selected] || projectItems[0] || emptyProject;
   useEffect(() => {
+    if(current.source === "database")setSelectedJourney(current.journeyStep);
+  }, [current.no,current.journeyStep,current.source]);
+  useEffect(() => {
     // Synchronize the persisted intake conversation when the selected project changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(current.intakeMessages?.length ? current.intakeMessages : defaultIntakeMessages);
@@ -6972,7 +6955,7 @@ function UserDashboard({
     (current.intakeStandardVersion==='3.0' ? Boolean(current.intakeDraftCompleted) : current.journeyStep > 0 || current.intakeDraftCompleted);
   const effectiveJourneyStep = !hasProjects
     ? -1
-    : current.historicalImport ? current.journeyStep
+    : current.source === "database" || current.historicalImport ? current.journeyStep
     : current.g2ReworkState === "resubmitted"
       ? Math.max(4, current.journeyStep)
       : current.feaCompleted
@@ -7333,7 +7316,7 @@ function UserDashboard({
             />
           ) : current.source === "database" && isLowRoute(current) && selectedJourney > 2 && selectedJourney < 9 ? (
             <EmptyDataPage title="하 트랙 적용 제외" description="G1 승인 후 운영대장 등록·배포로 연결되는 단축 경로입니다. 이 단계의 가짜 승인 이력을 생성하지 않습니다." />
-          ) : current.source === "database" && [2,4,6,8].includes(selectedJourney) && !importInProgress && (selectedJourney >= effectiveJourneyStep || current.workflowApprovals?.[({2:"G1",4:"G2",6:"G3",8:"G4"} as Record<number,string>)[selectedJourney]]) ? (
+          ) : current.source === "database" && [2,4,6,8].includes(selectedJourney) && !importInProgress ? (
             <WorkflowGate key={current.no + ":" + selectedJourney + ":" + JSON.stringify(current.workflowApprovals)} project={current} gate={{2:"G1",4:"G2",6:"G3",8:"G4"}[selectedJourney]} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />
           ) : current.source === "database" && selectedJourney > effectiveJourneyStep ? (
             <EmptyDataPage
@@ -7687,7 +7670,7 @@ function UserDashboard({
                   : hasProjects && isAiTeam
               }
               role={role}
-              projectItem={current}
+              projectItem={{...current,feaAuthor:current.feaAuthor||{name:identity?.displayName}}}
               forceDraft={
                 current.historicalImport &&
                 (deferredDocumentOpened || Boolean(deferredDocumentRecord))
