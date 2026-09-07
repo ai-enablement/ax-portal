@@ -17,7 +17,7 @@ function doc(code){
  }
  return {status:'complete',fields};
 }
-const gateState=(step=4)=>({journeyStep:step,workflowTrack:'MEDIUM',developerIds:['5'],historicalDocuments:{3:{documents:{ARD:doc('ARD')}},5:{documents:{EVR:doc('EVR')}}},gateChecks:{G3:{criteriaPassed:true,zeroViolations:true,evidence:'평가 v1 전건 확인'},G4:{criteriaPassed:true,evidence:'사용 20건 오류 0건 만족도 4.5, 종료 조건 충족'}},uatRecord:{completed:true,cases:5,actorId:'1'}});
+const gateState=(step=4)=>({journeyStep:step,workflowTrack:'MEDIUM',developerIds:['5'],historicalDocuments:{3:{documents:{ARD:doc('ARD')}},5:{documents:{EVR:doc('EVR')}}},markdownDocuments:{DES:{phases:{design:{version:1}}},EVD:{phases:{development_evaluation:{version:1},deployment_rollout:{version:2}}}},gateChecks:{G3:{criteriaPassed:true,zeroViolations:true,evidence:'평가 v1 전건 확인'},G4:{criteriaPassed:true,evidence:'사용 20건 오류 0건 만족도 4.5, 종료 조건 충족'}},uatRecord:{completed:true,cases:5,actorId:'1'}});
 const vote=(gate,role)=>({gateVote:{gate,role,decision:'APPROVED'}});
 test('six stages and every regular gate remain visible in order',()=>{
  assert.equal(JOURNEY_V31.filter(n=>n.number).length,6);

@@ -35,16 +35,22 @@ export function documentComplete(state,stage,code){
   const d=state.historicalDocuments?.[stage]?.documents?.[code];
   return d?.status==='complete'&&standardDocuments[code]?.sections.every(s=>sectionHasContent(s,d.fields));
 }
+export function markdownDocumentComplete(state,code,phase){
+  return Number(state.markdownDocuments?.[code]?.phases?.[phase]?.version)>0;
+}
+export function designDocumentComplete(state){return markdownDocumentComplete(state,'DES','design')||documentComplete(state,5,'DES');}
+export function developmentEvdComplete(state){return markdownDocumentComplete(state,'EVD','development_evaluation')||documentComplete(state,5,'EVR');}
+export function releaseEvdComplete(state){return markdownDocumentComplete(state,'EVD','deployment_rollout')||documentComplete(state,7,'DEP');}
 export function gateGaps(gate,state){
   if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...intakeRequired(state).map(f=>f.label),...feaRequired(state).map(f=>f.label)];
   if(gate==='G2')return documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료'];
   if(gate==='G3'){
     const c=state.gateChecks?.G3||{};
-    return [...(!documentComplete(state,5,'EVR')?['평가 결과 보고서 작성 완료']:[]),...(c.criteriaPassed!==true?['ARD 성공 기준 전 항목 통과']:[]),...(c.zeroViolations!==true?['금칙 위반 0건']:[]),...(!String(c.evidence||'').trim()?['평가 근거 문서·버전']:[]),...(state.uatRecord?.completed!==true?['요구자 UAT 완료']:[])];
+    return [...(!developmentEvdComplete(state)?['개발·평가 문서[EVD] 첨부 완료']:[]),...(c.criteriaPassed!==true?['ARD 성공 기준 전 항목 통과']:[]),...(c.zeroViolations!==true?['금칙 위반 0건']:[]),...(!String(c.evidence||'').trim()?['평가 근거 문서·버전']:[]),...(state.uatRecord?.completed!==true?['요구자 UAT 완료']:[])];
   }
   if(gate==='G4'){
     const c=state.gateChecks?.G4||{};
-    return [...(c.criteriaPassed!==true?['파일럿 종료 기준 충족']:[]),...(!String(c.evidence||'').trim()?['파일럿 결과·종료 판정 근거']:[])];
+    return [...(!releaseEvdComplete(state)?['배포·확산 EVD 후속 버전 첨부 완료']:[]),...(c.criteriaPassed!==true?['파일럿 종료 기준 충족']:[]),...(!String(c.evidence||'').trim()?['파일럿 결과·종료 판정 근거']:[])];
   }
   return ['알 수 없는 게이트'];
 }
@@ -59,8 +65,8 @@ export function eligibleRole(role,actor,project,state){
 }
 export function gateBasis(gate,state){
   return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],projectTrack(state)]:
-    gate==='G3'?[state.historicalDocuments?.[5],state.gateChecks?.G3,state.securityReviewerId,state.uatRecord]:
-    gate==='G4'?[state.historicalDocuments?.[7],state.gateChecks?.G4]:[state.intakeAnswers,state.intakeDetails,state.feaDraft,state.feaCompleted]);
+    gate==='G3'?[state.historicalDocuments?.[5],state.markdownDocuments?.EVD?.phases?.development_evaluation,state.gateChecks?.G3,state.securityReviewerId,state.uatRecord]:
+    gate==='G4'?[state.historicalDocuments?.[7],state.markdownDocuments?.EVD?.phases?.deployment_rollout,state.gateChecks?.G4]:[state.intakeAnswers,state.intakeDetails,state.feaDraft,state.feaCompleted]);
 }
 export function gateSummary(gate,state){
   const roles=requiredApprovers(gate,state);

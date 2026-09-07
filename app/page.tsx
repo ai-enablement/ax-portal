@@ -8,6 +8,7 @@ import "./status-badges.css";
 import {isImportInProgress, canBackfillDocument} from "../shared/historical-import-policy.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
+import MarkdownDocumentWorkspace from "./markdown-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
@@ -250,6 +251,12 @@ type UserProject = {
   workflowTrack?: string;
   workflowApprovals?: Record<string, Record<string, {decision:string;actorName?:string}>>;
   deliveryPhase?: "design" | "development";
+  markdownDocuments?: Record<string, {
+    latestId?: string;
+    latestVersion?: number;
+    latestPhase?: string;
+    phases?: Record<string, { id:string; version:number; name:string; authorName?:string; at:string }>;
+  }>;
   gateChecks?: Record<string, {criteriaPassed?:boolean;zeroViolations?:boolean;evidence?:string}>;
   securityReviewerId?: string;
   uatRecord?: {completed:boolean;cases:number;actorName:string};
@@ -7402,7 +7409,14 @@ function UserDashboard({
                 notify(record.status === "complete" ? record.decision === "REJECTED" ? "팀장 G1 Drop 판정을 확정했습니다." : "Admin이 개발 담당자 배정을 확정했습니다." : "팀장 G1 판정을 확정했습니다. Admin 개발 담당자 배정 대기로 이동합니다.");
               }}
             />
-          ) : (current.historicalImport || current.source === "database") && [3, 5, 7, 9].includes(selectedJourney) ? (
+          ) : (current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney) ? (
+            <MarkdownDocumentWorkspace
+              key={`${deferredDocumentKey}:markdown:${selectedDeliveryPhase}`}
+              project={{no:current.no,name:current.name}}
+              phase={selectedJourney === 7 ? "deployment_rollout" : selectedDeliveryPhase === "development" ? "development_evaluation" : "design"}
+              canEdit={canEditSelectedHistoricalDocument}
+            />
+          ) : (current.historicalImport || current.source === "database") && [3, 9].includes(selectedJourney) ? (
             <StandardDocumentWorkspace
               key={deferredDocumentKey + ":" + selectedDeliveryPhase}
               initialDocument={selectedJourney === 5 ? selectedDeliveryPhase === "design" ? "DES" : "EVR" : undefined}

@@ -10,7 +10,10 @@ async function route(request, context) {
   const pathname = `/${path.join("/")}`;
   let body = {};
 
-  if (!['GET', 'HEAD'].includes(request.method)) {
+  // DELETE endpoints in this gateway do not require a request body. Parsing an
+  // empty body used to reject valid Admin project deletion requests before the
+  // database handler was reached.
+  if (!['GET', 'HEAD', 'DELETE'].includes(request.method)) {
     try {
       body = await request.json();
     } catch {

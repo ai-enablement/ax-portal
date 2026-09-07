@@ -1,4 +1,4 @@
-import {allApproved,requiredApprovers,eligibleRole,gateGaps,gateBasis,projectTrack,documentComplete,isLowRoute,GATE_STEPS,displayStage} from '../shared/workflow-v31.mjs';
+import {allApproved,requiredApprovers,eligibleRole,gateGaps,gateBasis,projectTrack,documentComplete,designDocumentComplete,developmentEvdComplete,releaseEvdComplete,isLowRoute,GATE_STEPS,displayStage} from '../shared/workflow-v31.mjs';
 import {isImportInProgress} from '../shared/historical-import-policy.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
@@ -81,6 +81,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   }
   if(changes.deliveryPhase){
     if(step!==5||!author||changes.deliveryPhase!=='development')deny('설계 단계의 개발 담당자 또는 Admin만 개발·평가를 시작할 수 있습니다.',403);
+    if(!designDocumentComplete(merged))deny('에이전트 설계서[DES] .md 파일을 먼저 첨부해 주세요.');
     merged.deliveryPhase='development';
   }
   if(changes.lowRouteAction){
@@ -111,8 +112,8 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     if([4,6,8].includes(step)&&!allApproved(Object.keys(GATE_STEPS).find(k=>GATE_STEPS[k]===step),merged))deny('필수 승인자 전원의 승인이 필요합니다.');
     if(step===2&&(!['GO','CONDITIONAL'].includes(merged.g1Resolution?.decision)||!merged.developerIds?.length))deny('팀장 G1 승인과 Admin 개발 담당자 배정이 필요합니다.');
     if(step===3&&!documentComplete(merged,3,'ARD'))deny('ARD 필수 항목을 완료해 주세요.');
-    if(step===5&&(!documentComplete(merged,5,'EVR')||merged.deliveryPhase!=='development'))deny('개발·평가 단계에서 평가 결과를 완료해 주세요.');
-    if(step===7&&!String(merged.gateChecks?.G4?.evidence||'').trim())deny('파일럿 결과와 종료 판정 근거를 기록해 주세요.');
+    if(step===5&&(!developmentEvdComplete(merged)||merged.deliveryPhase!=='development'))deny('개발·평가 문서[EVD] .md 파일을 첨부해 주세요.');
+    if(step===7&&(!releaseEvdComplete(merged)||!String(merged.gateChecks?.G4?.evidence||'').trim()))deny('배포·확산 EVD 후속 버전과 파일럿 결과 근거를 기록해 주세요.');
   }
   for(const key of ['gateVote','g2Approval','uatConfirm','lowRouteAction','lowKnowledgeOwnerId'])delete merged[key];
   if(next!==step||changes.deliveryPhase){

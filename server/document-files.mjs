@@ -20,7 +20,7 @@ export function validateUpload(name, bytes) {
 }
 export async function documentAccess(client, identity, code, write = false, documentType) {
   if (!identity?.email) return null;
-  const actor = (await client.query(`select id,app_role from agent_portal.users where lower(email)=lower($1) and is_active=true limit 1`,[identity.email])).rows[0];
+  const actor = (await client.query(`select id,app_role,display_name from agent_portal.users where lower(email)=lower($1) and is_active=true limit 1`,[identity.email])).rows[0];
   if (!actor) return null;
   const project = (await client.query(`select id,requester_id,owner_id,current_stage_code from agent_portal.projects where project_code=$1 and deleted_at is null`,[code])).rows[0];
   if (!project) return null;
@@ -30,7 +30,7 @@ export async function documentAccess(client, identity, code, write = false, docu
   const canRead = ['admin','team_leader','team_member'].includes(actor.app_role) || same(project.requester_id) || same(project.owner_id) || members.some(m=>same(m.user_id));
   const canWrite = actor.app_role === 'admin' || (actor.app_role !== 'general_user' && (assigned.length ? assigned.some(m=>same(m.user_id)) : ['team_member','team_leader'].includes(actor.app_role)));
   const order = ['INT','FEA','G1','ARD','G2','DES','G3','PILOT','G4','OPS'];
-  const target = { ARD:3, DES:5, EVP:5, EVR:5, DEP:7, UG:7, OPS:9, CHG:9 }[documentType];
+  const target = { ARD:3, DES:5, EVD:5, EVP:5, EVR:5, DEP:7, UG:7, OPS:9, CHG:9 }[documentType];
   if (!canRead || (write && (!canWrite || target === undefined || order.indexOf(project.current_stage_code) < target))) return null;
   return {actor,project};
 }

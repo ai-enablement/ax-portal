@@ -304,6 +304,25 @@ create table if not exists document_versions (
   unique (document_id, version_number)
 );
 
+-- Immutable source files uploaded for the v3.1 DES/EVD/UG workflow. EVD keeps
+-- one project-wide version sequence across development and rollout phases.
+create table if not exists markdown_document_versions (
+  id uuid primary key,
+  project_id bigint not null references projects(id) on delete cascade,
+  document_type text not null check (document_type in ('DES', 'EVD', 'UG')),
+  lifecycle_phase text not null check (lifecycle_phase in ('design', 'development_evaluation', 'deployment_rollout')),
+  version_number integer not null check (version_number > 0),
+  original_name text not null,
+  mime_type text not null default 'text/markdown',
+  byte_size integer not null check (byte_size > 0 and byte_size <= 5242880),
+  original_content bytea not null,
+  content_markdown text not null,
+  checksum_sha256 text not null check (checksum_sha256 ~ '^[0-9a-f]{64}$'),
+  created_by bigint not null references users(id),
+  created_at timestamptz not null default now(),
+  unique (project_id, document_type, version_number)
+);
+
 create table if not exists document_sections (
   id bigint generated always as identity primary key,
   document_version_id bigint not null references document_versions(id) on delete cascade,
@@ -894,6 +913,8 @@ create index if not exists documents_author_id_idx on documents (author_id);
 create index if not exists documents_reviewer_id_idx on documents (reviewer_id);
 create index if not exists document_versions_document_version_idx on document_versions (document_id, version_number desc);
 create index if not exists document_versions_created_by_idx on document_versions (created_by);
+create index if not exists markdown_document_versions_project_history_idx
+  on markdown_document_versions (project_id, document_type, version_number desc);
 create index if not exists document_sections_version_order_idx on document_sections (document_version_id, section_order);
 create index if not exists attachments_project_created_idx on attachments (project_id, created_at desc);
 create index if not exists attachments_document_id_idx on attachments (document_id);
