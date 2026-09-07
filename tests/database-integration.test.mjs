@@ -50,7 +50,8 @@ test("operational project actions use PostgreSQL transactions, normalized record
   assert.match(api, /insert into agent_portal\.intake_messages/);
   assert.match(api, /insert into agent_portal\.documents/);
   assert.match(api, /insert into agent_portal\.gates/);
-  assert.match(api, /insert into agent_portal\.gate_approvals/);
+  assert.match(api, /persistWorkflowApprovals\(client,project,merged,previousState,actor\)/);
+  assert.match(await read("server/workflow-v31.mjs"), /insert into agent_portal\.gate_approvals/);
   assert.match(api, /insert into agent_portal\.audit_logs/);
   assert.match(api, /clientRequestId/);
   assert.match(api, /General users can only update their own intake content/);

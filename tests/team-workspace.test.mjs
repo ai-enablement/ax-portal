@@ -91,11 +91,11 @@ test("keeps the standard lifecycle order and role ownership", () => {
     "착수 승인",
     "요구 정의",
     "개발 착수",
-    "설계·개발·평가",
+    "설계",
+    "개발·평가",
     "배포 승인",
-    "파일럿",
+    "배포·확산",
     "확산 승인",
-    "운영·개선",
   ];
   let cursor = -1;
   for (const label of labels) {
@@ -103,9 +103,9 @@ test("keeps the standard lifecycle order and role ownership", () => {
     assert.ok(next > cursor, `missing lifecycle step: ${label}`);
     cursor = next;
   }
-  assert.ok(page.includes("요구자 + 개발 담당자 + AI활성화팀장"));
+  assert.ok(page.includes("요구자 + Project Owner + AI활성화팀장"));
   assert.ok(
-    page.includes("동료 리뷰어 + AI활성화팀장 (상 트랙은 정보보호 추가)"),
+    page.includes('approver: "AI활성화팀장 (상 트랙은 정보보호 추가)"'),
   );
   assert.ok(page.includes("프로젝트 Owner + AI활성화팀장"));
 });

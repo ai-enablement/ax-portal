@@ -5,6 +5,8 @@ import {applyImportLifecycle, assertImportTransition} from "../shared/historical
 import {missingFields, AGENT_FIELDS, fieldValue} from "../shared/intake-agent.mjs";
 import {completionGaps,persistIntakeFeaV3} from './intake-standard.mjs';
 import {intakeRequired} from '../shared/intake-standard.mjs';
+import {applyWorkflow,persistWorkflowApprovals,WorkflowError,sanitizeNewWorkflow} from './workflow-v31.mjs';
+import {isLowRoute,displayStage} from '../shared/workflow-v31.mjs';
 import {ProjectContactError, registrationContacts, resolveContactUser} from "./project-contacts.mjs";
 
 const statusToDatabase = {
@@ -31,6 +33,7 @@ function portalJourneyStep(stageCode) {
 }
 
 function databaseProjectStatus(journeyStep, state = {}) {
+  if(isLowRoute(state)&&state.lowRoute.phase!=='operating')return 'in_progress';
   if (state.g2ReworkState === "editing") return "rework";
   if (Number(journeyStep) >= 9) return "operating";
   if ([2, 4, 6, 8].includes(Number(journeyStep))) return "in_review";
@@ -767,7 +770,7 @@ function portalProjectFromRow(row) {
     category: row.projectCategory || "개별 접수",
     description: row.projectSummary || runtime.description || "",
     journeyStep,
-    stage: Math.max(1, portalJourneyStageCodes.slice(0, journeyStep + 1).filter((code) => !code.startsWith("G")).length),
+    stage: displayStage({...runtime,journeyStep}),
     progress: Number(row.progressPercent || 0),
     nextAction: row.nextAction || runtime.nextAction || "다음 작업 확인 필요",
     requestedDate: row.requestedCompletionDate ? new Date(row.requestedCompletionDate).toISOString().slice(0, 10) : runtime.requestedDate || "",
@@ -777,7 +780,7 @@ function portalProjectFromRow(row) {
     projectOwner: runtime.projectOwner || row.ownerName || row.requesterName,
     // A legacy name-only owner may have been linked to the registrant. Do not infer their email.
     projectOwnerEmail: runtime.projectOwnerEmail ? row.ownerEmail || runtime.projectOwnerEmail : "",
-    requesterEmail: runtime.requesterEmail || "",
+    requesterEmail: row.requesterEmail || runtime.requesterEmail || "",
     developerIds: developers.map((developer) => String(developer.id)),
     developerNames: developers.map((developer) => developer.name),
     handler: developers.length ? developers.map((developer) => developer.name).join(" · ") : "담당자 배정 필요",
@@ -798,7 +801,7 @@ async function listOperationalProjects(identity) {
             p.requested_completion_date as "requestedCompletionDate",
             p.created_at as "createdAt", p.updated_at as "updatedAt",
             requester.display_name as "requesterName", owner_user.display_name as "ownerName",
-            owner_user.email as "ownerEmail",
+            owner_user.email as "ownerEmail", requester.email as "requesterEmail",
             ir.raw_answers->'portalState' as "runtimeState",
             coalesce((
               select jsonb_agg(jsonb_build_object('id',u.id::text,'name',u.display_name) order by pm.assigned_at)
@@ -813,6 +816,7 @@ async function listOperationalProjects(identity) {
       where p.deleted_at is null
         and (
           $2 in ('admin','team_leader')
+          or ir.raw_answers->'portalState'->>'securityReviewerId'=($1::bigint)::text
           or ($2='team_member' and (p.current_stage_code in ('INT','FEA') or p.requester_id=$1 or p.owner_id=$1 or exists (
             select 1 from agent_portal.project_members access_pm where access_pm.project_id=p.id and access_pm.user_id=$1 and access_pm.ended_at is null
           )))
@@ -992,6 +996,7 @@ async function syncIntakeConversation(client, projectId, messages, actorId) {
 
 async function createOperationalProject(body, identity) {
   const submittedState = assertPortalProjectState(body.project || body);
+  sanitizeNewWorkflow(submittedState);
   delete submittedState.historicalImportFinalizedAt;
   delete submittedState.historicalResumeStep;
   delete submittedState.finalizeHistoricalImport;
@@ -1100,7 +1105,7 @@ async function updateOperationalProject(projectCode, body, identity) {
     const previousState = project.runtime_state || {};
     const developerIds = (previousState.developerIds || []).map(String);
     const canWriteImport = actor.app_role === "admin" || (actor.app_role !== "general_user" && (developerIds.length ? developerIds.includes(String(actor.id)) : ["team_leader","team_member"].includes(actor.app_role)));
-    const related = project.requester_id === actor.id || project.owner_id === actor.id || (await client.query(
+    const related = String(previousState.securityReviewerId||'')===String(actor.id) || project.requester_id === actor.id || project.owner_id === actor.id || (await client.query(
       `select 1 from agent_portal.project_members where project_id=$1 and user_id=$2 and ended_at is null limit 1`,
       [project.id, actor.id],
     )).rows[0];
@@ -1120,7 +1125,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};
     }
     if (previousState.historicalImport && changedDocuments.some(key=>Number(key)>portalJourneyStep(project.current_stage_code))) return {status:400,body:{error:"현재 단계 이후 문서는 아직 작성할 수 없습니다."}};
-    const generalUserKeys = new Set(["intakeAnswers", "intakeDetails", "intakeStandardVersion", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval"]);
+    const generalUserKeys = new Set(["intakeAnswers", "intakeDetails", "intakeStandardVersion", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval", "gateVote", "uatConfirm"]);
     if (actor.app_role === "general_user" && changedKeys.some((key) => !generalUserKeys.has(key))) {
       return { status: 403, body: { error: "General users can only update their own intake content." } };
     }
@@ -1141,6 +1146,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       );
       if (changedGate) return { status: 403, body: { error: "Gate decisions require team leader or admin permission." } };
     }
+    if(changedDocuments.some(k=>[2,4,6,8].includes(Number(k))&&Number(k)>=portalJourneyStep(project.current_stage_code))&&!(previousState.historicalImport&&!previousState.historicalImportFinalizedAt))return {status:403,body:{error:"게이트 문서 저장으로 승인할 수 없습니다. 승인자별 승인 버튼을 사용해 주세요."}};
     const merged = assertPortalProjectState({ ...applyImportLifecycle(previousState,changes,portalJourneyStep(project.current_stage_code)), no: projectCode, source: "database" });
     if(changes.intakeDetails || changes.intakeAnswers)merged.intakeStandardVersion='3.0';
     if(merged.agentSession && (changes.intakeDetails || changes.intakeAnswers || changes.feaDraft)) {
@@ -1163,70 +1169,20 @@ async function updateOperationalProject(projectCode, body, identity) {
       if (required.length) return {status:400,body:{error:`미확보 항목은 완료 처리할 수 없습니다: ${required.map(f=>f.label).join(", ")}`}};
     }
     if (actor.app_role === "general_user") merged.category = "개별 접수";
-    if (changes.g2ReworkState === "resubmitted") {
-      const g2Gate = (await client.query(
-        `select id from agent_portal.gates where project_id=$1 and gate_code='G2' limit 1`,
-        [project.id],
-      )).rows[0];
-      if (g2Gate) await client.query(`delete from agent_portal.gate_approvals where gate_id=$1`, [g2Gate.id]);
-      merged.g2Approvals = {};
+    if(changes.securityReviewerId){
+      const valid=(await client.query("select id from agent_portal.users where id=$1 and is_active=true and app_role<>'general_user'",[changes.securityReviewerId])).rows[0];
+      if(!valid)return {status:400,body:{error:"등록된 활성 정보보호 승인자를 선택해 주세요."}};
     }
-    if (changes.g2Approval) {
-      const g2Decision = changes.g2Approval.decision === "REWORK" ? "rework" : changes.g2Approval.decision === "APPROVED" ? "approved" : null;
-      if (!g2Decision || actor.app_role === "admin") {
-        return { status: 403, body: { error: "G2 approval is limited to the requester, assigned developer, and AI Enablement Team leader." } };
-      }
-      const approverRole = actor.app_role === "general_user"
-        ? "requester"
-        : actor.app_role === "team_leader" ? "team_leader" : "developer";
-      const gate = (await client.query(
-        `insert into agent_portal.gates (project_id,gate_code,gate_status,opened_at)
-         values ($1,'G2','pending',now())
-         on conflict (project_id,gate_code) do update set updated_at=now()
-         returning id`,
-        [project.id],
-      )).rows[0];
-      await client.query(
-        `insert into agent_portal.gate_approvals
-           (gate_id,approver_id,approver_role,decision,decision_comment,decided_at)
-         values ($1,$2,$3,$4,$5,now())
-         on conflict (gate_id,approver_role) do update set
-           approver_id=excluded.approver_id,
-           decision=excluded.decision,
-           decision_comment=excluded.decision_comment,
-           decided_at=now(),updated_at=now()`,
-        [gate.id, actor.id, approverRole, g2Decision, String(changes.g2Approval.reason || "") || null],
-      );
-      const approvalState = (await client.query(
-        `select count(*) filter (where decision='approved')::int as approved_count,
-                bool_or(decision in ('rejected','rework')) as has_rework
-           from agent_portal.gate_approvals where gate_id=$1`,
-        [gate.id],
-      )).rows[0];
-      const gateStatus = approvalState.has_rework ? "rework" : approvalState.approved_count >= 3 ? "approved" : "pending";
-      await client.query(
-        `update agent_portal.gates set
-           gate_status=$2,
-           final_decision=case when $2='approved' then 'approved' else null end,
-           decided_at=case when $2='approved' then now() else null end,
-           decided_by=case when $2='approved' then $3 else null end,
-           updated_at=now()
-         where id=$1`,
-        [gate.id, gateStatus, actor.id],
-      );
-      merged.g2Approvals = {
-        ...(previousState.g2Approvals || {}),
-        [approverRole]: {
-          decision: g2Decision === "rework" ? "REWORK" : "APPROVED",
-          reason: String(changes.g2Approval.reason || ""),
-          actorName: actor.display_name,
-          updatedAt: new Date().toISOString(),
-        },
-      };
-      delete merged.g2Approval;
+    if(changes.lowRouteAction==='register'){
+      const person=(await client.query("select display_name from agent_portal.users where id=$1 and is_active=true",[changes.lowKnowledgeOwnerId||null])).rows[0];
+      if(!person)return {status:400,body:{error:"등록된 지식갱신 담당자를 선택해 주세요."}};
+      project.registrationKnowledgeOwner=person.display_name;
     }
+    try {Object.assign(merged,applyWorkflow(previousState,changes,merged,actor,project));}
+    catch(error){if(error instanceof WorkflowError)return {status:error.status,body:{error:error.message}};throw error;}
+    // Approval roles and transitions are validated by applyWorkflow under this row lock.
     const requestedStageCode = portalStageCode(merged.journeyStep);
-    assertImportTransition(previousState, merged, portalJourneyStep(project.current_stage_code));
+    if(!isLowRoute(merged)&&merged.workflowVersion!=='3.1')assertImportTransition(previousState, merged, portalJourneyStep(project.current_stage_code));
     if (requestedStageCode !== project.current_stage_code) {
       await client.query(`select agent_portal.change_project_stage($1,$2,$3,$4)`, [project.id, requestedStageCode, actor.id, "포털 화면 진행 상태 저장"]);
     }
@@ -1255,6 +1211,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       [project.id, merged.intakeAnswers?.[0] || `과제: ${merged.name}`, merged.intakeAnswers?.[2] || null, merged.intakeAnswers?.[3] || null, JSON.stringify(merged.intakeAnswers || []), JSON.stringify(merged), Math.min(100, (merged.intakeAnswers || []).filter((answer) => String(answer || "").trim()).length * 20), Boolean(merged.intakeDraftCompleted || merged.historicalImport)],
     );
     await syncProjectArtifacts(client, project, merged, actor.id, previousState);
+    await persistWorkflowApprovals(client,project,merged,previousState,actor);
     if (Object.prototype.hasOwnProperty.call(changes, "intakeMessages")) {
       await syncIntakeConversation(client, project.id, merged.intakeMessages, actor.id);
     }
@@ -1393,7 +1350,7 @@ async function assignProjectDeveloper(projectCode, body, identity) {
       return { status: 403, body: { error: "Admin permission is required to assign a developer." } };
     }
     const project = (await client.query(
-      `select id from agent_portal.projects
+      `select * from agent_portal.projects
         where project_code=$1 and deleted_at is null
         limit 1 for update`,
       [projectCode],
@@ -1430,9 +1387,16 @@ async function assignProjectDeveloper(projectCode, body, identity) {
     if (intake) {
       const rawAnswers = intake.raw_answers && typeof intake.raw_answers === "object" ? intake.raw_answers : {};
       const portalState = rawAnswers.portalState && typeof rawAnswers.portalState === "object" ? rawAnswers.portalState : {};
+      const previous=structuredClone(portalState);
       portalState.developerIds = [String(assignee.id)];
       portalState.developerNames = [assignee.displayName];
       portalState.handler = assignee.displayName;
+      Object.assign(portalState,applyWorkflow(previous,{developerIds:portalState.developerIds},portalState,actor,project));
+      if(Number(portalState.journeyStep)!==Number(previous.journeyStep))await client.query("select agent_portal.change_project_stage($1,$2,$3,$4)",[project.id,portalStageCode(portalState.journeyStep),actor.id,"G1 승인 후 Admin 담당자 배정"]);
+      await client.query(
+        "update agent_portal.projects set project_status=$2,progress_percent=$3,next_action=$4,updated_at=now() where id=$1",
+        [project.id,databaseProjectStatus(portalState.journeyStep,portalState),Math.max(0,Math.min(100,Number(portalState.progress)||0)),portalState.nextAction||null],
+      );
       await client.query(
         `update agent_portal.intake_requests
             set raw_answers=$2::jsonb,updated_at=now() where project_id=$1`,

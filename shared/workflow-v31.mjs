@@ -1,0 +1,68 @@
+import {classifyProject} from './project-classification.mjs';
+import {standardDocuments,sectionHasContent} from './standard-documents.mjs';
+import {intakeRequired,feaRequired} from './intake-standard.mjs';
+export const GATE_STEPS={G1:2,G2:4,G3:6,G4:8};
+export const ROLE_LABELS={requester:'요구자',owner:'Project Owner',team_leader:'AI 활성화팀장',security_reviewer:'정보보호 승인자'};
+export const JOURNEY_V31=[
+  {step:0,title:'요구 접수',number:1},{step:1,title:'타당성 평가',number:2},
+  {step:2,title:'착수 승인',gate:'G1'},{step:3,title:'요구 정의',number:3},
+  {step:4,title:'개발 착수 승인',gate:'G2'},{step:5,phase:'design',title:'설계',number:4},
+  {step:5,phase:'development',title:'개발·평가',number:5},{step:6,title:'배포 승인',gate:'G3'},
+  {step:7,title:'배포·확산',number:6},{step:8,title:'확산 승인',gate:'G4'},
+];
+export function projectTrack(state) {
+  const ardLevel=String(state.historicalDocuments?.[3]?.documents?.ARD?.fields?.['autonomy.level']||'').match(/^L([0-4])/);
+  if(ardLevel&&Number(ardLevel[1])>=2)return 'HIGH';
+  if(state.workflowTrack)return state.workflowTrack;
+  const f=state.feaDraft;
+  if(!f||['writeExec','sensitive','damageFinancial','scope','autonomy'].some(k=>f[k]===undefined||f[k]===''))return 'UNKNOWN';
+  return classifyProject(f).track;
+}
+export function isLowRoute(state){return state.lowRoute?.enabled===true;}
+export function displayStage(state){const n=Number(state.journeyStep);return n<=0?1:n<=2?2:n<=4?3:n===5?(state.deliveryPhase==='development'?5:4):n===6?5:6;}
+export function requiredApprovers(gate,state){
+  if(gate==='G1')return ['team_leader'];
+  if(gate==='G2')return ['requester','owner','team_leader'];
+  if(gate==='G3')return projectTrack(state)==='HIGH'||projectTrack(state)==='UNKNOWN'?['team_leader','security_reviewer']:['team_leader'];
+  if(gate==='G4')return ['owner','team_leader'];
+  return [];
+}
+export function allApproved(gate,state) {
+  const roles=requiredApprovers(gate,state);
+  return roles.length>0&&roles.every(role=>state.workflowApprovals?.[gate]?.[role]?.decision==='APPROVED');
+}
+export function documentComplete(state,stage,code){
+  const d=state.historicalDocuments?.[stage]?.documents?.[code];
+  return d?.status==='complete'&&standardDocuments[code]?.sections.every(s=>sectionHasContent(s,d.fields));
+}
+export function gateGaps(gate,state){
+  if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...intakeRequired(state).map(f=>f.label),...feaRequired(state).map(f=>f.label)];
+  if(gate==='G2')return documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료'];
+  if(gate==='G3'){
+    const c=state.gateChecks?.G3||{};
+    return [...(!documentComplete(state,5,'EVR')?['평가 결과 보고서 작성 완료']:[]),...(c.criteriaPassed!==true?['ARD 성공 기준 전 항목 통과']:[]),...(c.zeroViolations!==true?['금칙 위반 0건']:[]),...(!String(c.evidence||'').trim()?['평가 근거 문서·버전']:[]),...(state.uatRecord?.completed!==true?['요구자 UAT 완료']:[])];
+  }
+  if(gate==='G4'){
+    const c=state.gateChecks?.G4||{};
+    return [...(c.criteriaPassed!==true?['파일럿 종료 기준 충족']:[]),...(!String(c.evidence||'').trim()?['파일럿 결과·종료 판정 근거']:[])];
+  }
+  return ['알 수 없는 게이트'];
+}
+export function eligibleRole(role,actor,project,state){
+  const same=id=>id!=null&&String(id)===String(actor.id);
+  if(!actor.is_active)return false;
+  if(role==='requester')return same(project.requester_id);
+  if(role==='owner')return same(project.owner_id);
+  if(role==='team_leader')return actor.app_role==='team_leader';
+  if(role==='security_reviewer')return same(state.securityReviewerId);
+  return false;
+}
+export function gateBasis(gate,state){
+  return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],projectTrack(state)]:
+    gate==='G3'?[state.historicalDocuments?.[5],state.gateChecks?.G3,state.securityReviewerId,state.uatRecord]:
+    gate==='G4'?[state.historicalDocuments?.[7],state.gateChecks?.G4]:[state.intakeAnswers,state.intakeDetails,state.feaDraft,state.feaCompleted]);
+}
+export function gateSummary(gate,state){
+  const roles=requiredApprovers(gate,state);
+  return `${roles.filter(r=>state.workflowApprovals?.[gate]?.[r]?.decision==='APPROVED').length}/${roles.length} 승인`;
+}

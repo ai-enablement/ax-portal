@@ -1,0 +1,44 @@
+"use client";
+import {useState} from 'react';
+import {JOURNEY_V31,requiredApprovers,ROLE_LABELS,gateSummary,gateGaps,isLowRoute} from '../shared/workflow-v31.mjs';
+import './workflow-v31.css';
+export function WorkflowJourney({project,selected,onSelect}){
+  const low=isLowRoute(project),step=Number(project.journeyStep),phase=project.deliveryPhase||'design';
+  return <><nav className="workflow-v31-track" aria-label="6단계 개발 진행 및 승인 게이트">{JOURNEY_V31.map((n,i)=>{
+    const excluded=low&&n.step>2,active=n.step===step&&(!n.phase||n.phase===phase),done=n.step<step||(n.phase==='design'&&step===5&&phase==='development');
+    return <button type="button" key={i} className={[n.gate?'gate':'stage',excluded?'excluded':active?'current':done?'done':'',selected===n.step?'selected':''].join(' ')} onClick={()=>onSelect(n.step,n.phase)} aria-current={active?'step':undefined}><span>{n.gate||n.number}</span><b>{n.title}</b><small>{excluded?'하 트랙 적용 제외':active?'현재 단계':done?'완료':'예정'}</small></button>;
+  })}</nav><div className="workflow-v31-footer">{low?<span>하 트랙 단축: G1 승인 → 운영대장 등록 → 배포 · G2~G4 승인 이력을 만들지 않습니다.</span>:<span>필수 승인자 전원 승인 후 다음 단계로 이동합니다.</span>}<button type="button" onClick={()=>onSelect(9)}>{low?'운영대장 등록·배포':'운영 이관'} →</button></div></>;
+}
+function useSave(onSave){const [busy,setBusy]=useState(false),[message,setMessage]=useState('');return {busy,message,save:async change=>{setBusy(true);setMessage('');try{const ok=await onSave(change);setMessage(ok===false?'저장하지 못했습니다. 오류 안내를 확인해 주세요.':'저장되었습니다.');}catch(e){setMessage(e.message);}finally{setBusy(false);}}};}
+export function WorkflowGate({project,gate,identity,people,onSave}){
+  const {busy,message,save}=useSave(onSave),[reason,setReason]=useState(''),[decision,setDecision]=useState('GO'),[developer,setDeveloper]=useState('');
+  const role=identity?.appRole,admin=role==='admin',leader=role==='team_leader',email=(identity?.email||'').toLowerCase();
+  const mine=r=>r==='team_leader'?leader:r==='requester'?email===(project.requesterEmail||'').toLowerCase():r==='owner'?email===(project.projectOwnerEmail||'').toLowerCase():people.some(p=>String(p.id)===String(project.securityReviewerId)&&p.email?.toLowerCase()===email);
+  const expected={G1:2,G2:4,G3:6,G4:8}[gate],active=project.journeyStep===expected,passed=project.journeyStep>expected;
+  const gaps=gateGaps(gate,project);
+  return <section className="workflow-v31-panel"><header><div><small>{gate} · 승인 게이트</small><h3>{gate==='G1'?'착수 승인':gate==='G2'?'개발 착수 승인':gate==='G3'?'배포 승인':'확산 승인'}</h3></div><strong>{gate==='G1'?(project.g1Resolution?.decision||'판정 대기'):gateSummary(gate,project)}</strong></header>
+    {passed&&!project.workflowApprovals?.[gate]&&<p>이전 절차의 통과 이력을 보존합니다. 신규 승인으로 대체하지 않습니다.</p>}
+    {!active&&!passed&&<p>앞 단계를 완료한 뒤 승인할 수 있습니다.</p>}
+    {active&&gaps.length>0&&<p className="workflow-warning">미완료: {gaps.join(' · ')}</p>}
+    {requiredApprovers(gate,project).map(r=><div className="workflow-v31-vote" key={r}><div><b>{ROLE_LABELS[r]}</b><p>{project.workflowApprovals?.[gate]?.[r]?.actorName||'해당 담당자 계정으로 승인'} · {project.workflowApprovals?.[gate]?.[r]?.decision||'대기'}</p></div>{gate!=='G1'&&mine(r)&&active&&<div><button type="button" disabled={busy||gaps.length>0} onClick={()=>save({gateVote:{gate,role:r,decision:'APPROVED',reason}})}>승인</button><button type="button" disabled={busy||!reason.trim()} onClick={()=>save({gateVote:{gate,role:r,decision:'REWORK',reason}})}>보완 요청</button></div>}</div>)}
+    {active&&<label>판정 조건·보완 사유<textarea value={reason} onChange={e=>setReason(e.target.value)} /></label>}
+    {gate==='G1'&&active&&<><p>팀장이 G1을 확정한 후 Admin이 개발 담당자를 배정합니다. 두 작업이 완료되면 자동 이동합니다.</p>{leader&&<div className="workflow-v31-actions"><select aria-label="G1 판정" value={decision} onChange={e=>setDecision(e.target.value)}><option value="GO">Go</option><option value="CONDITIONAL">Conditional Go</option><option value="DROP">Drop</option></select><button type="button" disabled={busy||gaps.length>0} onClick={()=>save({g1Resolution:{decision,reason,assignee:project.developerNames?.join(' · ')||'미배정'}})}>팀장 G1 판정 확정</button></div>}{admin&&<div className="workflow-v31-actions"><select aria-label="개발 담당자" value={developer} onChange={e=>setDeveloper(e.target.value)}><option value="">개발 담당자 선택</option>{people.map(p=><option key={p.id} value={p.id}>{p.displayName}</option>)}</select><button type="button" disabled={busy||!developer||!['GO','CONDITIONAL'].includes(project.g1Resolution?.decision)} onClick={()=>save({developerIds:[developer]})}>개발 담당자 배정</button></div>}</>}
+    {gate==='G3'&&active&&(admin||leader)&&<label>정보보호 승인자<select value={project.securityReviewerId||''} disabled={busy} onChange={e=>save({securityReviewerId:e.target.value})}><option value="">정보보호 담당 계정 선택</option>{people.map(p=><option key={p.id} value={p.id}>{p.displayName}</option>)}</select><small>상 트랙 필수 · 담당자 변경 시 현재 G3 승인을 다시 받습니다.</small></label>}
+    <p role="status">{busy?'저장 중…':message}</p></section>;
+}
+export function WorkflowControls({project,identity,people,onSave}){
+  const {busy,message,save}=useSave(onSave),step=Number(project.journeyStep),gate=step<=6?'G3':'G4';
+  const [evidence,setEvidence]=useState(project.gateChecks?.[gate]?.evidence||''),[criteria,setCriteria]=useState(project.gateChecks?.[gate]?.criteriaPassed||false),[zero,setZero]=useState(project.gateChecks?.G3?.zeroViolations||false);
+  const [cases,setCases]=useState(''),[uat,setUat]=useState(''),[person,setPerson]=useState('');
+  const admin=identity?.appRole==='admin',author=admin||people.some(p=>p.email?.toLowerCase()===identity?.email?.toLowerCase()&&project.developerIds?.includes(String(p.id)));
+  const requester=identity?.email?.toLowerCase()===(project.requesterEmail||'').toLowerCase();
+  if(project.historicalImport&&!project.historicalImportFinalizedAt)return null;
+  if(isLowRoute(project)&&step===9)return <section className="workflow-v31-panel"><h3>하 트랙 · 운영대장 등록 후 배포</h3><p>오너: {project.projectOwner||project.owner} / 개발·운영: {project.developerNames?.join(' · ')||'미배정'}</p><p>상태: {project.lowRoute.phase==='operating'?'배포·운영 중':project.lowRoute.registeredAt?'운영대장 등록 완료 · 배포 대기':'운영대장 등록 대기'}</p>{author&&project.lowRoute.phase!=='operating'&&<div className="workflow-v31-actions"><select aria-label="지식갱신 담당자" value={person} onChange={e=>setPerson(e.target.value)}><option value="">지식갱신 담당자 선택</option>{people.map(p=><option key={p.id} value={p.id}>{p.displayName}</option>)}</select><button type="button" disabled={busy||!person} onClick={()=>save({lowRouteAction:'register',lowKnowledgeOwnerId:person})}>운영대장 등록</button><button type="button" disabled={busy||!project.lowRoute.registeredAt} onClick={()=>save({lowRouteAction:'deploy'})}>하 트랙 배포 완료</button></div>}<p role="status">{message}</p></section>;
+  if(![5,6,7,8].includes(step))return null;
+  return <section className="workflow-v31-panel"><h3>{step<=6?'설계·개발·평가 진행 및 배포 조건':'파일럿 결과 및 확산 조건'}</h3>{step===5&&<div className="workflow-v31-actions"><span>{project.deliveryPhase==='development'?'⑤ 개발·평가 진행 중':'④ 설계 진행 중 · DES는 개발 중에도 보완 가능'}</span>{author&&project.deliveryPhase!=='development'&&<button type="button" disabled={busy} onClick={()=>save({deliveryPhase:'development'})}>개발·평가 시작 →</button>}</div>}
+    {author&&<><label><input type="checkbox" checked={criteria} onChange={e=>setCriteria(e.target.checked)}/>{gate==='G3'?'ARD 성공 기준 전 항목 통과':'파일럿 종료 기준 충족'}</label>{gate==='G3'&&<label><input type="checkbox" checked={zero} onChange={e=>setZero(e.target.checked)}/>금칙 위반 0건</label>}<label>{gate==='G3'?'평가 근거 문서·버전 및 결과':'파일럿 사용 건수·오류 신고·만족도 및 종료 판정 근거'}<textarea value={evidence} onChange={e=>setEvidence(e.target.value)}/></label><button type="button" disabled={busy} onClick={()=>save({gateChecks:{[gate]:{criteriaPassed:criteria,zeroViolations:zero,evidence}}})}>검증 근거 저장</button></>}
+    {step<=6&&<><p>요구자 UAT: {project.uatRecord?.completed?`${project.uatRecord.cases}건 · ${project.uatRecord.actorName} 확인 완료`:'실제 업무 케이스 확인 대기'}</p>{requester&&<><label>실제 업무 확인 건수<input type="number" min="1" value={cases} onChange={e=>setCases(e.target.value)}/></label><label>확인 결과·근거<textarea value={uat} onChange={e=>setUat(e.target.value)}/></label><button type="button" disabled={busy||!cases||!uat.trim()} onClick={()=>save({uatConfirm:{cases:Number(cases),evidence:uat}})}>요구자 UAT 완료 확인</button></>}</>}
+    {author&&step===5&&project.deliveryPhase==='development'&&<button type="button" disabled={busy} onClick={()=>save({journeyStep:6})}>평가 결과 제출 → G3 승인 요청</button>}
+    {author&&step===7&&<button type="button" disabled={busy||!project.gateChecks?.G4?.evidence} onClick={()=>save({journeyStep:8})}>파일럿 결과 제출 → G4 승인 요청</button>}
+    <p role="status">{busy?'저장 중…':message}</p></section>;
+}

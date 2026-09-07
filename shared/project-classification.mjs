@@ -31,6 +31,6 @@ export function operationsSourceFields(project = {}) {
     'owners.autonomy': autonomy,
     'owners.owner': project.projectOwner || project.owner || '',
     'owners.operator': (project.developerNames || []).filter(Boolean).join(' · '),
-    'owners.knowledgeOwner': contentText(dep?.fields?.['readiness.knowledgeOwner']),
+    'owners.knowledgeOwner': project.lowRoute?.knowledgeOwner || contentText(dep?.fields?.['readiness.knowledgeOwner']),
   };
 }

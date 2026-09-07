@@ -12,6 +12,8 @@ import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
 import { intakeRequired, feaRequired } from '../shared/intake-standard.mjs';
+import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
+import {isLowRoute} from '../shared/workflow-v31.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
@@ -243,6 +245,18 @@ type UserProject = {
   finalizeHistoricalImport?: boolean;
   documentsDeferred?: boolean;
   source?: "database";
+  workflowVersion?: string;
+  workflowTrack?: string;
+  workflowApprovals?: Record<string, Record<string, {decision:string;actorName?:string}>>;
+  deliveryPhase?: "design" | "development";
+  gateChecks?: Record<string, {criteriaPassed?:boolean;zeroViolations?:boolean;evidence?:string}>;
+  securityReviewerId?: string;
+  uatRecord?: {completed:boolean;cases:number;actorName:string};
+  lowRoute?: {enabled:boolean;phase:string;registeredAt?:string};
+  gateVote?: {gate:string;role:string;decision:string;reason:string};
+  uatConfirm?: {cases:number;evidence:string};
+  lowRouteAction?: string;
+  lowKnowledgeOwnerId?: string;
   intakeDraftCompleted?: boolean;
   feaCompleted?: boolean;
   feaDraft?: {
@@ -2329,18 +2343,26 @@ function LegacyTeamWorkspaceDashboard({
       document: "에이전트 요구사항 정의서[ARD]",
       description:
         "요구 정의가 충분한지 확인하고 실제 설계·개발을 시작해도 되는지 결정합니다.",
-      approver: "요구자 + 개발 담당자 + AI활성화팀장",
+      approver: "요구자 + Project Owner + AI활성화팀장",
       approval:
         "자율성, 성공·평가 기준, Out of Scope, 실패 시나리오 기재 완료를 3자 서명으로 승인",
     },
     {
-      label: "설계·개발·평가",
+      label: "설계",
       marker: "4",
       kind: "phase",
-      document: "설계서[DES] · 평가 계획서[EVP] · 평가 결과 보고서[EVR]",
+      document: "설계서[DES]",
       description:
         "정의된 요구에 맞춰 Agent를 설계·개발하고, 기능·안전·실패 케이스를 독립적으로 평가합니다.",
       owner: "개발 담당 · 동료 리뷰어",
+    },
+    {
+      label: "개발·평가",
+      marker: "5",
+      kind: "phase",
+      document: "평가 계획서[EVP] · 평가 결과 보고서[EVR]",
+      description: "설계를 보완하며 개발·평가를 수행합니다. 요구자 UAT와 평가 기준 통과를 확인한 뒤 G3 승인을 요청합니다.",
+      owner: "개발 담당 · 요구자 UAT",
     },
     {
       label: "배포 승인",
@@ -2349,13 +2371,13 @@ function LegacyTeamWorkspaceDashboard({
       document: "평가 결과 보고서[EVR] + 배포 체크리스트[DEP]",
       description:
         "객관적인 평가 근거를 확인해 실제 사용 환경에 배포해도 되는지 결정하는 핵심 Gate입니다.",
-      approver: "동료 리뷰어 + AI활성화팀장 (상 트랙은 정보보호 추가)",
+      approver: "AI활성화팀장 (상 트랙은 정보보호 추가)",
       approval:
-        "ARD 성공 기준 전 항목 통과와 금칙 위반 0건을 확인해 배포를 승인",
+        "ARD 성공 기준 전 항목 통과, 금칙 위반 0건, 요구자 UAT 완료를 확인해 배포를 승인",
     },
     {
-      label: "파일럿",
-      marker: "5",
+      label: "배포·확산",
+      marker: "6",
       kind: "phase",
       document: "배포 체크리스트[DEP] · 사용자 가이드[UG]",
       description:
@@ -2372,15 +2394,6 @@ function LegacyTeamWorkspaceDashboard({
       approver: "프로젝트 Owner + AI활성화팀장",
       approval:
         "파일럿 종료 기준 충족과 운영·지식 담당 인수 완료를 확인해 확산을 승인",
-    },
-    {
-      label: "운영·개선",
-      marker: "6",
-      kind: "phase",
-      document: "운영 대장[OPS] · 개선 이력서[CHG]",
-      description:
-        "배포 후 사용량, 품질, 오류와 변경 이력을 지속 관리합니다. 자율성 상향은 재심사를 진행합니다.",
-      owner: "프로젝트 Owner · 운영 담당 · AI활성화팀",
     },
   ];
   const selectedLifecycleStep =
@@ -2471,7 +2484,7 @@ function LegacyTeamWorkspaceDashboard({
             <span className="lifecycle-heading-mark">LC</span>
             <div>
               <h2>Agent Life Cycle</h2>
-              <p>요구 접수부터 운영·개선까지의 표준 진행 순서</p>
+              <p>요구 접수부터 확산 승인까지 · 하 트랙은 G1 이후 운영대장 등록·배포</p>
             </div>
           </div>
           <div className="lifecycle-compact-summary">
@@ -2492,7 +2505,7 @@ function LegacyTeamWorkspaceDashboard({
             <div className="team-lifecycle-scroll">
               <div
                 className="team-lifecycle-track"
-                aria-label="요구 접수, 타당성 평가, G1 착수 승인, 요구 정의, G2 개발 착수, 설계·개발·평가, G3 배포 승인, 파일럿, G4 확산 승인, 운영·개선 순서"
+                aria-label="요구 접수, 타당성 평가, G1, 요구 정의, G2, 설계, 개발·평가, G3, 배포·확산, G4, 운영 이관 순서"
               >
                 <div className="lifecycle-flow-line" />
                 {lifecycleSteps.map((step) => (
@@ -6852,6 +6865,7 @@ function UserDashboard({
   const [selected, setSelected] = useState(0);
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
+  const [selectedDeliveryPhase, setSelectedDeliveryPhase] = useState<"design" | "development">("design");
   const [chatInput, setChatInput] = useState("");
   const [historicalIntakeEditing, setHistoricalIntakeEditing] = useState(false);
   const [pilotReleaseDocument, setPilotReleaseDocument] = useState<
@@ -7226,44 +7240,8 @@ function UserDashboard({
               <span>{finalizingImport ? "이관 완료 처리 중…" : "과거 이관 완료"}</span>
             </button>}
           </section>}
-          <div className="user-lifecycle-track journey-v2 oneview-journey">
-            {userJourney.map((stage, index) => {
-              const state =
-                index < effectiveJourneyStep
-                  ? "done"
-                  : index === effectiveJourneyStep
-                    ? "current"
-                    : "upcoming";
-              const rejectedGate =
-                current.no === "2026-028" &&
-                index === 4 &&
-                current.g2ReworkState !== "resubmitted";
-              return (
-                <button
-                  type="button"
-                  key={`${stage.code || "S"}-${stage.title}`}
-                  className={`${rejectedGate ? "rejected" : state} ${stage.kind} ${selectedJourney === index ? "selected" : ""}`}
-                  onClick={() => setSelectedJourney(index)}
-                  aria-label={`${stage.title} 결과 보기`}
-                >
-                  <span>
-                    {rejectedGate ? (
-                      <X size={14} weight="bold" />
-                    ) : index < effectiveJourneyStep ? (
-                      <Check size={14} weight="bold" />
-                    ) : stage.kind === "gate" ? (
-                      stage.code
-                    ) : (
-                      stage.display
-                    )}
-                  </span>
-                  <div>
-                    <b>{stage.title}</b>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <WorkflowJourney project={current} selected={selectedJourney} onSelect={(step: number, phase?: "design" | "development") => {setSelectedJourney(step);if(phase)setSelectedDeliveryPhase(phase);}} />
+          {current.source === "database" && <WorkflowControls key={current.no + ":" + JSON.stringify([current.journeyStep,current.deliveryPhase,current.gateChecks,current.uatRecord,current.lowRoute])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
 
           <div className="journey-legend" aria-label="진행 상태 범례">
             <span>
@@ -7353,7 +7331,11 @@ function UserDashboard({
               title="선택된 Agent 과제가 없습니다."
               description="과제를 등록하거나 왼쪽 목록에서 선택하면 현재 단계와 문서 상태가 여기에 표시됩니다."
             />
-          ) : current.historicalImport && selectedJourney > effectiveJourneyStep ? (
+          ) : current.source === "database" && isLowRoute(current) && selectedJourney > 2 && selectedJourney < 9 ? (
+            <EmptyDataPage title="하 트랙 적용 제외" description="G1 승인 후 운영대장 등록·배포로 연결되는 단축 경로입니다. 이 단계의 가짜 승인 이력을 생성하지 않습니다." />
+          ) : current.source === "database" && [2,4,6,8].includes(selectedJourney) && !importInProgress && (selectedJourney >= effectiveJourneyStep || current.workflowApprovals?.[({2:"G1",4:"G2",6:"G3",8:"G4"} as Record<number,string>)[selectedJourney]]) ? (
+            <WorkflowGate key={current.no + ":" + selectedJourney + ":" + JSON.stringify(current.workflowApprovals)} project={current} gate={{2:"G1",4:"G2",6:"G3",8:"G4"}[selectedJourney]} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />
+          ) : current.source === "database" && selectedJourney > effectiveJourneyStep ? (
             <EmptyDataPage
               title="아직 진행할 수 없는 단계입니다."
               description={`${userJourney[effectiveJourneyStep].title} 단계를 완료하면 다음 단계의 작성과 승인이 활성화됩니다.`}
@@ -7439,11 +7421,12 @@ function UserDashboard({
             />
           ) : (current.historicalImport || current.source === "database") && [3, 5, 7, 9].includes(selectedJourney) ? (
             <StandardDocumentWorkspace
-              key={deferredDocumentKey}
+              key={deferredDocumentKey + ":" + selectedDeliveryPhase}
+              initialDocument={selectedJourney === 5 ? selectedDeliveryPhase === "design" ? "DES" : "EVR" : undefined}
               project={current}
               people={teamAccounts.map(account => ({id:account.id,name:account.displayName}))}
               stage={selectedJourney}
-              allowPartialSave={canBackfillDocument(current, selectedJourney)}
+              allowPartialSave={canBackfillDocument(current, selectedJourney) || isLowRoute(current)}
               record={deferredDocumentRecord}
               canEdit={canEditSelectedHistoricalDocument}
               onGallerySubmit={current.journeyStep >= 9 && ([ACCOUNT_ROLES.user, ACCOUNT_ROLES.member, ACCOUNT_ROLES.leader, ACCOUNT_ROLES.admin] as string[]).includes(role) ? () => openGallerySubmission({
@@ -7457,7 +7440,7 @@ function UserDashboard({
                   ...(current.historicalDocuments || {}),
                   [String(selectedJourney)]: record,
                 },
-                ...(!importInProgress && record.status === "complete" && selectedJourney === effectiveJourneyStep && selectedJourney < 9 ? {
+                ...(!importInProgress && record.status === "complete" && selectedJourney === effectiveJourneyStep && selectedJourney === 3 ? {
                   journeyStep: selectedJourney + 1,
                   status: `${userJourney[selectedJourney + 1].title} 진행 중`,
                 } : {}),

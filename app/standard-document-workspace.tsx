@@ -9,11 +9,12 @@ import DocumentContentEditor from "./document-content-editor";
 import { contentText } from "../shared/document-content.mjs";
 import type { OperationsProject } from "../shared/project-classification.mjs";
 
-export default function StandardDocumentWorkspace({ project, stage, record, canEdit, onSave, onGallerySubmit, people = [], allowPartialSave = false }: {
+export default function StandardDocumentWorkspace({ project, stage, record, canEdit, onSave, onGallerySubmit, people = [], allowPartialSave = false, initialDocument }: {
   project: OperationsProject & { no: string; name: string; intakeAnswers?: string[] };
   people?: {id:string;name:string}[];
   allowPartialSave?: boolean;
   stage: number;
+  initialDocument?: string;
   record?: StandardStageRecord;
   canEdit: boolean;
   onGallerySubmit?: () => void;
@@ -21,7 +22,7 @@ export default function StandardDocumentWorkspace({ project, stage, record, canE
 }) {
   const [storedDraft, setDraft] = useState(() => hydrateStandardDocuments(stage, record, project));
   const draft = hydrateStandardDocuments(stage, storedDraft, project);
-  const [code, setCode] = useState(stageDocumentCodes[stage][0]);
+  const [code, setCode] = useState(initialDocument && stageDocumentCodes[stage].includes(initialDocument) ? initialDocument : stageDocumentCodes[stage][0]);
   const [active, setActive] = useState<number | null>(null);
   const [selectedField, setSelectedField] = useState("");
   const [answer, setAnswer] = useState("");

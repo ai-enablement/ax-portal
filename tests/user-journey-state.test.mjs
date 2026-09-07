@@ -159,7 +159,7 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes("historicalBaselineStep: historical ? journeyStep : undefined"));
   assert.ok(page.includes("과거 과제 등록 · 내용 보완 시작"));
   assert.ok(page.includes("현재 단계부터 정식 절차를 시작합니다."));
-  assert.ok(page.includes("current.historicalImport && selectedJourney > effectiveJourneyStep"));
+  assert.ok(page.includes('current.source === "database" && selectedJourney > effectiveJourneyStep'));
   assert.ok(page.includes("requiresHistoricalG1Record"));
   assert.ok(page.includes("G1 착수 판정 이관"));
   assert.ok(page.includes('["GO", "CONDITIONAL"] as const'));
