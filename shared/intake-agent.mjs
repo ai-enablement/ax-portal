@@ -40,11 +40,16 @@ export function missingFields(state, prefix = '') {
   if(!prefix || prefix.startsWith('fea')) for(const field of feaRequired(state)) if(!required.some(f=>f.key===field.key)) required.push(FIELD_MAP.get(field.key));
   return required;
 }
+export function interviewMissingFields(state,prefix='') {
+  if(prefix!=='int.')return missingFields(state,prefix);
+  return AGENT_FIELDS.filter(field=>field.key.startsWith(prefix)&&!validField(field,fieldValue(state,field.key)));
+}
 export function progress(state) {
   const prefix=Number(state.journeyStep||0)===0?'int.':'fea.';
   const missing = missingFields(state,prefix);
+  const interviewMissing = interviewMissingFields(state,prefix);
   const held = state.agentSession?.held || [];
-  return {phase:prefix==='int.'?'INT':'FEA',total:AGENT_FIELDS.filter(f=>!f.optional&&f.key.startsWith(prefix)).length, missing:missing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})), ready:missing.length===0};
+  return {phase:prefix==='int.'?'INT':'FEA',total:AGENT_FIELDS.filter(f=>!f.optional&&f.key.startsWith(prefix)).length, missing:missing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})),interviewMissing:interviewMissing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})), ready:missing.length===0};
 }
 export function safeMessage(text) {
   return !/(?:\d{6}[- ]?[1-8]\d{6}|\b(?:sk-|AIza)[A-Za-z0-9_-]{20,}|-----BEGIN .*PRIVATE KEY-----|(?:api[_ -]?key|비밀키)\s*[:=：]\s*[A-Za-z0-9_-]{16,}|(?:계좌|카드)\s*(?:번호)?\s*[:：]?\s*[\d -]{10,})/i.test(text);
@@ -106,7 +111,8 @@ export function acceptModelTurn(state, result, message, snapshot=state) {
     session.generatedSummary={kind:'AI 초안 · 담당자 검토 필요',evidence:summary.evidence,at:new Date().toISOString()};
     accepted.delete('fea.summary');session.proposals=[...accepted.values()];
   }
-  const missing = missingFields(next,Number(state.journeyStep||0)===0?'int.':'fea.').filter(f=>f.key!=='fea.summary'&&!(session.held||[]).includes(f.key) && !accepted.has(f.key));
+  const phasePrefix=Number(state.journeyStep||0)===0?'int.':'fea.';
+  const missing = interviewMissingFields(next,phasePrefix).filter(f=>f.key!=='fea.summary'&&!(session.held||[]).includes(f.key) && !accepted.has(f.key));
   const target = missing.find(f=>f.key===result.target) || missing[0];
   let question = '';
   if(target) {

@@ -32,7 +32,8 @@ export async function generateTurn(state,message,{env=process.env,fetcher=fetch}
   const values=Object.fromEntries(phaseFields.map(field=>[field.key,fieldValue(state,field.key)]));
   const intakeReference=phasePrefix==='fea.'?Object.fromEntries(AGENT_FIELDS.filter(field=>field.key.startsWith('int.')).map(field=>[field.key,fieldValue(state,field.key)])):{};
   const history=(state.intakeMessages||[]).slice(-16).map(item=>({role:item.role,text:item.text}));
-  const context={fields:phaseFields,values,intakeReference,held:(state.agentSession?.held||[]).filter(key=>key.startsWith(phasePrefix)),attempts:Object.fromEntries(Object.entries(state.agentSession?.attempts||{}).filter(([key])=>key.startsWith(phasePrefix))),missing:progress(state).missing,computed:phasePrefix==='fea.'?deterministicSummary(state):{},history,message};
+  const phaseProgress=progress(state);
+  const context={fields:phaseFields,values,intakeReference,held:(state.agentSession?.held||[]).filter(key=>key.startsWith(phasePrefix)),attempts:Object.fromEntries(Object.entries(state.agentSession?.attempts||{}).filter(([key])=>key.startsWith(phasePrefix))),missing:phaseProgress.interviewMissing||phaseProgress.missing,computed:phasePrefix==='fea.'?deterministicSummary(state):{},history,message};
   const unsafeInput=[...Object.values(values),...Object.values(intakeReference),...history.map(item=>item.text),message].find(value=>typeof value==='string'&&!safeMessage(value));
   if(unsafeInput) throw new AgentError(400,'기존 접수 내용에 민감정보가 감지되었습니다. 직접 입력 화면에서 제거한 뒤 다시 시도해 주세요.');
   let response;

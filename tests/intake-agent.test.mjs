@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
-import {AGENT_FIELDS,FIELD_MAP,validField,fieldValue,missingFields,progress,safeMessage,applyProposals,acceptModelTurn,deterministicSummary,setField} from '../shared/intake-agent.mjs';
+import {AGENT_FIELDS,FIELD_MAP,validField,fieldValue,missingFields,interviewMissingFields,progress,safeMessage,applyProposals,acceptModelTurn,deterministicSummary,setField} from '../shared/intake-agent.mjs';
 import {azureConfiguration,generateTurn,assertAgentAccess,AgentError} from '../server/intake-agent.mjs';
 const configured={AZURE_OPENAI_ENDPOINT:'https://test.openai.azure.com/',AZURE_OPENAI_API_KEY:'test-only',AZURE_OPENAI_DEPLOYMENT:'test-deployment'};
 const blank=()=>({journeyStep:1,name:'테스트 과제',intakeAnswers:['','','','',''],agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}});
@@ -58,6 +58,14 @@ test('missing numbers, defaults and vague narratives cannot become complete',()=
   assert.ok(missingFields(state).some(f=>f.key==='fea.writeExec'));
   assert.equal(progress(state).ready,false);assert.equal(deterministicSummary(state).roi,null);
 });
+test('INT keeps interviewing for useful optional context after required fields are complete',()=>{
+  const state={journeyStep:0,intakeAnswers:['회의실 예약 확인이 반복됩니다.','','','',''],intakeDetails:{performer:'총무 담당자',countPerMonth:'20',asIsMinutes:'15',people:'1',quantityBasis:'최근 한 달 업무 기록 기준',failureImpact:'예약 누락으로 회의가 지연됩니다.'},agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}};
+  assert.equal(progress(state).ready,true);
+  assert.equal(missingFields(state,'int.').length,0);
+  assert.ok(interviewMissingFields(state,'int.').some(field=>field.key==='int.currentProcess'));
+  const next=acceptModelTurn(state,{reply:'필수 내용은 확인했습니다.',target:'int.currentProcess',question:'현재 예약 확인은 어떻게 처리하나요?',proposals:[]},'계속 질문해 주세요.');
+  assert.match(next.reply,/현재 예약 확인은 어떻게 처리하나요/);
+});
 test('unsubstantiated quantities and unauthorized output keys are ignored',()=>{
   const message='월 20건입니다.';
   const {state}=acceptModelTurn(blank(),{reply:'확인해 주세요.',target:'int.0',question:'업무 문제는 무엇인가요?',proposals:[
@@ -102,6 +110,8 @@ test('portal wiring guards server state, revisions and completion; original data
   const api=await readFile(new URL('../server/database-api.mjs',import.meta.url),'utf8');
   assert.match(api,/changedKeys.includes\("agentSession"\)/);assert.match(api,/body.agentRevision/);assert.match(api,/missingFields\(merged/);
   const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<IntakeAgentPanel/);assert.match(page,/portal-agent-saved/);
-  const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');assert.match(panel,/phase==='INT'&&data\.progress\.ready/);assert.match(panel,/현재 INT 필수 항목 중 부족한 정보만/);
+  const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');assert.match(panel,/phase==='INT'&&data\.progress\.ready&&!interviewMissing\.length/);assert.match(panel,/현재 INT 필수 항목 중 부족한 정보만/);
+  assert.doesNotMatch(panel,/data\.session\.request\?\.status!=='complete'/);
+  assert.match(panel,/action==='review_intake'\?'INT 확인을 완료했습니다/);
   assert.equal(AGENT_FIELDS.filter(f=>f.key.startsWith('fea.fitNotes')).length,0);
 });
