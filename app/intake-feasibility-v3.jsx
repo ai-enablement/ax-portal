@@ -1,6 +1,6 @@
 "use client";
 import {useState} from 'react';
-import {INT_FIELDS,FEA_FIELDS,standardValue,intakeRequired,feaRequired,intakeFeasibilityMetrics} from '../shared/intake-standard.mjs';
+import {INT_SECTIONS,FEA_FIELDS,standardValue,intakeRequired,feaRequired,intakeFeasibilityMetrics} from '../shared/intake-standard.mjs';
 import {classifyProject} from '../shared/project-classification.mjs';
 import {canBackfillDocument} from '../shared/historical-import-policy.mjs';
 import './intake-feasibility-v3.css';
@@ -8,11 +8,11 @@ const labels={true:'예',false:'아니오',PERSONAL:'개인',TEAM:'팀',DEPT:'�
 function Field({field,value,onChange}) {
  return <label className="intfea-field"><span>{field.label}{field.required&&<b>필수</b>}</span>{field.type==='select'?<select value={String(value??'')} onChange={e=>onChange(e.target.value)}><option value="">선택해 주세요</option>{field.options.map(v=><option key={v} value={v}>{labels[v]||v}</option>)}</select>:field.type==='textarea'?<textarea value={value||''} onChange={e=>onChange(e.target.value)} maxLength={6000}/>:<input type={field.type} value={value??''} onChange={e=>onChange(e.target.value)} min={field.type==='number'?0:undefined} step={field.key.endsWith('.people')?'1':'any'}/>}</label>;
 }
-export function IntakeV3Fields({answers,details,onChange,readOnly=false}) {
+export function IntakeV3Fields({answers,details,onChange,readOnly=false,sectionNumber=0}) {
  const state={intakeAnswers:answers,intakeDetails:details};
  const change=(key,value)=>{const name=key.split('.')[1];if(/^\d$/.test(name)){const next=[...answers];next[Number(name)]=value;onChange(next,details);}else onChange(answers,{...details,[name]:value});};
- const groups=[['2. 어떤 업무가 힘든가요?',INT_FIELDS.slice(0,6)],['3. 지금은 어떻게 처리하나요?',INT_FIELDS.slice(6,8)],['4. 잘못 처리되면 어떤 일이 생기나요?',INT_FIELDS.slice(8,9)],['5. 희망 시점과 이유',INT_FIELDS.slice(9)]];
- return <fieldset className="intfea-v3" disabled={readOnly}><p>INT v3.0 · 1페이지 요약. 숫자는 대략이라도 입력하고 추정 여부를 근거에 남겨 주세요.</p>{groups.map(([title,fields])=><section className="intfea-section" key={title}><h4>{title}</h4><div className="intfea-grid">{fields.map(field=><Field key={field.key} field={field} value={standardValue(state,field.key)} onChange={value=>change(field.key,value)}/>)}</div></section>)}</fieldset>;
+ const sections=sectionNumber?INT_SECTIONS.filter(section=>section.number===sectionNumber):INT_SECTIONS;
+ return <fieldset className="intfea-v3" disabled={readOnly}><p>INT v3.0 · 1페이지 요약. 숫자는 대략이라도 입력하고 추정 여부를 근거에 남겨 주세요.</p>{sections.map(section=><section className="intfea-section" key={section.number}><h4>{section.number}. {section.title}</h4><div className="intfea-grid">{section.fields.map(field=><Field key={field.key} field={field} value={standardValue(state,field.key)} onChange={value=>change(field.key,value)}/>)}</div></section>)}</fieldset>;
 }
 export function IntakeV3Summary({project}) {
  const s=key=>String(standardValue(project,key)||'미확보');

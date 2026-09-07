@@ -12,7 +12,7 @@ import MarkdownDocumentWorkspace from "./markdown-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
-import { intakeRequired, feaRequired } from '../shared/intake-standard.mjs';
+import { intakeRequired, intakeSectionRequired, feaRequired } from '../shared/intake-standard.mjs';
 import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
 import {isLowRoute} from '../shared/workflow-v31.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
@@ -1506,7 +1506,7 @@ export default function Home() {
       notify(error instanceof Error ? error.message : "과제를 DB에 저장하지 못했습니다.");
       return false;
     }
-    setView("home");
+    setView(historical ? "home" : "intake");
     notify(
       registration?.historical
         ? "과거 Agent 과제를 최소 정보로 등록했습니다. 현재 단계 이전 문서는 미등록 상태로 남겨 담당자가 추후 작성할 수 있습니다."
@@ -14911,7 +14911,7 @@ function suggestRequestTitle(problem: string) {
   return `${summary || "신규 업무"} Agent`;
 }
 
-function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange, email, onEmailChange, optionalEmail, name }: {
+function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange, email, onEmailChange, optionalEmail, selfEmailEditable = false, name }: {
   mode: "SELF" | "OTHER";
   onModeChange: (mode: "SELF" | "OTHER") => void;
   requester: string;
@@ -14920,6 +14920,7 @@ function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange
   email: string;
   onEmailChange: (email: string) => void;
   optionalEmail: boolean;
+  selfEmailEditable?: boolean;
   name: string;
 }) {
   return (
@@ -14944,8 +14945,8 @@ function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange
       )}
       <label className="project-owner-details">
         <span>Owner MS 계정 이메일 · {optionalEmail ? "선택" : "필수"}</span>
-        <input type="email" value={email} readOnly={mode === "SELF"} onChange={(event) => onEmailChange(event.target.value)} placeholder={mode === "SELF" ? "요구자 이메일을 먼저 입력해 주세요." : "name@company.com"} aria-label="Project Owner MS 계정 이메일" aria-invalid={Boolean(email && !isContactEmail(email))} required={!optionalEmail} />
-        <small>{email && !isContactEmail(email) ? "이메일 형식을 확인해 주세요." : mode === "SELF" ? "요구자 메일이 자동 반영됩니다. 다른 메일을 쓰려면 ‘다른 Owner 지정’을 선택하세요." : "오너의 MS 로그인 계정과 연결됩니다. 이름과 메일이 같은 담당자인지 확인해 주세요."}</small>
+        <input type="email" value={email} readOnly={mode === "SELF" && !selfEmailEditable} onChange={(event) => onEmailChange(event.target.value)} placeholder={mode === "SELF" ? "요구자 이메일을 먼저 입력해 주세요." : "name@company.com"} aria-label="Project Owner MS 계정 이메일" aria-invalid={Boolean(email && !isContactEmail(email))} required={!optionalEmail} />
+        <small>{email && !isContactEmail(email) ? "이메일 형식을 확인해 주세요." : mode === "SELF" ? selfEmailEditable ? "이 값을 수정하면 요구자 MS 계정 이메일에도 동일하게 반영됩니다." : "요구자 메일이 자동 반영됩니다. 다른 메일을 쓰려면 ‘다른 Owner 지정’을 선택하세요." : "오너의 MS 로그인 계정과 연결됩니다. 이름과 메일이 같은 담당자인지 확인해 주세요."}</small>
         <small>승인·작성 요청 알림을 위한 연락처입니다. 현재 메일·Teams 알림은 발송하지 않습니다.{optionalEmail ? " 이관 건은 미입력 상태로 저장할 수 있습니다." : ""}</small>
       </label>
     </fieldset>
@@ -15061,6 +15062,10 @@ function RequestWizard({
   const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim() || suggestedRequestTitle;
+  const intakeState = { intakeAnswers: answers, intakeDetails };
+  const stepRequired = step === 1
+    ? answers[0].trim() ? [] : [{ key: "int.0" }]
+    : intakeSectionRequired(intakeState, step);
   const updateAnswer = (value: string) => { if(step===4)setIntakeDetails(d=>({...d,failureImpact:value}));else setAnswers(items=>items.map((item,index)=>index===step-1?value:item)); };
   const updateAnswerAt = (targetIndex: number, value: string) =>
     setAnswers((items) =>
@@ -15107,14 +15112,22 @@ function RequestWizard({
     else setSubmitted(false);
   };
   const advance = () => {
-    if (!answers[0].trim() || submitted) return;
+    if (stepRequired.length || submitted || (step === 5 && !canSubmit)) return;
     if (step < 5) setStep(step + 1);
     else void submitRequest();
   };
   const openChatMode = () => {
     setRegistrationMode("NEW");
-    const firstEmpty = answers.findIndex((answer) => !answer.trim());
-    setStep(firstEmpty === -1 ? 5 : firstEmpty + 1);
+    const nextStep = !answers[0].trim()
+      ? 1
+      : intakeSectionRequired({ intakeAnswers: answers, intakeDetails }, 2).length
+        ? 2
+        : !intakeDetails.currentProcess?.trim() && !answers[2].trim()
+          ? 3
+          : intakeSectionRequired({ intakeAnswers: answers, intakeDetails }, 4).length
+            ? 4
+            : 5;
+    setStep(nextStep);
     setWritingMode("CHAT");
   };
   const openHistoricalMode = () => {
@@ -15238,7 +15251,13 @@ function RequestWizard({
               </div>
             </header>
             <div className="wizard-chat-history">
-              {[...answers.slice(0,3),intakeDetails.failureImpact||"",answers[4]].slice(0, step - 1).map((answer, index) => (
+              {[
+                answers[0],
+                [intakeDetails.performer, intakeDetails.countPerMonth&&`월 ${intakeDetails.countPerMonth}건`, intakeDetails.asIsMinutes&&`건당 ${intakeDetails.asIsMinutes}분`, intakeDetails.people&&`${intakeDetails.people}명`, intakeDetails.quantityBasis].filter(Boolean).join(" · "),
+                [intakeDetails.currentProcess, answers[2]].filter(Boolean).join("\n"),
+                intakeDetails.failureImpact||"",
+                [answers[4], intakeDetails.timingReason].filter(Boolean).join(" · "),
+              ].slice(0, step - 1).map((answer, index) => (
                 <div className="wizard-answer-pair" key={`${answer}-${index}`}>
                   <div className="chat-message agent">
                     <small>요구 접수 Agent</small>
@@ -15246,7 +15265,7 @@ function RequestWizard({
                   </div>
                   <div className="chat-message user">
                     <small>나</small>
-                    <p>{answer}</p>
+                    <p>{answer || "입력 생략 · 등록 후 AI 인터뷰에서 보완"}</p>
                   </div>
                 </div>
               ))}
@@ -15256,7 +15275,9 @@ function RequestWizard({
               </div>
             </div>
             <div className="wizard-chat-input">
-              {step===2 ? <IntakeV3Fields answers={answers} details={intakeDetails} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setIntakeDetails(d);}} /> : step === 5 ? (
+              {step >= 2 ? <>
+                <IntakeV3Fields sectionNumber={step} answers={answers} details={intakeDetails} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setIntakeDetails(d);}} />
+                {step === 5 && (
                 <div className="wizard-final-fields">
                   {isAiTeam && (
                     <fieldset className="wizard-owner-field wizard-requester-field">
@@ -15264,40 +15285,30 @@ function RequestWizard({
                       <p>회의를 요청했거나 업무 문제를 제기한 실제 요구자를 입력합니다.</p>
                       <input value={requesterName} onChange={(event) => setRequesterName(event.target.value)} placeholder="요구자 이름" aria-label="요구자 이름" />
                       <input value={requesterDepartment} onChange={(event) => setRequesterDepartment(event.target.value)} placeholder="소속 부서" aria-label="요구자 소속 부서" />
-                      <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" />
+                      <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" aria-invalid={Boolean(requesterEmail && !isContactEmail(normalizeContactEmail(requesterEmail)))} />
+                      {requesterEmail && !isContactEmail(normalizeContactEmail(requesterEmail)) && <small>이메일 형식을 확인해 주세요.</small>}
                     </fieldset>
                   )}
                   {!isAiTeam&&<label className="wizard-form-field"><span>요구자 소속 부서 · 필수</span><input value={requesterDepartment} onChange={e=>setRequesterDepartment(e.target.value)}/></label>}
-                  <label className="wizard-date-input">
-                    <span>희망 완료일</span>
-                    <input
-                      type="date"
-                      value={answers[step - 1]}
-                      onInput={(event) =>
-                        updateAnswer((event.target as HTMLInputElement).value)
-                      }
-                      onChange={(event) => updateAnswer(event.target.value)}
-                    />
-                  </label>
-                  <label className="wizard-form-field"><span>희망 시점의 이유</span><textarea value={intakeDetails.timingReason||""} onChange={e=>setIntakeDetails(d=>({...d,timingReason:e.target.value}))}/></label>
-                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={setProjectOwnerEmail} optionalEmail={isHistorical} name="project-owner-mode" />
+                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={(email) => ownerMode === "SELF" && isAiTeam ? setRequesterEmail(email) : setProjectOwnerEmail(email)} optionalEmail={isHistorical} selfEmailEditable={isAiTeam} name="project-owner-mode" />
                 </div>
-              ) : (
+                )}
+              </> : (
                 <textarea
-                  value={step===4?intakeDetails.failureImpact||"":answers[step - 1]}
+                  value={answers[0]}
                   onChange={(event) => updateAnswer(event.target.value)}
-                  placeholder={examples[step - 1]}
+                  placeholder={examples[0]}
                 />
               )}
               <button
                 disabled={
-                  !answers[0].trim() ||
-                  (step === 5 && (!resolvedRequester || !resolvedProjectOwner)) ||
+                  stepRequired.length > 0 ||
+                  (step === 5 && !canSubmit) ||
                   submitted
                 }
                 onClick={advance}
               >
-                {step === 5 ? "등록 후 AI 인터뷰 시작" : "다음 · 모르는 항목은 건너뛰기"}
+                {step === 5 ? "등록 후 AI 인터뷰 시작" : "다음"}
                 <ArrowRight size={15} weight="bold" />
               </button>
             </div>
@@ -15397,7 +15408,8 @@ function RequestWizard({
                     <p>회의를 요청했거나 업무 문제를 제기한 실제 요구자를 입력합니다.</p>
                     <input value={requesterName} onChange={(event) => setRequesterName(event.target.value)} placeholder="요구자 이름" aria-label="요구자 이름" />
                     <input value={requesterDepartment} onChange={(event) => setRequesterDepartment(event.target.value)} placeholder="소속 부서" aria-label="요구자 소속 부서" />
-                    <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" />
+                    <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" aria-invalid={Boolean(requesterEmail && !isContactEmail(normalizeContactEmail(requesterEmail)))} />
+                    {requesterEmail && !isContactEmail(normalizeContactEmail(requesterEmail)) && <small>이메일 형식을 확인해 주세요.</small>}
                   </fieldset>
                 )}
                 {isHistorical && (
@@ -15434,12 +15446,12 @@ function RequestWizard({
                 {!isAiTeam&&<label className="wizard-form-field wide"><span>요구자 소속 부서 · 필수</span><input value={requesterDepartment} onChange={e=>setRequesterDepartment(e.target.value)}/></label>}
                 <div className="wide"><IntakeV3Fields answers={answers} details={intakeDetails} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setIntakeDetails(d);}} /></div>
                 {isHistorical&&<details className="wide"><summary>타당성 평가서[FEA] v3.0 입력 · 선택 / 나중에 보완 가능</summary><FeaV3Fields project={{intakeAnswers:answers,intakeDetails}} draft={historicalFea||{standardVersion:"3.0"}} onChange={setHistoricalFea}/></details>}
-                <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={setProjectOwnerEmail} optionalEmail={isHistorical} name="form-project-owner-mode" />
+                <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={(email) => ownerMode === "SELF" && isAiTeam ? setRequesterEmail(email) : setProjectOwnerEmail(email)} optionalEmail={isHistorical} selfEmailEditable={isAiTeam} name="form-project-owner-mode" />
               </div>
               <footer className="wizard-form-actions">
                 <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `업무 문제 · 요구자 · Owner 필수 · 나머지는 AI 인터뷰에서 보완`}</span>
                 <button disabled={!canSubmit} onClick={submitRequest}>
-                  {isHistorical ? "과거 과제 등록 · 내용 보완 시작" : isAiTeam ? "Agent 과제 등록" : "접수서 제출"}
+                  {isHistorical ? "과거 과제 등록 · 내용 보완 시작" : "등록 후 AI 인터뷰 시작"}
                   <ArrowRight size={15} weight="bold" />
                 </button>
               </footer>

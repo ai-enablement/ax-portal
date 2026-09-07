@@ -13916,8 +13916,10 @@ body {
   gap: 8px;
 }
 .wizard-form-field.wide,
-.wizard-form-scroll .wizard-requester-field {
+.wizard-form-scroll .wizard-requester-field,
+.wizard-form-scroll > .wide {
   grid-column: 1 / -1;
+  width: 100%;
 }
 .wizard-form-field > span {
   color: #253247;
@@ -14742,7 +14744,8 @@ body {
     grid-template-columns: 1fr;
   }
   .wizard-form-field.wide,
-  .wizard-form-scroll .wizard-requester-field {
+  .wizard-form-scroll .wizard-requester-field,
+  .wizard-form-scroll > .wide {
     grid-column: auto;
   }
   .historical-project-fields {

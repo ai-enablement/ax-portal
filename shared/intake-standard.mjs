@@ -17,6 +17,12 @@ export const INT_FIELDS = [
   {key:'int.4',label:'희망 시점',type:'date',required:false},
   text('int.timingReason','희망 시점의 이유'),
 ];
+export const INT_SECTIONS = [
+  {number:2,title:'어떤 업무가 힘든가요?',fields:INT_FIELDS.slice(0,6)},
+  {number:3,title:'지금은 어떻게 처리하나요?',fields:INT_FIELDS.slice(6,8)},
+  {number:4,title:'잘못 처리되면 어떤 일이 생기나요?',fields:INT_FIELDS.slice(8,9)},
+  {number:5,title:'희망 시점과 이유',fields:INT_FIELDS.slice(9)},
+];
 export const FEA_FIELDS = [
   text('fea.summary','AI 요구 요약 · 3줄',true),
   ...ALTERNATIVE_LABELS.map((label,i)=>text(`fea.alternatives.${i}`,label+' · 검토 결과',true)),
@@ -51,6 +57,10 @@ export function fieldComplete(field,value) {
   return knownText(value);
 }
 export function intakeRequired(state) {return INT_FIELDS.filter(f=>f.required&&!fieldComplete(f,standardValue(state,f.key)));}
+export function intakeSectionRequired(state, sectionNumber) {
+  const section=INT_SECTIONS.find(section=>section.number===sectionNumber);
+  return (section?.fields||[]).filter(field=>field.required&&!fieldComplete(field,standardValue(state,field.key)));
+}
 export function feaRequired(state) {
   const missing=FEA_FIELDS.filter(f=>f.required&&!fieldComplete(f,standardValue(state,f.key)));
   return missing;

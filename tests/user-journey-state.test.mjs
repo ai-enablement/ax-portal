@@ -37,7 +37,7 @@ test("lets AI team register an intake on behalf of the requester", () => {
   assert.ok(page.includes("요청자를 대신해 접수서 작성"));
   assert.ok(page.includes("요구자 정보"));
   assert.ok(page.includes("요구자 MS 계정 이메일"));
-  assert.ok(page.includes("step === 5 && (!resolvedRequester || !resolvedProjectOwner)"));
+  assert.ok(page.includes("step === 5 && !canSubmit"));
   assert.ok(!page.includes('className="wizard-document-preview"'));
   assert.ok(page.includes("resolvedRequester"));
 });
@@ -59,6 +59,8 @@ test("supports both chat and direct document intake with shared values", () => {
   assert.ok(page.includes("updateAnswerAt"));
   assert.ok(page.includes("두 방식에서 입력한 내용은 서로 유지됩니다"));
   assert.ok(page.includes("submitRequest"));
+  assert.ok(page.includes('setView(historical ? "home" : "intake")'));
+  assert.equal((page.match(/등록 후 AI 인터뷰 시작/g) || []).length, 2);
   assert.ok(css.includes(".request-writing-modes"));
   assert.ok(css.includes(".wizard-form-panel"));
   assert.ok(css.includes(".wizard-form-scroll"));
