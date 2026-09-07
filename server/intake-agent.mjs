@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {getPool, withTransaction} from './db/pool.mjs';
 import {syncProjectArtifacts} from './database-api.mjs';
-import {AGENT_FIELDS, fieldValue, progress, deterministicSummary, safeMessage, applyProposals, acceptModelTurn} from '../shared/intake-agent.mjs';
+import {AGENT_FIELDS, fieldValue, progress, deterministicSummary, safeMessage, applyProposals, acceptModelTurn,autoApplyIntakeExtractions} from '../shared/intake-agent.mjs';
 
 export class AgentError extends Error { constructor(status,message) {super(message);this.status=status;} }
 export function azureConfiguration(env=process.env) {
@@ -37,7 +37,7 @@ export async function generateTurn(state,message,{env=process.env,fetcher=fetch}
   const unsafeInput=[...Object.values(values),...Object.values(intakeReference),...history.map(item=>item.text),message].find(value=>typeof value==='string'&&!safeMessage(value));
   if(unsafeInput) throw new AgentError(400,'기존 접수 내용에 민감정보가 감지되었습니다. 직접 입력 화면에서 제거한 뒤 다시 시도해 주세요.');
   let response;
-  const phasePrompt=Number(state.journeyStep||0)===0?'현재 INT 요구 접수 단계다. int.* 항목만 수집·추출한다. FEA 질문과 제안은 아직 하지 않는다. INT 필수 답변이 확인되면 AI 검토 완료 버튼으로 FEA에 넘어가도록 안내한다.':'현재 FEA 단계다. 기존 INT와 대화에서 요구 요약 3줄을 직접 정리해 fea.summary에 제안한다. 사용자에게 요약 작성을 요구하지 않는다. 미확보 사실은 만들지 않는다. 대안·효과·위험을 수집한다. 작성자에게 Go/Drop 판정안을 묻지 않으며 이와 관련한 이전 지침은 적용하지 않는다. FEA 검토·보완 후 작성 완료로 G1을 요청하고 팀장이 판정한다.';
+  const phasePrompt=Number(state.journeyStep||0)===0?'현재 INT 요구 접수 단계다. int.* 항목만 수집·추출한다. FEA 질문과 제안은 아직 하지 않는다. 사용자가 명확히 답한 INT 사실은 원문 근거와 함께 extracted로 적극 추출한다. 현재 순서의 정보가 충분하지 않으면 같은 항목을 구체적으로 되묻고, 충분하면 다음 미확보 항목을 질문한다. INT 필수 답변이 확인되면 AI 검토 완료 버튼으로 FEA에 넘어가도록 안내한다.':'현재 FEA 단계다. 기존 INT와 대화에서 요구 요약 3줄을 직접 정리해 fea.summary에 제안한다. 사용자에게 요약 작성을 요구하지 않는다. 미확보 사실은 만들지 않는다. 대안·효과·위험을 수집한다. 작성자에게 Go/Drop 판정안을 묻지 않으며 이와 관련한 이전 지침은 적용하지 않는다. FEA 검토·보완 후 작성 완료로 G1을 요청하고 팀장이 판정한다.';
   try {response=await fetcher(config.url,{method:'POST',redirect:'error',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json','api-key':config.key},body:JSON.stringify({model:config.deployment,messages:[{role:'system',content:SYSTEM_PROMPT+'\n'+phasePrompt},{role:'user',content:JSON.stringify(context)}],max_completion_tokens:6000,response_format:{type:'json_schema',json_schema:{name:'intake_feasibility_turn',strict:true,schema:OUTPUT_SCHEMA}}})});}
   catch {throw new AgentError(502,'AI 응답을 받지 못했습니다. 답변은 DB에 보관되어 있으니 잠시 후 다시 시도해 주세요.');}
   if(!response.ok) throw new AgentError(response.status===429?429:502,response.status===429?'AI 사용량 제한입니다. 잠시 후 다시 시도해 주세요.':'AI 연결에 실패했습니다. Azure 모델 배포·접근 권한·구조화 출력 지원을 확인해 주세요.');
@@ -104,7 +104,9 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
     if(!Array.isArray(body.keys) || body.keys.length>AGENT_FIELDS.length || !body.keys.every(k=>AGENT_FIELDS.some(f=>f.key===k))) throw new AgentError(400,'확인할 항목을 선택해 주세요.');
     let next=structuredClone(state),conflicts=[];
     if(body.action==='review_intake'){
-      next=completeIntakeReview(state,actor);
+      next=autoApplyIntakeExtractions(state,actor.id);
+      if(next.agentSession)next.agentSession.proposals=(next.agentSession.proposals||[]).filter(item=>!item.key.startsWith('int.')||item.kind==='extracted');
+      next=completeIntakeReview(next,actor);
       await client.query("select agent_portal.change_project_stage($1,'FEA',$2,'요구 접수 AI 검토 완료')",[project.id,actor.id]);
       next.nextAction='AI가 정리한 FEA 초안을 검토·보완해 주세요.';next.progress=22;
       await client.query("update agent_portal.projects set next_action=$2,progress_percent=22,updated_at=now() where id=$1",[project.id,next.nextAction]);
@@ -144,7 +146,9 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
     return await transaction(async client=>{
       const {actor,project,state}=await load(client,identity,code,true);
       if(state.agentSession?.request?.token!==reservation.token) throw new AgentError(409,'다른 요청이 처리되었습니다. 새로고침해 주세요.');
-      const {state:next,reply}=acceptModelTurn(state,result,body.message.trim(),reservation.state);
+      const accepted=acceptModelTurn(state,result,body.message.trim(),reservation.state);
+      const reply=accepted.reply;
+      let next=autoApplyIntakeExtractions(accepted.state,actor.id);
       if(JSON.stringify(next.feaDraft)!==JSON.stringify(state.feaDraft))next.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
       next.agentSession.request.status='complete';
       delete next.agentSession.request.token;

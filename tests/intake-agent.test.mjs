@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
-import {AGENT_FIELDS,FIELD_MAP,validField,fieldValue,missingFields,interviewMissingFields,progress,safeMessage,applyProposals,acceptModelTurn,deterministicSummary,setField} from '../shared/intake-agent.mjs';
+import {AGENT_FIELDS,FIELD_MAP,validField,fieldValue,missingFields,interviewMissingFields,progress,safeMessage,applyProposals,autoApplyIntakeExtractions,acceptModelTurn,deterministicSummary,setField} from '../shared/intake-agent.mjs';
 import {azureConfiguration,generateTurn,assertAgentAccess,AgentError} from '../server/intake-agent.mjs';
 const configured={AZURE_OPENAI_ENDPOINT:'https://test.openai.azure.com/',AZURE_OPENAI_API_KEY:'test-only',AZURE_OPENAI_DEPLOYMENT:'test-deployment'};
 const blank=()=>({journeyStep:1,name:'테스트 과제',intakeAnswers:['','','','',''],agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}});
@@ -66,6 +66,16 @@ test('INT keeps interviewing for useful optional context after required fields a
   const next=acceptModelTurn(state,{reply:'필수 내용은 확인했습니다.',target:'int.currentProcess',question:'현재 예약 확인은 어떻게 처리하나요?',proposals:[]},'계속 질문해 주세요.');
   assert.match(next.reply,/현재 예약 확인은 어떻게 처리하나요/);
 });
+test('INT applies exact answer extractions immediately and asks the earliest missing field',()=>{
+  const state={journeyStep:0,intakeAnswers:['','','','',''],intakeDetails:{},agentSession:{revision:1,confirmed:{},proposals:[{key:'int.0',value:'회의실 예약 확인이 반복됩니다.',baseValue:'',kind:'extracted',evidence:'회의실 예약 확인이 반복됩니다.'}],held:[],attempts:{}}};
+  const applied=autoApplyIntakeExtractions(state,'7');
+  assert.equal(fieldValue(applied,'int.0'),'회의실 예약 확인이 반복됩니다.');
+  assert.equal(applied.agentSession.proposals.length,0);
+  assert.equal(applied.agentSession.confirmed['int.0'].actorId,'7');
+  const next=acceptModelTurn({...state,agentSession:{...state.agentSession,proposals:[]}},{reply:'확인하겠습니다.',target:'int.performer',question:'누가 담당하나요?',proposals:[]},'계속 질문해 주세요.');
+  assert.match(next.reply,/어떤 업무가 힘든가요/);
+  assert.doesNotMatch(next.reply,/누가 담당하나요/);
+});
 test('unsubstantiated quantities and unauthorized output keys are ignored',()=>{
   const message='월 20건입니다.';
   const {state}=acceptModelTurn(blank(),{reply:'확인해 주세요.',target:'int.0',question:'업무 문제는 무엇인가요?',proposals:[
@@ -90,13 +100,13 @@ test('manual changes during generation and review are never silently overwritten
   const {state}=acceptModelTurn(current,{reply:'확인',target:'',question:'',proposals:[{key:'fea.countPerMonth',value:'20',kind:'extracted',evidence:'월 20건'}]},'월 20건',snapshot);
   const saved=applyProposals(state,['fea.countPerMonth'],'1');assert.equal(saved.state.feaDraft.countPerMonth,'30');assert.equal(saved.conflicts.length,1);
 });
-test('re-asking has bounded counts and held slots accept later answers',()=>{
+test('INT keeps re-asking while FEA retains bounded holds and later answers can resume',()=>{
   let state={...blank(),journeyStep:0};
-  for(let i=0;i<2;i++) state=acceptModelTurn(state,{reply:'수치 확인 필요',target:'int.countPerMonth',question:'월 몇 건인가요?',proposals:[]},'모릅니다').state;
-  assert.ok(state.agentSession.held.includes('int.countPerMonth'));
-  state=acceptModelTurn(state,{reply:'확인',target:'',question:'',proposals:[{key:'int.countPerMonth',value:'20',kind:'extracted',evidence:'월 20건'}]},'월 20건').state;
-  state=applyProposals(state,['int.countPerMonth'],'1').state;
-  assert.ok(!state.agentSession.held.includes('int.countPerMonth'));
+  for(let i=0;i<4;i++) state=acceptModelTurn(state,{reply:'조금 더 확인하겠습니다.',target:'int.0',question:'어떤 업무가 힘든가요?',proposals:[]},'설명이 어렵습니다').state;
+  assert.ok(!state.agentSession.held.includes('int.0'));
+  let fea=blank();
+  for(let i=0;i<3;i++) fea=acceptModelTurn(fea,{reply:'보류합니다.',target:'fea.summary',question:'요약 근거를 알려주세요.',proposals:[]},'모릅니다').state;
+  assert.ok(fea.agentSession.held.includes('fea.alternatives.0'));
 });
 test('classification and ROI are deterministic with confirmed inputs, not model verdicts',()=>{
   const state=blank();for(const [key,value] of Object.entries({countPerMonth:'20',asIsMinutes:'45',people:'2',savedMinutes:'30',effectBasis:'실측한 처리 시간 차이',businessIdentity:'false',writeExec:'false',sensitive:'false',damageFinancial:'false',scope:'TEAM',track:'HIGH',autonomy:'L2',agentType:'혼합형'})) {setField(state,`fea.${key}`,value);state.agentSession.confirmed[`fea.${key}`]={value};}
@@ -113,5 +123,7 @@ test('portal wiring guards server state, revisions and completion; original data
   const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');assert.match(panel,/phase==='INT'&&data\.progress\.ready&&!interviewMissing\.length/);assert.match(panel,/현재 INT 필수 항목 중 부족한 정보만/);
   assert.doesNotMatch(panel,/data\.session\.request\?\.status!=='complete'/);
   assert.match(panel,/action==='review_intake'\?'INT 확인을 완료했습니다/);
+  assert.match(panel,/INT 자동 작성 중/);
+  assert.match(panel,/phase==='INT'\?'int-simple'/);
   assert.equal(AGENT_FIELDS.filter(f=>f.key.startsWith('fea.fitNotes')).length,0);
 });

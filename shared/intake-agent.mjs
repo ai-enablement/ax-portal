@@ -73,6 +73,11 @@ export function applyProposals(state, keys, actorId) {
   }
   return {state:next, conflicts};
 }
+export function autoApplyIntakeExtractions(state,actorId){
+  if(Number(state.journeyStep||0)!==0)return state;
+  const keys=(state.agentSession?.proposals||[]).filter(item=>item.kind==='extracted'&&item.key.startsWith('int.')).map(item=>item.key);
+  return keys.length?applyProposals(state,keys,actorId).state:state;
+}
 function sourceEvidence(evidence,sources) {
   if(typeof evidence!=='string'||sources.includes(evidence))return evidence;
   const trimmed=evidence.trim();
@@ -92,6 +97,7 @@ export function acceptModelTurn(state, result, message, snapshot=state) {
     const item={...proposal,evidence:sourceEvidence(proposal?.evidence,sources)};
     const field = FIELD_MAP.get(item?.key);
     if(Number(state.journeyStep||0)===0&&!item.key?.startsWith('int.'))continue;
+    if(Number(state.journeyStep||0)===0&&item.kind!=='extracted')continue;
     if(!field || !validField(field,item.value) || !safeMessage(item.value) || typeof item.evidence!=='string' || item.evidence.length>1200 || !safeMessage(item.evidence)) continue;
     if(!['extracted','suggested'].includes(item.kind)) continue;
     // Numbers must come verbatim from an actual answer, not from model-generated estimates.
@@ -113,13 +119,13 @@ export function acceptModelTurn(state, result, message, snapshot=state) {
   }
   const phasePrefix=Number(state.journeyStep||0)===0?'int.':'fea.';
   const missing = interviewMissingFields(next,phasePrefix).filter(f=>f.key!=='fea.summary'&&!(session.held||[]).includes(f.key) && !accepted.has(f.key));
-  const target = missing.find(f=>f.key===result.target) || missing[0];
+  const target = missing[0];
   let question = '';
   if(target) {
     session.attempts ||= {};
     const count = (session.attempts[target.key] || 0)+1;
     session.attempts[target.key]=count;
-    if(count >= (target.number ? 2 : 3)) session.held=[...new Set([...(session.held||[]),target.key])];
+    if(phasePrefix!=='int.'&&count >= (target.number ? 2 : 3)) session.held=[...new Set([...(session.held||[]),target.key])];
     question = target.key===result.target && typeof result.question==='string' && result.question.length<2000 && safeMessage(result.question) ? result.question : `${target.label}을 구체적으로 알려주세요. 확인이 어려우면 보류하고 나중에 보완할 수 있습니다.`;
   }
   const reply = [result.reply,question,accepted.size ? '아래 확인 대기 항목을 검토해 주세요. 확인한 내용만 문서에 반영됩니다.' : '',!target && missingFields(next).length ? '아직 미확보 항목이 있습니다. 완료 처리하지 않고 보류하며, 나중에 답변을 주시면 다시 반영합니다.' : ''].filter(Boolean).join('\n\n');
