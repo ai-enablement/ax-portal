@@ -270,7 +270,7 @@ type UserProject = {
     latestId?: string;
     latestVersion?: number;
     latestPhase?: string;
-    phases?: Record<string, { id:string; version:number; name:string; authorName?:string; at:string }>;
+    phases?: Record<string, { id:string; version:number; name:string; authorName?:string; at:string; status?:"draft"|"complete"; completedVersion?:number; completedAt?:string; completedByName?:string }>;
   }>;
   gateChecks?: Record<string, {criteriaPassed?:boolean;zeroViolations?:boolean;evidence?:string}>;
   securityReviewerId?: string;
@@ -307,6 +307,7 @@ type UserProject = {
     emergencyReasonAndDeadline?: string;
   };
   fastTrackAction?: {type:string;reason?:string;ardLite?:UserProject["ardLite"];role?:string;decision?:string};
+  markdownCompleteAction?: {phase:"design"|"development_evaluation"|"deployment_rollout"};
   gateVote?: {gate:string;role:string;decision:string;reason:string};
   uatConfirm?: {cases:number;evidence:string};
   lowRouteAction?: string;
@@ -7345,7 +7346,7 @@ function UserDashboard({
           </section>}
           {current.source === "database" && current.fastTrack?.requested && <FastTrackPanel key={current.no + ":" + JSON.stringify([current.fastTrack,current.ardLite,current.developerIds])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
           <WorkflowJourney project={current} selected={selectedJourney} onSelect={(step: number, phase?: "design" | "development") => {setSelectedJourney(step);if(phase)setSelectedDeliveryPhase(phase);}} />
-          {current.source === "database" && <WorkflowControls key={current.no + ":" + JSON.stringify([current.journeyStep,current.deliveryPhase,current.gateChecks,current.uatRecord,current.lowRoute])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
+          {current.source === "database" && selectedJourney === effectiveJourneyStep && <WorkflowControls key={current.no + ":" + JSON.stringify([current.journeyStep,current.deliveryPhase,current.gateChecks,current.uatRecord,current.lowRoute])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
 
           <div className="journey-legend" aria-label="진행 상태 범례">
             <span>
@@ -7447,10 +7448,11 @@ function UserDashboard({
           ) : (current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney) ? (
             <MarkdownDocumentWorkspace
               key={`${deferredDocumentKey}:markdown:${selectedDeliveryPhase}`}
-              project={{no:current.no,name:current.name}}
+              project={current}
               phase={selectedJourney === 7 ? "deployment_rollout" : selectedDeliveryPhase === "development" ? "development_evaluation" : "design"}
               canEdit={canEditSelectedHistoricalDocument}
               devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined}
+              onComplete={(phase) => onUpdateProject(current.no,{markdownCompleteAction:{phase}})}
             />
           ) : current.documentsDeferred &&
             selectedJourney !== 0 &&

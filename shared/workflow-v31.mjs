@@ -38,12 +38,20 @@ export function allApproved(gate,state) {
   const roles=requiredApprovers(gate,state);
   return roles.length>0&&roles.every(role=>state.workflowApprovals?.[gate]?.[role]?.decision==='APPROVED');
 }
+export function historicalGateComplete(gate,state){
+  const gateStep=GATE_STEPS[gate];
+  const baseline=Number(state.historicalBaselineStep??state.historicalResumeStep);
+  return state.historicalImport===true&&Number.isFinite(baseline)&&Number.isFinite(gateStep)&&gateStep<baseline;
+}
 export function documentComplete(state,stage,code){
   const d=state.historicalDocuments?.[stage]?.documents?.[code];
   return d?.status==='complete'&&standardDocuments[code]?.sections.every(s=>sectionHasContent(s,d.fields));
 }
 export function markdownDocumentComplete(state,code,phase){
-  return Number(state.markdownDocuments?.[code]?.phases?.[phase]?.version)>0;
+  const record=state.markdownDocuments?.[code]?.phases?.[phase];
+  if(!record||Number(record.version)<=0)return false;
+  // Records created before phase completion was separated from upload have no status.
+  return record.status===undefined||record.status==='complete';
 }
 export function designDocumentComplete(state){return markdownDocumentComplete(state,'DES','design')||documentComplete(state,5,'DES');}
 export function developmentEvdComplete(state){return markdownDocumentComplete(state,'EVD','development_evaluation')||documentComplete(state,5,'EVR');}

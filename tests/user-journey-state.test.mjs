@@ -83,6 +83,10 @@ test("removes redundant mockup status copy from the one-page project overview", 
   assert.ok(!page.includes("index < historicalBaselineStep"));
 });
 
+test("shows workflow evidence controls only on the selected current stage", () => {
+  assert.ok(page.includes('selectedJourney === effectiveJourneyStep && <WorkflowControls'));
+});
+
 test("lets AI team roles write FEA and locks G1 until complete", () => {
   assert.ok(page.includes('className="fea-grid"'));
   assert.ok(page.includes("disabled={!canEditFea}"));

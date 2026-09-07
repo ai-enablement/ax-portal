@@ -5,10 +5,11 @@ import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
 const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments','fastTrack','ardLite'];
+const markdownPhaseDocument={design:'DES',development_evaluation:'EVD',deployment_rollout:'EVD'};
 export function sanitizeNewWorkflow(state){
   const fastTrackRequest=state.fastTrack;
   const historicalStep=Number(state.journeyStep??0),historicalPhase=state.deliveryPhase;
-  for(const key of [...serverKeys,'securityReviewerId','gateChecks','gateVote','uatConfirm','lowRouteAction','lowKnowledgeOwnerId','deliveryPhase'])delete state[key];
+  for(const key of [...serverKeys,'securityReviewerId','gateChecks','gateVote','uatConfirm','lowRouteAction','lowKnowledgeOwnerId','deliveryPhase','markdownCompleteAction'])delete state[key];
   if(state.historicalImport&&historicalStep>=5)state.deliveryPhase=historicalStep===5&&historicalPhase==='design'?'design':'development';
   if(!state.historicalImport)for(const key of ['g1Resolution','g2Approvals','g2Approval','feaCompleted','historicalDocuments'])delete state[key];
   if(!state.historicalImport&&fastTrackRequest?.requested===true){
@@ -36,6 +37,33 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   if(!previous.historicalImport&&step===0&&(changes.feaDraft||changes.feaCompleted||Number(merged.journeyStep)>0))deny('요구 접수 Agent 검토를 완료한 뒤 FEA를 작성해 주세요.');
   const author=actor.app_role==='admin'||(previous.developerIds||[]).map(String).includes(String(actor.id));
   const importOpen=isImportInProgress(previous);
+  if(changes.deliveryPhase)deny('설계 문서의 완료 버튼으로 다음 단계로 이동해 주세요.');
+  if([5,7].includes(step)&&Number(changes.journeyStep)>step&&!changes.markdownCompleteAction)deny('현재 문서의 완료 버튼으로 다음 Gate를 요청해 주세요.');
+  let markdownPhaseChanged=false;
+  if(changes.markdownCompleteAction){
+    if(!author)deny('지정 개발 담당자 또는 Admin만 단계 작성을 완료할 수 있습니다.',403);
+    const phase=String(changes.markdownCompleteAction.phase||''),documentType=markdownPhaseDocument[phase];
+    if(!documentType)deny('완료할 문서 단계를 확인해 주세요.');
+    const currentPhase=phase==='design'?(step===5&&previous.deliveryPhase!=='development')||step===6:
+      phase==='development_evaluation'?(step===5&&previous.deliveryPhase==='development')||step===6:
+      step===7||step===8;
+    const importedPhase=importOpen&&((phase==='design'&&step>=5)||(phase==='development_evaluation'&&step>=5)||(phase==='deployment_rollout'&&step>=7));
+    if(!currentPhase&&!importedPhase)deny('현재 진행 중인 문서 단계만 완료할 수 있습니다.');
+    const document=previous.markdownDocuments?.[documentType],entry=document?.phases?.[phase];
+    if(!entry||Number(entry.version)<=0)deny(`${phase==='design'?'설계 DES':phase==='development_evaluation'?'개발·평가 EVD':'배포·확산 EVD'} 최종 버전을 먼저 첨부해 주세요.`);
+    const completedEntry={...entry,status:'complete',completedVersion:Number(entry.version),completedAt:now,completedById:String(actor.id),completedByName:actor.display_name};
+    merged.markdownDocuments={...(previous.markdownDocuments||{}),[documentType]:{...document,phases:{...(document.phases||{}),[phase]:completedEntry}}};
+    markdownPhaseChanged=true;
+    if(!importOpen){
+      if(phase==='design'&&step===5)merged.deliveryPhase='development';
+      if(phase==='development_evaluation'&&step===5)merged.journeyStep=6;
+      if(phase==='deployment_rollout'&&step===7){
+        if(!String(merged.gateChecks?.G4?.evidence||'').trim())deny('파일럿 결과·종료 판정 근거를 저장한 뒤 배포·확산 작성을 완료해 주세요.');
+        merged.journeyStep=8;
+      }
+    }
+    delete merged.markdownCompleteAction;
+  }
   if(importOpen){
     if(changes.gateVote||changes.uatConfirm||changes.lowRouteAction||changes.deliveryPhase)deny('과거 이관 완료 후 승인·단계 이동을 진행해 주세요.');
     return merged;
@@ -157,11 +185,6 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     merged.workflowApprovals[gate][role]={decision,reason:String(reason||''),actorId:String(actor.id),actorName:actor.display_name,at:now};
     if(allApproved(gate,merged))merged.journeyStep=step+1;
   }
-  if(changes.deliveryPhase){
-    if(step!==5||!author||changes.deliveryPhase!=='development')deny('설계 단계의 개발 담당자 또는 Admin만 개발·평가를 시작할 수 있습니다.',403);
-    if(!designDocumentComplete(merged))deny('에이전트 설계서[DES] .md 파일을 먼저 첨부해 주세요.');
-    merged.deliveryPhase='development';
-  }
   if(changes.lowRouteAction){
     if(!isLowRoute(previous)||step!==9||!author)deny('하 트랙 운영 등록 담당자만 처리할 수 있습니다.',403);
     if(changes.lowRouteAction==='register'){
@@ -195,8 +218,8 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     if(step===5&&(!developmentEvdComplete(merged)||merged.deliveryPhase!=='development'))deny('개발·평가 문서[EVD] .md 파일을 첨부해 주세요.');
     if(step===7&&!regularizedJump&&(!releaseEvdComplete(merged)||!String(merged.gateChecks?.G4?.evidence||'').trim()))deny('배포·확산 EVD 후속 버전과 파일럿 결과 근거를 기록해 주세요.');
   }
-  for(const key of ['gateVote','g2Approval','uatConfirm','lowRouteAction','lowKnowledgeOwnerId','fastTrackAction'])delete merged[key];
-  if(next!==step||changes.deliveryPhase){
+  for(const key of ['gateVote','g2Approval','uatConfirm','lowRouteAction','lowKnowledgeOwnerId','fastTrackAction','markdownCompleteAction'])delete merged[key];
+  if(next!==step||markdownPhaseChanged){
     merged.stage=displayStage(merged);
     merged.status=['요구 접수 작성 중','타당성 평가 진행 중','G1 착수 승인 대기','요구 정의 진행 중','G2 개발 착수 승인 대기',merged.deliveryPhase==='development'?'개발·평가 진행 중':'설계 진행 중','G3 배포 승인 대기','배포·확산 진행 중','G4 확산 승인 대기','운영 이관 완료'][next];
     merged.nextAction=merged.status;merged.progress=Math.round(next/9*100);

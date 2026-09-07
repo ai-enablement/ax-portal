@@ -54,10 +54,10 @@ export function allowedPhase(state, documentType, requestedPhase) {
 }
 
 function completionEntry(previous, row) {
-  const phases = { ...(previous?.phases || {}), [row.lifecycle_phase]: { id: row.id, version: row.version_number, name: row.original_name, authorName: row.author_name, at: row.created_at } };
+  const phases = { ...(previous?.phases || {}), [row.lifecycle_phase]: { id: row.id, version: row.version_number, name: row.original_name, authorName: row.author_name, at: row.created_at, status: 'draft' } };
   return { ...(previous || {}), latestId: row.id, latestVersion: row.version_number, latestPhase: row.lifecycle_phase, phases };
 }
-export function applyMarkdownCompletion(state, documentType, row) {
+export function applyMarkdownUpload(state, documentType, row) {
   const next=structuredClone(state||{}),gate=markdownReworkGate(next,documentType,row.lifecycle_phase);
   if(gate){
     next.workflowApprovalHistory=[...(next.workflowApprovalHistory||[]),{gate,approvals:structuredClone(next.workflowApprovals?.[gate]||{}),reason:'보완 문서 새 버전 첨부',at:row.created_at}];
@@ -169,7 +169,7 @@ export async function uploadMarkdownDocument(identity, projectCode, documentType
       (id,project_id,document_type,lifecycle_phase,version_number,original_name,mime_type,byte_size,original_content,content_markdown,checksum_sha256,created_by)
       values($1,$2,$3,$4,$5,$6,'text/markdown',$7,$8,$9,$10,$11)`,
       [row.id, access.project.id, documentType, phase, version, row.original_name, bytes.length, bytes, markdown, checksum, access.actor.id]);
-    const completion=applyMarkdownCompletion(intake.state||{},documentType,row),state=completion.state;
+    const completion=applyMarkdownUpload(intake.state||{},documentType,row),state=completion.state;
     await client.query(`update agent_portal.intake_requests set raw_answers=jsonb_set(coalesce(raw_answers,'{}'::jsonb),'{portalState}',$2::jsonb),updated_at=now() where id=$1`, [intake.id, JSON.stringify(state)]);
     if(completion.resetGate){
       await client.query(`delete from agent_portal.gate_approvals where gate_id in (select id from agent_portal.gates where project_id=$1 and gate_code=$2)`,[access.project.id,completion.resetGate]);
@@ -178,7 +178,7 @@ export async function uploadMarkdownDocument(identity, projectCode, documentType
     await client.query(`insert into agent_portal.audit_logs
       (actor_user_id,project_id,action_code,entity_type,entity_id,after_data)
       values($1,$2,'MARKDOWN_DOCUMENT_UPLOAD','markdown_document',$3,$4::jsonb)`,
-      [access.actor.id, access.project.id, row.id, JSON.stringify({ documentType, phase, version, name: row.original_name, size: bytes.length, checksum })]);
+      [access.actor.id, access.project.id, row.id, JSON.stringify({ documentType, phase, version, name: row.original_name, size: bytes.length, checksum, status: 'draft' })]);
     return { status: 201, body: { document: { id: row.id, documentType, phase, version, name: row.original_name, size: bytes.length, checksum, authorName: row.author_name, createdAt: row.created_at } } };
   });
 }

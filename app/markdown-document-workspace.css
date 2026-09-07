@@ -42,7 +42,11 @@
 .markdown-empty-view { display:grid; place-content:center; text-align:center; min-height:350px; color:#718096; }
 .markdown-empty { color:#718096; }
 .markdown-workspace > footer { display:flex; justify-content:space-between; gap:16px; align-items:center; border-top:1px solid #e3e9f1; background:#f8fafc; padding:13px 20px; color:#64748b; }
+.markdown-workspace > footer > div { display:grid; gap:4px; min-width:0; }
 .markdown-workspace > footer p { margin:0; color:#1458b3; font-weight:650; }
+.markdown-complete-button { flex:0 0 auto; min-height:42px; padding:10px 16px; border:1px solid #123f73; border-radius:8px; color:#fff; background:#123f73; font-weight:800; }
+.markdown-complete-button:hover:not(:disabled) { background:#0b315d; }
+.markdown-complete-button:disabled { border-color:#d5dce6; color:#8a96a8; background:#e9edf3; cursor:not-allowed; }
 @media(max-width:800px) {
   .markdown-workspace > header { align-items:flex-start; flex-direction:column; }
   .markdown-header-actions { align-items:flex-start; }

@@ -156,7 +156,7 @@ function projectNotification(project, actor) {
   if (step === 5) {
     if (project.deliveryPhase !== "development") {
       if (relations.author && !designDocumentComplete(project)) {
-        return item(project, "설계 문서 첨부", "DES .md 파일을 첨부해 설계 작성을 완료해 주세요.", 5, "danger", "design");
+        return item(project, "설계 작성 완료", "최종 DES .md 버전을 확인하고 완료 버튼을 눌러 주세요.", 5, "danger", "design");
       }
       if (relations.author) {
         return item(project, "개발·평가 시작", "설계 문서를 확인하고 개발·평가 단계로 전환해 주세요.", 5, "warning", "design");
@@ -164,7 +164,7 @@ function projectNotification(project, actor) {
       return null;
     }
     if (relations.author && !developmentEvdComplete(project)) {
-      return item(project, "개발·평가 문서 첨부", "EVD .md 파일과 평가 근거를 등록해 주세요.", 5, "danger", "development");
+      return item(project, "개발·평가 작성 완료", "최종 EVD .md 버전과 평가 근거를 확인하고 완료 버튼을 눌러 주세요.", 5, "danger", "development");
     }
     if (relations.requester && !project.uatRecord?.completed) {
       return item(project, "요구자 UAT 확인", "실제 업무 케이스의 확인 결과를 등록해 주세요.", 5, "danger", "development");
@@ -199,7 +199,7 @@ function projectNotification(project, actor) {
       return null;
     }
     if (relations.author && !releaseEvdComplete(project)) {
-      return item(project, "배포·확산 문서 첨부", "EVD 후속 .md 파일과 파일럿 결과를 등록해 주세요.", 7, "danger");
+      return item(project, "배포·확산 작성 완료", "최종 EVD 후속 버전과 파일럿 결과를 확인하고 완료 버튼을 눌러 주세요.", 7, "danger");
     }
     if (relations.author && gateGaps("G4", project).length) {
       return item(project, "G4 파일럿 근거 보완", gateGaps("G4", project).join(" · "), 7, "warning");

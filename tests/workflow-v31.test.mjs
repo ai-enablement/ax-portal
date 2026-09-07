@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {JOURNEY_V31,requiredApprovers,gateGaps,documentComplete} from '../shared/workflow-v31.mjs';
+import {JOURNEY_V31,requiredApprovers,gateGaps,documentComplete,historicalGateComplete} from '../shared/workflow-v31.mjs';
 import {applyWorkflow,persistWorkflowApprovals,sanitizeNewWorkflow} from '../server/workflow-v31.mjs';
 import {standardDocuments} from '../shared/standard-documents.mjs';
 const leader={id:3,app_role:'team_leader',is_active:true,display_name:'팀장'};
@@ -24,6 +24,14 @@ test('six stages and every regular gate remain visible in order',()=>{
  assert.equal(JOURNEY_V31.filter(n=>n.number).length,6);
  assert.deepEqual(JOURNEY_V31.filter(n=>n.gate).map(n=>n.gate),['G1','G2','G3','G4']);
  assert.deepEqual(JOURNEY_V31.filter(n=>n.step===5).map(n=>n.phase),['design','development']);
+});
+test('historical gates before the immutable import baseline display as complete',()=>{
+ const imported={historicalImport:true,historicalBaselineStep:7,historicalResumeStep:7,journeyStep:7};
+ assert.equal(historicalGateComplete('G1',imported),true);
+ assert.equal(historicalGateComplete('G2',imported),true);
+ assert.equal(historicalGateComplete('G3',imported),true);
+ assert.equal(historicalGateComplete('G4',imported),false);
+ assert.equal(historicalGateComplete('G1',{...imported,historicalImport:false}),false);
 });
 test('new registration never accepts fabricated gate approvals, route or UAT',()=>{
  const s=sanitizeNewWorkflow({workflowTrack:'LOW',lowRoute:{enabled:true},workflowApprovals:{G2:{owner:{decision:'APPROVED'}}},uatRecord:{completed:true},g1Resolution:{decision:'GO'},intakeAnswers:['keep']});
@@ -76,6 +84,8 @@ test('journey keeps rich current, completed Gate and rejection visuals with a re
  assert.match(ui,/rejected\?<X/);
  assert.match(ui,/done\?<Check/);
  assert.match(ui,/workflow-rework-banner/);
+ assert.match(ui,/이관 승인 완료/);
+ assert.match(css,/\.workflow-imported-gate/);
  assert.match(css,/\.workflow-current-marker/);
  assert.match(css,/\.workflow-v31-track \.gate\.done span/);
  assert.match(css,/\.workflow-v31-track \.rejected span/);
@@ -93,6 +103,26 @@ test('no direct gate jump or fabricated approval; no future documents',()=>{
  assert.throws(()=>run(gateState(),{markdownDocuments:{EVD:{phases:{development_evaluation:{version:99}}}}}),/서버/);
  assert.throws(()=>run(gateState(),{journeyStep:9}),/현재 단계/);
  assert.throws(()=>run(gateState(),{historicalDocuments:{9:{}}},developer),/이후/);
+});
+test('Markdown upload stays draft until the author completes each phase',()=>{
+ let design={...gateState(5),deliveryPhase:'design',markdownDocuments:{DES:{phases:{design:{version:2,status:'draft'}}}}};
+ assert.throws(()=>run(design,{deliveryPhase:'development'},developer),/완료 버튼/);
+ design=run(design,{markdownCompleteAction:{phase:'design'}},developer);
+ assert.equal(design.markdownDocuments.DES.phases.design.status,'complete');
+ assert.equal(design.markdownDocuments.DES.phases.design.completedVersion,2);
+ assert.equal(design.deliveryPhase,'development');
+
+ let development={...design,markdownDocuments:{...design.markdownDocuments,EVD:{phases:{development_evaluation:{version:3,status:'draft'}}}}};
+ assert.throws(()=>run(development,{journeyStep:6},developer),/완료 버튼/);
+ development=run(development,{markdownCompleteAction:{phase:'development_evaluation'}},developer);
+ assert.equal(development.journeyStep,6);
+ assert.equal(development.markdownDocuments.EVD.phases.development_evaluation.status,'complete');
+
+ let rollout={...gateState(7),markdownDocuments:{...gateState(7).markdownDocuments,EVD:{phases:{...gateState(7).markdownDocuments.EVD.phases,deployment_rollout:{version:4,status:'draft'}}}}};
+ rollout=run(rollout,{markdownCompleteAction:{phase:'deployment_rollout'}},developer);
+ assert.equal(rollout.journeyStep,8);
+ assert.equal(rollout.markdownDocuments.EVD.phases.deployment_rollout.completedVersion,4);
+ assert.throws(()=>run({...gateState(5),deliveryPhase:'design',markdownDocuments:{}},{markdownCompleteAction:{phase:'design'}},developer),/최종 버전/);
 });
 test('historical registration preserves the split design and development phase only',()=>{
  const design=sanitizeNewWorkflow({historicalImport:true,journeyStep:5,deliveryPhase:'design'});
