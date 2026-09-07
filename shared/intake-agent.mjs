@@ -66,13 +66,23 @@ export function applyProposals(state, keys, actorId) {
   }
   return {state:next, conflicts};
 }
+function sourceEvidence(evidence,sources) {
+  if(typeof evidence!=='string'||sources.includes(evidence))return evidence;
+  const trimmed=evidence.trim();
+  // Formatting quotes are not evidence: strip one matching outer pair ONLY
+  // when the entire inner string is verbatim in an actual source.
+  const pairs=[['“','”'],['"','"'],['「','」'],['‘','’']];
+  const candidate=pairs.some(([a,b])=>trimmed.startsWith(a)&&trimmed.endsWith(b))?trimmed.slice(1,-1):trimmed;
+  return candidate&&sources.includes(candidate)?candidate:evidence;
+}
 export function acceptModelTurn(state, result, message, snapshot=state) {
   if(!result || typeof result.reply!=='string' || !Array.isArray(result.proposals) || result.reply.length>8000 || !safeMessage(result.reply)) throw new Error('AI 응답을 검증하지 못했습니다. 다시 시도해 주세요.');
   const next = structuredClone(state);
   const session = next.agentSession;
   const sources = [message,...(next.intakeMessages || []).filter(m=>m.role==='user').map(m=>m.text),...AGENT_FIELDS.map(f=>fieldValue(state,f.key))].join('\n');
   const accepted = new Map((session.proposals || []).map(p=>[p.key,p]));
-  for(const item of result.proposals.slice(0,AGENT_FIELDS.length)) {
+  for(const proposal of result.proposals.slice(0,AGENT_FIELDS.length)) {
+    const item={...proposal,evidence:sourceEvidence(proposal?.evidence,sources)};
     const field = FIELD_MAP.get(item?.key);
     if(!field || !validField(field,item.value) || !safeMessage(item.value) || typeof item.evidence!=='string' || item.evidence.length>1200 || !safeMessage(item.evidence)) continue;
     if(!['extracted','suggested'].includes(item.kind)) continue;

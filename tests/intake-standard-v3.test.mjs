@@ -6,6 +6,15 @@ import {completionGaps,persistIntakeFeaV3} from '../server/intake-standard.mjs';
 import {classifyProject} from '../shared/project-classification.mjs';
 const intake=()=>({intakeStandardVersion:'3.0',journeyStep:0,intakeAnswers:['부품 변경 때 문서를 수동 대조합니다.','','','',''],intakeDetails:{performer:'품질팀 담당자',countPerMonth:'20',asIsMinutes:'30',people:'2',quantityBasis:'월평균 약 20건, 담당자의 추정',failureImpact:'재작업 비용과 납기 지연'}});
 const fea=()=>({standardVersion:'3.0',alternatives:['규정 변경만으로 대조를 대체하지 못함','시스템에 대조 기능이 없음','문서 양식이 달라 규칙 불가','단순 챗에는 근거 추적 불가'],conclusion:'사람이 검토할 대조 결과가 필요함',writeExec:false,sensitive:false,businessIdentity:true,scope:'TEAM',damageFinancial:false,maximumDamage:'누락 시 재작업',agentType:'혼합형',autonomy:'L1',recommendation:'GO',targetDate:'2026-12-01'});
+test('model quotation formatting is accepted only for verbatim source evidence',()=>{
+  const s={...intake(),agentSession:{confirmed:{},proposals:[]}};
+  const run=(value,evidence)=>acceptModelTurn(s,{reply:'확인해 주세요.',target:'',question:'',proposals:[{key:'int.countPerMonth',value,evidence,kind:'extracted'}]},'월평균 약 25건입니다.').state.agentSession.proposals;
+  assert.equal(run('25','“월평균 약 25건입니다.”')[0].evidence,'월평균 약 25건입니다.');
+  assert.equal(run('25','"월평균 약 25건입니다."')[0].value,'25');
+  assert.equal(run('50','“월평균 약 50건입니다.”').length,0);
+  assert.equal(run('50','“월평균 약 25건입니다.”').length,0);
+  assert.equal(run('25','“월평균 약” “25건입니다.”').length,0);
+});
 test('v3 INT accepts required pain, people/quantities and harm without former outcome/optional source',()=>{assert.equal(intakeRequired(intake()).length,0);for(const key of ['performer','countPerMonth','asIsMinutes','people','failureImpact']){const s=intake();delete s.intakeDetails[key];assert.ok(intakeRequired(s).some(f=>f.key===`int.${key}`));}assert.ok(!INT_FIELDS.some(f=>f.key==='int.3'));});
 test('v3 FEA drops five-axis and To-Be requirement but requires alternatives, risk and conditional decision data',()=>{const s={...intake(),feaDraft:fea()};assert.equal(feaRequired(s).length,0);s.feaDraft.alternatives[2]='TBD';assert.ok(feaRequired(s).some(f=>f.key==='fea.alternatives.2'));s.feaDraft=fea();s.feaDraft.recommendation='CONDITIONAL';assert.ok(feaRequired(s).some(f=>f.key==='fea.decisionReason'));s.feaDraft.recommendation='DROP';assert.ok(feaRequired(s).some(f=>f.key==='fea.dropAlternative'));assert.ok(!FEA_FIELDS.some(f=>f.key.includes('fit')||f.key.includes('toBeMinutes')));});
 test('draft/import save stays permissive; finalized current-stage completion is strict',()=>{const p={historicalImport:true,journeyStep:1,historicalBaselineStep:1};assert.deepEqual(completionGaps(p,{feaCompleted:true},{...p,feaCompleted:true}),[]);const final={...p,historicalImportFinalizedAt:'2026-09-07',historicalResumeStep:1};assert.ok(completionGaps(final,{feaCompleted:true},{...final,feaCompleted:true}).length);assert.deepEqual(completionGaps({}, {intakeDetails:{}},{}),[]);assert.ok(completionGaps({journeyStep:0},{journeyStep:1},{journeyStep:1}).length);});
