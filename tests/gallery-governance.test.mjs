@@ -148,6 +148,15 @@ test("Gallery workflow has responsive review and submission UI", () => {
   assert.match(css, /@media \(max-width: 760px\)/);
 });
 
+test("published Gallery cards open details and their registered access URL", () => {
+  assert.match(page, /setCatalogDetailId\(a\.applicationId\)/);
+  assert.match(page, /gallery-agent-detail-title/);
+  assert.match(page, /openAgent\(a\.name, a\.accessUrl\)/);
+  assert.match(page, /window\.open\(target\.toString\(\), "_blank", "noopener,noreferrer"\)/);
+  assert.match(page, /사용\/실행 링크를 확인해 주세요/);
+  assert.match(css, /\.gallery-agent-detail-modal/);
+});
+
 test("PostgreSQL schema persists submissions, reviews, and published entries", () => {
   assert.match(schema, /create table if not exists gallery_submissions/);
   assert.match(schema, /create table if not exists gallery_reviews/);

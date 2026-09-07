@@ -13936,6 +13936,8 @@ function Gallery({
   );
   const [submissionOpen, setSubmissionOpen] = useState(Boolean(initialDraft));
   const [editingApplicationId, setEditingApplicationId] = useState<string | null>(null);
+  const [catalogCategory, setCatalogCategory] = useState("전체");
+  const [catalogDetailId, setCatalogDetailId] = useState<string | null>(null);
   const [selectedApplicationId, setSelectedApplicationId] = useState(
     applications.find((application) => application.status !== "PUBLISHED")?.id ||
       applications[0]?.id ||
@@ -13990,18 +13992,36 @@ function Gallery({
       rating: "-",
       tag: application.platform,
       tone: application.platform === "Power Apps" ? "green" : "blue",
+      accessUrl: application.accessUrl,
     }));
   const catalog = [
     ...publishedAgents,
-    ...list.map((agent) => ({ ...agent, applicationId: "" })),
-  ].filter((agent) =>
-    `${agent.name} ${agent.desc} ${agent.category}`
+    ...list.map((agent) => ({ ...agent, applicationId: "", accessUrl: "" })),
+  ].filter((agent) => {
+    const matchesQuery = `${agent.name} ${agent.desc} ${agent.category}`
       .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
+      .includes(query.toLowerCase());
+    return matchesQuery && (catalogCategory === "전체" || agent.category === catalogCategory);
+  });
   const selectedApplication =
     applications.find((application) => application.id === selectedApplicationId) ||
     applications[0];
+  const catalogDetailApplication = applications.find(
+    (application) => application.id === catalogDetailId && application.status === "PUBLISHED",
+  );
+
+  const openAgent = (name: string, accessUrl: string) => {
+    let target: URL;
+    try {
+      target = new URL(accessUrl);
+      if (!['http:', 'https:'].includes(target.protocol)) throw new Error('Unsupported URL');
+    } catch {
+      notify(`${name}의 사용/실행 링크를 확인해 주세요.`);
+      return;
+    }
+    const opened = window.open(target.toString(), "_blank", "noopener,noreferrer");
+    if (!opened) notify("팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.");
+  };
 
   const startPersonalSubmission = () => {
     setEditingApplicationId(null);
@@ -14180,12 +14200,15 @@ function Gallery({
           <kbd>⌘ K</kbd>
         </label>
         <div className="chips">
-          <button>전체</button>
-          <button>생산성</button>
-          <button>품질</button>
-          <button>개발</button>
-          <button>경영지원</button>
-          <button>IT</button>
+          {["전체", ...GALLERY_CATEGORIES].map((category) => (
+            <button
+              key={category}
+              className={catalogCategory === category ? "active" : ""}
+              onClick={() => setCatalogCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
         </div>
       </section>
       <section className="gallery-publish-flow" aria-label="Agent Gallery 등록 경로">
@@ -14232,14 +14255,27 @@ function Gallery({
               </div>
             )}
             {catalog.map((a) => (
-              <article className="agent-card" key={a.name}>
+              <article
+                className="agent-card"
+                key={a.name}
+                role={a.applicationId ? "button" : undefined}
+                tabIndex={a.applicationId ? 0 : undefined}
+                aria-label={a.applicationId ? `${a.name} 상세 정보 보기` : undefined}
+                onClick={() => a.applicationId && setCatalogDetailId(a.applicationId)}
+                onKeyDown={(event) => {
+                  if (a.applicationId && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    setCatalogDetailId(a.applicationId);
+                  }
+                }}
+              >
                 <div className={`agent-art ${a.tone}`}><span>{a.icon}</span><Pill tone="white">{a.tag}</Pill></div>
                 <div className="agent-body">
                   <Pill>{a.category}</Pill><h3>{a.name}</h3><p>{a.desc}</p>
                   <div className="agent-stats"><span>★ {a.rating}</span><span>사용자 {a.users}</span><span>검토 완료</span></div>
-                  <button onClick={() => notify(`${a.name} 사용 화면을 열었습니다.`)}>Agent 보기 <span>→</span></button>
+                  <button onClick={(event) => { event.stopPropagation(); openAgent(a.name, a.accessUrl); }}>Agent 보기 <span>→</span></button>
                   {role === ACCOUNT_ROLES.admin && a.applicationId && (
-                    <div className="gallery-admin-actions">
+                    <div className="gallery-admin-actions" onClick={(event) => event.stopPropagation()}>
                       <button
                         onClick={() => {
                           const application = applications.find(
@@ -14333,6 +14369,43 @@ function Gallery({
             </article>
           )}
         </section>
+      )}
+
+      {catalogDetailApplication && (
+        <div className="gallery-modal-backdrop" onMouseDown={() => setCatalogDetailId(null)}>
+          <section
+            className="gallery-agent-detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gallery-agent-detail-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <small>{catalogDetailApplication.category} · {catalogDetailApplication.artifactType}</small>
+                <h2 id="gallery-agent-detail-title">{catalogDetailApplication.name}</h2>
+                <p>{catalogDetailApplication.description}</p>
+              </div>
+              <button aria-label="상세 정보 닫기" onClick={() => setCatalogDetailId(null)}><X size={18} /></button>
+            </header>
+            <div className="gallery-agent-detail-grid">
+              <div><small>제작 플랫폼</small><b>{catalogDetailApplication.platform}</b></div>
+              <div><small>업무 카테고리</small><b>{catalogDetailApplication.category}</b></div>
+              <div><small>대상 사용자</small><b>{catalogDetailApplication.targetUsers}</b></div>
+              <div><small>데이터 분류</small><b>{catalogDetailApplication.dataClass}</b></div>
+              <div><small>운영 담당</small><b>{catalogDetailApplication.supportOwner}</b></div>
+              <div><small>등록 경로</small><b>{catalogDetailApplication.source === "OPERATIONS" ? `운영 승인 과제 · ${catalogDetailApplication.projectNo}` : "개인 제작 Agent"}</b></div>
+            </div>
+            <section className="gallery-agent-detail-evidence">
+              <h3>검토·등록 정보</h3>
+              {catalogDetailApplication.evidence.map((item) => <span key={item}><CheckCircle size={15} weight="fill" /> {item}</span>)}
+            </section>
+            <footer>
+              <button onClick={() => setCatalogDetailId(null)}>닫기</button>
+              <button className="primary" onClick={() => openAgent(catalogDetailApplication.name, catalogDetailApplication.accessUrl)}>Agent 보기 <ArrowRight size={14} weight="bold" /></button>
+            </footer>
+          </section>
+        </div>
       )}
 
       {submissionOpen && (
