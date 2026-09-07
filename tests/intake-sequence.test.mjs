@@ -10,7 +10,7 @@ test('INT review is required before FEA, never depends on FEA completeness',()=>
  const n=completeIntakeReview(s,{id:7,display_name:'실제 요구자'});assert.equal(n.journeyStep,1);assert.equal(n.intakeReview.actorName,'실제 요구자');assert.equal(n.feaCompleted,undefined);assert.equal(n.g1Resolution,undefined);
  assert.equal(progress(n).phase,'FEA');
  assert.throws(()=>completeIntakeReview({...s,intakeDetails:{}},{id:7}),/필수/);
- assert.throws(()=>completeIntakeReview({...s,agentSession:{request:{status:'running'}}},{id:7}),/검토/);
+ assert.doesNotThrow(()=>completeIntakeReview({...s,agentSession:{proposals:[]}},{id:7,display_name:'실제 요구자'}));
  assert.throws(()=>completeIntakeReview({...s,agentSession:{request:{status:'complete'},proposals:[{key:'int.0'}]}},{id:7}),/대기/);
 });
 test('INT model output cannot fill FEA; FEA summary auto fills once and preserves manual edits',()=>{

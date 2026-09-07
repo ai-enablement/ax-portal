@@ -20,6 +20,8 @@ test("persists intake and only advances completed INT to FEA waiting", () => {
   assert.ok(page.includes('ownerMode === "SELF"'));
   assert.ok(page.includes("과제를 책임질 Owner를 선택해 주세요."));
   assert.ok(page.includes("projectOwner,"));
+  assert.ok(page.includes('intakeComplete || current.source === "database" ? "complete" : "draft"'));
+  assert.ok(page.includes('current.source !== "database"'));
 });
 
 test("owner selection shares a full-width accessible picker in both writing modes", () => {

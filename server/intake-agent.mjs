@@ -27,8 +27,13 @@ export const OUTPUT_SCHEMA = {type:'object',additionalProperties:false,required:
 }};
 export async function generateTurn(state,message,{env=process.env,fetcher=fetch}={}) {
   const config=azureConfiguration(env);
-  const context={fields:AGENT_FIELDS,values:Object.fromEntries(AGENT_FIELDS.map(f=>[f.key,fieldValue(state,f.key)])),held:state.agentSession?.held||[],attempts:state.agentSession?.attempts||{},missing:progress(state).missing,computed:deterministicSummary(state),history:(state.intakeMessages||[]).slice(-16).map(m=>({role:m.role,text:m.text})),message};
-  if(!safeMessage(JSON.stringify(context))) throw new AgentError(400,'기존 접수 내용에 민감정보가 감지되었습니다. 직접 입력 화면에서 제거한 뒤 다시 시도해 주세요.');
+  const phasePrefix=Number(state.journeyStep||0)===0?'int.':'fea.';
+  const phaseFields=AGENT_FIELDS.filter(field=>field.key.startsWith(phasePrefix));
+  const values=Object.fromEntries(phaseFields.map(field=>[field.key,fieldValue(state,field.key)]));
+  const history=(state.intakeMessages||[]).slice(-16).map(item=>({role:item.role,text:item.text}));
+  const context={fields:phaseFields,values,held:(state.agentSession?.held||[]).filter(key=>key.startsWith(phasePrefix)),attempts:Object.fromEntries(Object.entries(state.agentSession?.attempts||{}).filter(([key])=>key.startsWith(phasePrefix))),missing:progress(state).missing,computed:phasePrefix==='fea.'?deterministicSummary(state):{},history,message};
+  const unsafeInput=[...Object.values(values),...history.map(item=>item.text),message].find(value=>typeof value==='string'&&!safeMessage(value));
+  if(unsafeInput) throw new AgentError(400,'기존 접수 내용에 민감정보가 감지되었습니다. 직접 입력 화면에서 제거한 뒤 다시 시도해 주세요.');
   let response;
   const phasePrompt=Number(state.journeyStep||0)===0?'현재 INT 요구 접수 단계다. int.* 항목만 수집·추출한다. FEA 질문과 제안은 아직 하지 않는다. INT 필수 답변이 확인되면 AI 검토 완료 버튼으로 FEA에 넘어가도록 안내한다.':'현재 FEA 단계다. 기존 INT와 대화에서 요구 요약 3줄을 직접 정리해 fea.summary에 제안한다. 사용자에게 요약 작성을 요구하지 않는다. 미확보 사실은 만들지 않는다. 대안·효과·위험을 수집한다. 작성자에게 Go/Drop 판정안을 묻지 않으며 이와 관련한 이전 지침은 적용하지 않는다. FEA 검토·보완 후 작성 완료로 G1을 요청하고 팀장이 판정한다.';
   try {response=await fetcher(config.url,{method:'POST',redirect:'error',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json','api-key':config.key},body:JSON.stringify({model:config.deployment,messages:[{role:'system',content:SYSTEM_PROMPT+'\n'+phasePrompt},{role:'user',content:JSON.stringify(context)}],max_completion_tokens:6000,response_format:{type:'json_schema',json_schema:{name:'intake_feasibility_turn',strict:true,schema:OUTPUT_SCHEMA}}})});}
@@ -83,7 +88,7 @@ function publicState(state) {
   return {configured,project:state,progress:progress(state),computed:deterministicSummary(state),fields:AGENT_FIELDS.map(f=>({key:f.key,label:f.label,choices:f.choices})),session:state.agentSession||{},messages:state.intakeMessages||[]};
 }
 export function completeIntakeReview(state,actor){
-  if(Number(state.journeyStep)!==0||!progress(state).ready||state.agentSession?.request?.status!=='complete')throw new AgentError(400,'요구 접수 필수 답변 확인과 AI 검토를 먼저 완료해 주세요.');
+  if(Number(state.journeyStep)!==0||!progress(state).ready)throw new AgentError(400,'요구 접수 필수 답변을 먼저 완료해 주세요.');
   if(state.agentSession?.proposals?.some(p=>p.key.startsWith('int.')))throw new AgentError(400,'접수서 반영 대기 항목을 먼저 확인해 주세요.');
   return {...structuredClone(state),intakeReview:{actorId:String(actor.id),actorName:actor.display_name,at:new Date().toISOString()},intakeDraftCompleted:true,journeyStep:1,stage:'타당성 평가',status:'타당성 평가 작성 중'};
 }

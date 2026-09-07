@@ -7491,7 +7491,7 @@ function UserDashboard({
             />
           ) : selectedJourney === 0 ? (
             <div
-              className={`intake-result-layout ${intakeComplete ? "complete" : "draft"} ${current.historicalImport ? "historical" : ""}`}
+              className={`intake-result-layout ${intakeComplete || current.source === "database" ? "complete" : "draft"} ${current.historicalImport ? "historical" : ""}`}
             >
               <section
                 className="intake-document"
@@ -7601,7 +7601,7 @@ function UserDashboard({
                   </section>
                 </div>
                 }
-                {!intakeComplete && !current.historicalImport && (
+                {!intakeComplete && !current.historicalImport && current.source !== "database" && (
                   <footer>
                     <button onClick={() => onUpdateProject(current.no, { intakeDraftCompleted: true })}>
                       작성 완료 및 AI Agent 검토{" "}

@@ -16,6 +16,16 @@ test('Azure request stays server-only, structured, bounded and non-streaming JSO
   assert.equal(result.reply,'질문');assert.equal(request.redirect,'error');
   const body=JSON.parse(request.body);assert.equal(body.response_format.json_schema.strict,true);assert.equal(body.model,'test-deployment');assert.ok(!request.body.includes('test-only'));
 });
+test('INT interview sends only INT fields and excludes contact metadata',async()=>{
+  let request;
+  const state={...blank(),journeyStep:0,requester:'테스트 · test@example.com',projectOwnerEmail:'test@example.com',intakeAnswers:['회의실 예약이 번거롭습니다.','','','',''],intakeDetails:{}};
+  await generateTurn(state,'부족한 항목을 질문해 주세요.',{env:configured,fetcher:async(url,options)=>{request={url,...options};return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'확인하겠습니다.',proposals:[],target:'int.performer',question:'누가 이 업무를 수행하나요?'})}}]})};}});
+  const context=JSON.parse(JSON.parse(request.body).messages[1].content);
+  assert.ok(context.fields.every(field=>field.key.startsWith('int.')));
+  assert.ok(Object.keys(context.values).every(key=>key.startsWith('int.')));
+  assert.ok(!JSON.stringify(context).includes('test@example.com'));
+  assert.deepEqual(context.computed,{});
+});
 test('Azure failures and incomplete output do not expose provider diagnostics',async()=>{
   for(const response of [{ok:false,status:401},{ok:false,status:429},{ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:'secret'}}]})}]) {
     await assert.rejects(generateTurn(blank(),'입력',{env:configured,fetcher:async()=>response}),e=>e instanceof AgentError&&!e.message.includes('secret'));
@@ -82,5 +92,6 @@ test('portal wiring guards server state, revisions and completion; original data
   const api=await readFile(new URL('../server/database-api.mjs',import.meta.url),'utf8');
   assert.match(api,/changedKeys.includes\("agentSession"\)/);assert.match(api,/body.agentRevision/);assert.match(api,/missingFields\(merged/);
   const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<IntakeAgentPanel/);assert.match(page,/portal-agent-saved/);
+  const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');assert.match(panel,/phase==='INT'&&data\.progress\.ready/);assert.match(panel,/현재 INT 필수 항목 중 부족한 정보만/);
   assert.equal(AGENT_FIELDS.filter(f=>f.key.startsWith('fea.fitNotes')).length,0);
 });

@@ -49,6 +49,10 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
   }
   const proposals=data?.session.proposals||[];
   const phase=(data?.progress as Snapshot['progress'] & {phase?:string})?.phase||'INT';
+  if(data&&phase==='INT'&&data.progress.ready) return <section className="portal-intake-review-ready" aria-label="요구 접수 완료 확인">
+    <div><small>INT · 필수 정보 확인 완료</small><strong>추가 인터뷰 없이 타당성 평가로 넘어갈 수 있습니다.</strong><p>입력된 INT를 확인한 뒤 FEA 작성 단계를 시작합니다.</p></div>
+    <button type="button" disabled={busy||proposals.some(p=>p.key.startsWith('int.'))} onClick={()=>void send('review_intake')}>INT 확인 완료 → FEA 작성</button>
+  </section>;
   return <section className="portal-intake-agent" aria-label="신규 과제 INT FEA 자동 인터뷰">
     <header><div><small>{phase} · 신규 과제 전용</small><h3>{phase==='INT'?'① 요구 접수 Agent 검토':'② 타당성 평가 Agent 작성'}</h3><p>요구 접수 검토를 완료한 후 FEA를 작성합니다. 확인한 내용만 문서에 반영하며 AI 요약은 담당자가 검토합니다.</p></div><button type="button" onClick={()=>void refresh()} disabled={busy}>대화 새로고침</button></header>
     {error && <p className="agent-error" role="alert">{error}</p>}
@@ -58,7 +62,7 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
       <div className="agent-interview-grid">
         <div className="agent-conversation">
           <div ref={history} className="agent-history" role="log" aria-live="polite" aria-label="저장된 인터뷰 대화">
-            {!data.messages.length && <><p>이미 입력한 접수서를 바탕으로 부족한 정보를 질문하겠습니다. 아래 버튼으로 시작하거나 답변을 바로 입력해 주세요.</p><button type="button" disabled={busy||!data.configured} onClick={()=>void send('message',[],{id:crypto.randomUUID(),message:'등록한 접수서를 검토하고 INT와 FEA에서 부족한 정보를 하나씩 질문해 주세요.'})}>접수서 검토 · 인터뷰 시작</button></>}
+            {!data.messages.length && <><p>{phase==='INT'?'INT에서 아직 부족한 필수 정보만 하나씩 질문하겠습니다.':'확인된 INT를 바탕으로 FEA에 부족한 정보를 하나씩 질문하겠습니다.'} 아래 버튼으로 시작하거나 답변을 바로 입력해 주세요.</p><button type="button" disabled={busy||!data.configured} onClick={()=>void send('message',[],{id:crypto.randomUUID(),message:phase==='INT'?'현재 INT 필수 항목 중 부족한 정보만 하나씩 질문해 주세요.':'확인된 INT를 바탕으로 FEA의 부족한 정보를 하나씩 질문해 주세요.'})}>{phase==='INT'?'INT 부족 항목 인터뷰 시작':'FEA 인터뷰 시작'}</button></>}
             {data.messages.map((m,i)=><div key={i} className={`agent-bubble ${m.role==='user'?'user':'agent'}`}><small>{m.role==='user'?'참여자':'요구 접수 Agent'}</small><p>{m.text}</p></div>)}
             {busy && <p role="status">처리 중입니다. 답변을 정리하고 저장하고 있습니다…</p>}
           </div>
