@@ -2,12 +2,17 @@ import { contentText } from './document-content.mjs';
 
 export const AGENT_TYPES = ['AI Agent (판단형)', '업무지원 Agent (규칙형)', '혼합형'];
 export const AUTONOMY_LEVELS = ['L0', 'L1', 'L2', 'L3', 'L4'];
+export const TRACKS = ['LOW', 'MEDIUM', 'HIGH'];
+export const TRACK_LABELS = {LOW:'하',MEDIUM:'중',HIGH:'상'};
 export function classifyProject(input = {}) {
   if(input.standardVersion==='3.0') {
     const high=[input.writeExec&&'쓰기·실행 권한',input.sensitive&&'민감 개인정보',input.damageFinancial&&'금전·법적 피해 가능성',['L2','L3','L4'].includes(input.autonomy)&&'자율성 L2 이상',input.scope==='COMPANY'&&'전사 사용'].filter(Boolean);
     const medium=input.businessIdentity||['DEPT','MULTI_DEPT'].includes(input.scope);
-    const track=high.length?'HIGH':medium?'MEDIUM':'LOW';
-    return {track,label:{HIGH:'상',MEDIUM:'중',LOW:'하'}[track],signals:high.length?high:[input.businessIdentity?'업무 식별정보 취급':medium?'부서 단위 이상 사용':'개인·팀 보조'],citation:'표준체계 v3.0 0.3절'};
+    const calculated=high.length?'HIGH':medium?'MEDIUM':'LOW';
+    const selected=TRACKS.includes(input.track)?input.track:calculated;
+    const track=TRACKS[Math.max(TRACKS.indexOf(calculated),TRACKS.indexOf(selected))];
+    const raised=selected!==track;
+    return {track,label:TRACK_LABELS[track],signals:high.length?high:[input.businessIdentity?'업무 식별정보 취급':medium?'부서 단위 이상 사용':selected!==calculated?`FEA 선택 ${TRACK_LABELS[selected]} 트랙`:'개인·팀 보조'],citation:'표준체계 v3.0 0.3절',raised};
   }
   const signals = [input.writeExec && '쓰기·실행 권한', input.sensitive && '개인정보·기밀 취급', input.damageFinancial && '금전·법적 피해 가능성', ['L2','L3','L4'].includes(input.autonomy) && '자율성 L2 이상', input.scope === 'COMPANY' && '전사 사용'].filter(Boolean);
   const medium = ['DEPT','MULTI_DEPT'].includes(input.scope);
@@ -23,7 +28,10 @@ export function operationsSourceFields(project = {}) {
   const autonomy = confirmed || (AUTONOMY_LEVELS.includes(fea?.autonomy) ? fea.autonomy : '');
   const draftTrack = fea ? classifyProject(fea) : null;
   const finalTrack = fea ? classifyProject({...fea,autonomy}) : null;
-  const track = draftTrack?.track === 'HIGH' || finalTrack?.track === 'HIGH' ? '상' : finalTrack?.label || '';
+  const ardTrackValue = contentText(ard?.fields?.['autonomy.track']);
+  const ardTrack = Object.entries(TRACK_LABELS).find(([,label])=>label===ardTrackValue)?.[0];
+  const trackCode = [draftTrack?.track, finalTrack?.track, ard?.status === 'complete' ? ardTrack : ''].filter(Boolean).sort((a,b)=>TRACKS.indexOf(b)-TRACKS.indexOf(a))[0];
+  const track = TRACK_LABELS[trackCode] || '';
   const dep = project.historicalDocuments?.['7']?.documents?.DEP;
   return {
     'owners.type': AGENT_TYPES.includes(fea?.agentType) ? fea.agentType : '',

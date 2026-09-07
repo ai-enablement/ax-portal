@@ -15,6 +15,32 @@ test("ARD restores all ten sections without sample answers", () => {
   assert.deepEqual(hydrateStandardDocuments(3, hydrated).documents, hydrated.documents);
 });
 
+test("ARD inherits INT and FEA classification as a reviewable draft without overwriting edits", () => {
+  const project = {
+    name: "회의 지원 Agent",
+    requester: "박요구 · 경영지원팀",
+    projectOwner: "김오너 · 경영지원팀",
+    developerNames: ["이개발"],
+    requestedDate: "2026-10-01",
+    intakeAnswers: ["회의 일정 조율에 시간이 오래 걸림", "", "Outlook · Teams"],
+    intakeDetails: { currentProcess: "캘린더를 열어 수동으로 비교", failureImpact: "일정 누락", countPerMonth: "20", asIsMinutes: "15", people: "2", quantityBasis: "최근 한 달 추정", timingReason: "분기 시작 전 적용" },
+    feaDraft: { standardVersion: "3.0", summary: "일정 후보를 찾아 초안을 제안하는 Agent", expectedEffect: "조율 시간 단축", savedMinutes: "10", effectBasis: "파일럿 추정", writeExec: false, sensitive: false, businessIdentity: true, scope: "TEAM", damageFinancial: false, maximumDamage: "일정 재조정", track: "MEDIUM", agentType: "AI Agent (판단형)", autonomy: "L1" },
+  };
+  const draft = hydrateStandardDocuments(3, {}, project);
+  assert.equal(draft.documents.ARD.fields["overview.agentType"], "AI Agent (판단형)");
+  assert.equal(draft.documents.ARD.fields["autonomy.track"], "중");
+  assert.equal(draft.documents.ARD.fields["autonomy.level"], "L1 초안 생성");
+  assert.match(draft.documents.ARD.fields["asIs.baseline"], /월 20건/);
+  assert.match(draft.documents.ARD.fields["knowledge.sources"], /Outlook/);
+  draft.documents.ARD.fields["asIs.pain"] = "담당자가 확인한 수정 내용";
+  assert.equal(hydrateStandardDocuments(3, draft, project).documents.ARD.fields["asIs.pain"], "담당자가 확인한 수정 내용");
+});
+
+test("ARD receives the risk-elevated track when a lower FEA selection conflicts with L2", () => {
+  const draft = hydrateStandardDocuments(3, {}, { name: "실행 Agent", feaDraft: { standardVersion: "3.0", track: "LOW", autonomy: "L2", scope: "TEAM", writeExec: false, sensitive: false, businessIdentity: false, damageFinancial: false } });
+  assert.equal(draft.documents.ARD.fields["autonomy.track"], "상");
+});
+
 test("direct design and pilot layouts retain the shared save path without changing ARD", () => {
   const workspace = readFileSync(new URL("../app/standard-document-workspace.tsx", import.meta.url), "utf8");
   const direct = readFileSync(new URL("../app/direct-stage-documents.tsx", import.meta.url), "utf8");

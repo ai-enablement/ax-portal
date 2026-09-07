@@ -1,15 +1,15 @@
 // Field identities follow the original ARD, delivery and operations forms.
-import { AGENT_TYPES, AUTONOMY_LEVELS, operationsSourceFields } from './project-classification.mjs';
+import { AGENT_TYPES, AUTONOMY_LEVELS, TRACK_LABELS, classifyProject, operationsSourceFields } from './project-classification.mjs';
 // These identifiers, rather than positional textarea indexes, are persisted.
 const f = (id, label, kind = "textarea", options = []) => ({ id, label, kind, options });
 const s = (id, title, description, fields) => ({ id, title, description, fields });
 const narrative = (id, title, description) => s(id, title, description, [f("body", "작성 내용", "rich"), { ...f("evidence", "근거 · 참조 문서", "files"), optional: true }]);
 export const standardDocuments = {
   ARD: { title: "에이전트 요구사항 정의서", sections: [
-    s("overview", "개요", "에이전트 정의·목적·이해관계자", [f("name", "1.1 에이전트 이름", "text"), f("oneLine", "한 줄 정의"), f("background", "1.2 배경 및 목적"), f("stakeholders", "1.3 이해관계자")]),
+    s("overview", "개요", "에이전트 정의·목적·이해관계자", [f("name", "1.1 에이전트 이름", "text"), f("agentType", "Agent 유형 · FEA 승계", "select", AGENT_TYPES), f("oneLine", "한 줄 정의"), f("background", "1.2 배경 및 목적"), f("stakeholders", "1.3 이해관계자")]),
     s("asIs", "As-Is 프로세스", "현행 흐름·고통 지점·Baseline", [f("process", "2.1 프로세스 맵 · 담당자·시스템·소요시간·사용 문서"), f("pain", "2.2 고통 지점(Pain Point)"), f("baseline", "2.3 현행 기준 지표(Baseline)")]),
     s("toBe", "To-Be 프로세스", "Agent 담당 단계·사람 개입·범위", [f("process", "3.1 프로세스 맵"), f("hitl", "3.2 사람 개입 지점(Human-in-the-loop)"), f("inScope", "3.3 In Scope"), f("outScope", "Out of Scope")]),
-    s("autonomy", "자율성 수준 정의", "L0–L4 수준과 상향 조건", [f("level", "자율성 수준", "select", ["L0 정보 제공", "L1 초안 생성", "L2 승인 후 실행", "L3 자동 실행", "L4 완전 자율"]), f("reason", "수준 선정 근거"), f("upgrade", "향후 상향 조건")]),
+    s("autonomy", "트랙·자율성 수준 정의", "FEA 트랙과 L0–L4 자율성의 정합성 확인", [f("track", "트랙 · FEA 승계", "select", ["하", "중", "상"]), f("level", "자율성 수준 · FEA 초안 승계", "select", ["L0 정보 제공", "L1 초안 생성", "L2 승인 후 실행", "L3 자동 실행", "L4 완전 자율"]), f("reason", "수준 선정 근거"), f("upgrade", "향후 상향 조건")]),
     s("functions", "기능 요구사항 (FR)", "입력·행동·출력과 우선순위", [f("rows", "기능 요구사항", "fr-table")]),
     s("knowledge", "지식·데이터 요구사항", "참조 지식·연동·최신성 책임", [f("sources", "6.1 참조 지식 · 버전·갱신 주기"), f("data", "6.2 연동 데이터 · 접근 방법·권한"), f("owner", "6.3 최신성 책임")]),
     s("success", "성공 기준 및 평가 기준", "비즈니스·품질·평가셋 기준", [f("business", "비즈니스 목표 · 개선 전/후"), f("accuracy", "정확도 목표"), f("safety", "안전성 · 금칙 위반 기준"), f("format", "형식 준수율 목표"), f("evaluationSet", "7.3 평가셋 확보 · 출처·건수"), f("labelOwner", "정답 라벨 책임자", "text"), f("evidence", "근거 제시율 목표")]),
@@ -70,6 +70,41 @@ for (const section of standardDocuments.CHG.sections.filter(s => s.id !== "histo
 }
 export const stageDocumentCodes = { 3: ["ARD"], 5: ["DES", "EVP", "EVR"], 7: ["DEP", "UG"], 9: ["OPS", "CHG"] };
 
+export const ARD_INHERITED_FIELD_KEYS = new Set([
+  "overview.name", "overview.agentType", "overview.oneLine", "overview.background", "overview.stakeholders",
+  "asIs.process", "asIs.pain", "asIs.baseline", "autonomy.track", "autonomy.level", "autonomy.reason",
+  "knowledge.sources", "success.business", "constraints.schedule",
+]);
+
+const autonomyOption = level => ({L0:"L0 정보 제공",L1:"L1 초안 생성",L2:"L2 승인 후 실행",L3:"L3 자동 실행",L4:"L4 완전 자율"}[level] || "");
+const lines = values => values.map(value=>String(value||'').trim()).filter(Boolean).join("\n");
+export function inheritedArdFields(project = {}) {
+  const fea = project.feaDraft || {};
+  const details = project.intakeDetails || {};
+  const answers = project.intakeAnswers || [];
+  const classification = Object.keys(fea).length ? classifyProject({...fea,standardVersion:'3.0'}) : null;
+  const selectedTrack = classification?.label || TRACK_LABELS[fea.track] || '';
+  const baseline = [details.countPerMonth&&`월 ${details.countPerMonth}건`,details.asIsMinutes&&`건당 ${details.asIsMinutes}분`,details.people&&`${details.people}명`,details.quantityBasis].filter(Boolean).join(" · ");
+  const stakeholders = [project.requester&&`요구자: ${project.requester}`,project.projectOwner&&`Project Owner: ${project.projectOwner}`,(project.developerNames||[]).length&&`개발 담당: ${project.developerNames.join(' · ')}`].filter(Boolean).join("\n");
+  const autonomy = autonomyOption(fea.autonomy);
+  return {
+    "overview.name": project.name || "",
+    "overview.agentType": AGENT_TYPES.includes(fea.agentType) ? fea.agentType : "",
+    "overview.oneLine": String(fea.summary || project.description || "").split(/\r?\n/).find(Boolean)?.trim() || "",
+    "overview.background": lines([answers[0]&&`업무 문제: ${answers[0]}`,details.failureImpact&&`오처리 영향: ${details.failureImpact}`]),
+    "overview.stakeholders": stakeholders,
+    "asIs.process": lines([details.currentProcess,answers[2]]),
+    "asIs.pain": answers[0] || "",
+    "asIs.baseline": baseline,
+    "autonomy.track": selectedTrack,
+    "autonomy.level": autonomy,
+    "autonomy.reason": autonomy ? `FEA에서 ${fea.autonomy} 자율성 초안으로 선택됨. ARD에서 실행 권한과 사람 승인 지점을 확인해 확정합니다.` : "",
+    "knowledge.sources": answers[2] || "",
+    "success.business": lines([fea.expectedEffect,fea.savedMinutes&&`건당 예상 절감 시간: ${fea.savedMinutes}분`,fea.effectBasis&&`산출 근거: ${fea.effectBasis}`]),
+    "constraints.schedule": lines([project.requestedDate&&`희망 완료일: ${project.requestedDate}`,details.timingReason]),
+  };
+}
+
 export function hydrateStandardDocuments(stage, record = {}, project = {}) {
   const result = structuredClone(record);
   result.schemaVersion = 2;
@@ -81,7 +116,12 @@ export function hydrateStandardDocuments(stage, record = {}, project = {}) {
   for (const code of stageDocumentCodes[stage] || []) {
     result.documents[code] ||= { fields: {}, completedSections: [], status: "draft", messages: [] };
   }
-  if (stage === 3 && !result.documents.ARD.fields["overview.name"]) result.documents.ARD.fields["overview.name"] = project.name || "";
+  if (stage === 3) {
+    const inherited = inheritedArdFields(project);
+    for (const [key,value] of Object.entries(inherited)) {
+      if (result.documents.ARD.fields[key] === undefined && value) result.documents.ARD.fields[key] = value;
+    }
+  }
   if (stage === 9) Object.assign(result.documents.OPS.fields, operationsSourceFields(project));
   return result;
 }

@@ -14,7 +14,10 @@ import IntakeAgentPanel from "./intake-agent-panel";
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
 import { intakeRequired, intakeSectionRequired, feaRequired } from '../shared/intake-standard.mjs';
 import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
+import FastTrackPanel from './fast-track-panel';
 import {isLowRoute} from '../shared/workflow-v31.mjs';
+import {FAST_TRACK_EXTERNAL_FACTORS} from '../shared/fast-track.mjs';
+import {buildWorkNotifications} from '../shared/work-notifications.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import {GALLERY_CATEGORIES,GALLERY_PLATFORMS,GALLERY_DATA_CLASSES,gallerySelections,toggleGallerySelection} from "../shared/gallery-options.mjs";
@@ -74,6 +77,7 @@ const ACCOUNT_APP_ROLES: Record<AccountRole, "team_leader" | "team_member" | "bt
   [ACCOUNT_ROLES.admin]: "admin",
 };
 type PortalIdentity = {
+  userId: string;
   email: string;
   displayName: string;
   objectId: string;
@@ -198,6 +202,8 @@ type UserProject = {
   no: string;
   clientRequestId?: string;
   createdByUserId?: string;
+  requesterId?: string;
+  ownerId?: string;
   name: string;
   category: ProjectCategory;
   stage: number;
@@ -270,6 +276,37 @@ type UserProject = {
   securityReviewerId?: string;
   uatRecord?: {completed:boolean;cases:number;actorName:string};
   lowRoute?: {enabled:boolean;phase:string;registeredAt?:string};
+  fastTrack?: {
+    requested: boolean;
+    status: "REQUESTED" | "QUALIFIED" | "REJECTED" | "GF_APPROVED" | "TEMPORARY" | "REGULARIZED";
+    externalFactor: string;
+    externalDeadline: string;
+    externalReason: string;
+    requestedAt?: string;
+    eligibilityReason?: string;
+    qualifiedByName?: string;
+    qualifiedAt?: string;
+    rejectedByName?: string;
+    rejectedAt?: string;
+    gfApprovedByName?: string;
+    gfApprovedAt?: string;
+    ownerNotificationDueAt?: string;
+    ownerNotifiedAt?: string;
+    ownerNotifiedByName?: string;
+    temporaryDeployedAt?: string;
+    regularizationDueAt?: string;
+    regularizedAt?: string;
+    regularizationApprovals?: Record<string,{decision:string;reason?:string;actorName?:string;actorId?:string;at?:string}>;
+  };
+  ardLite?: {
+    definition?: string;
+    outOfScope?: string;
+    autonomy?: string;
+    successCriteria?: string;
+    prohibitedActions?: string;
+    emergencyReasonAndDeadline?: string;
+  };
+  fastTrackAction?: {type:string;reason?:string;ardLite?:UserProject["ardLite"];role?:string;decision?:string};
   gateVote?: {gate:string;role:string;decision:string;reason:string};
   uatConfirm?: {cases:number;evidence:string};
   lowRouteAction?: string;
@@ -303,6 +340,7 @@ type UserProject = {
     damageFinancial: boolean;
     autonomy: string;
     agentType?: string;
+    track?: string;
   };
   g1Resolution?: { decision: "GO" | "CONDITIONAL" | "DROP"; assignee: string; reason: string };
   g2ReworkState?: "editing" | "resubmitted";
@@ -844,6 +882,12 @@ export default function Home() {
   const [workflowTarget, setWorkflowTarget] = useState<string | undefined>(
     undefined,
   );
+  const [workflowActionTarget, setWorkflowActionTarget] = useState<{
+    projectNo: string;
+    journeyStep: number;
+    deliveryPhase?: "design" | "development";
+    nonce: number;
+  } | null>(null);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [galleryDraft, setGalleryDraft] = useState<GalleryDraft | null>(null);
   const [galleryApplications, setGalleryApplications] = useState<
@@ -1312,18 +1356,22 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const openWorkflow = (next: View, projectNo: string) => {
+  const openWorkflow = (next: View, projectNo: string, journeyStep?: number, deliveryPhase?: "design" | "development") => {
     setWorkflowTarget(projectNo);
+    if (journeyStep !== undefined) {
+      setWorkflowActionTarget({ projectNo, journeyStep, deliveryPhase, nonce: Date.now() });
+    }
     go(next);
   };
 
-  const notifications: {
-    projectNo: string;
-    title: string;
-    body: string;
-    view: View;
-    tone: string;
-  }[] = [];
+  const notifications = useMemo(
+    () => buildWorkNotifications(userProjectItems, {
+      id: identity?.userId,
+      email: actorEmail,
+      appRole: identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : identity?.appRole,
+    }),
+    [userProjectItems, identity?.userId, identity?.appRole, identity?.canSwitchRole, actorEmail, role],
+  );
 
   const openHub = (project?: (typeof projects)[0]) => {
     setHubProject(project || null);
@@ -1364,6 +1412,12 @@ export default function Home() {
       clientRequestId?: string;
       g1Decision?: "GO" | "CONDITIONAL";
       g1Reason?: string;
+      fastTrackRequest?: {
+        requested: boolean;
+        externalFactor: string;
+        externalDeadline: string;
+        externalReason: string;
+      };
     },
   ): Promise<boolean> => {
     const registrationReceivedDate = registration?.receivedDate || new Date().toISOString().slice(0, 10);
@@ -1374,7 +1428,7 @@ export default function Home() {
           : registration?.category || "개별 접수";
       const journeyStep = historical
         ? Math.max(0, Math.min(userJourney.length - 1, registration?.currentJourneyStep ?? 0))
-        : registration?.intakeDraftCompleted ? 1 : 0;
+        : registration?.fastTrackRequest?.requested ? 0 : registration?.intakeDraftCompleted ? 1 : 0;
       const receivedDate = registrationReceivedDate;
       const currentStage = userJourney[journeyStep];
       const deliveryPhase = historical && journeyStep >= 5
@@ -1517,6 +1571,12 @@ export default function Home() {
         historicalImport: historical,
         historicalBaselineStep: historical ? journeyStep : undefined,
         documentsDeferred: historical,
+        fastTrack: !historical && registration?.fastTrackRequest?.requested
+          ? {
+              ...registration.fastTrackRequest,
+              status: "REQUESTED",
+            }
+          : undefined,
       };
     try {
       const response = await fetch("/api/database/projects", {
@@ -1678,7 +1738,7 @@ export default function Home() {
             )}
             <button
               className="icon-button"
-              aria-label="알림"
+              aria-label={`업무 알림 ${notifications.length}건`}
               aria-expanded={notificationOpen}
               aria-controls="notification-panel"
               onClick={() => setNotificationOpen((current) => !current)}
@@ -1703,17 +1763,24 @@ export default function Home() {
                   {notifications.map((item) => (
                     <button
                       key={`${item.projectNo}-${item.title}`}
-                      onClick={() => openWorkflow(item.view, item.projectNo)}
+                      onClick={() => openWorkflow(item.view as View, item.projectNo, item.journeyStep, item.deliveryPhase)}
                     >
                       <span className={item.tone} />
                       <p>
-                        <small>{item.projectNo}</small>
+                        <small>{item.projectNo} · {item.projectName}</small>
                         <b>{item.title}</b>
                         <em>{item.body}</em>
                       </p>
                       <ArrowRight size={14} weight="bold" />
                     </button>
                   ))}
+                  {notifications.length === 0 && (
+                    <div className="notification-empty">
+                      <CheckCircle size={22} weight="duotone" />
+                      <b>지금 처리할 업무가 없습니다.</b>
+                      <small>새 단계가 열리거나 승인이 요청되면 여기에 표시됩니다.</small>
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -1729,6 +1796,7 @@ export default function Home() {
             role={role}
             identity={identity}
             projectNo={workflowTarget}
+            workflowActionTarget={workflowActionTarget}
             teamAccounts={teamAccounts}
             teamRequirementItems={teamDashboardRequirements}
             onAssignProjectDeveloper={assignProjectDeveloper}
@@ -1976,6 +2044,7 @@ function Dashboard({
   role,
   identity,
   projectNo,
+  workflowActionTarget,
   teamAccounts,
   teamRequirementItems,
   onAssignProjectDeveloper,
@@ -1992,6 +2061,7 @@ function Dashboard({
   role: AccountRole;
   identity: PortalIdentity | null;
   projectNo?: string;
+  workflowActionTarget?: {projectNo:string;journeyStep:number;deliveryPhase?:"design"|"development";nonce:number} | null;
   teamAccounts: TeamAccount[];
   teamRequirementItems: TeamRequirement[];
   onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
@@ -2027,6 +2097,7 @@ function Dashboard({
         role={role}
         identity={identity}
         projectNo={projectNo}
+        workflowActionTarget={workflowActionTarget}
         teamAccounts={teamAccounts}
         onAssignProjectDeveloper={onAssignProjectDeveloper}
         onDeleteProject={onDeleteProject}
@@ -2643,9 +2714,6 @@ function LegacyTeamWorkspaceDashboard({
                   </p>
                 </div>
                 <div className="compact-project-actions">
-                  <button className="text-link" onClick={() => setView("hub")}>
-                    Projects Hub →
-                  </button>
                   <button
                     className="compact-collapse-link"
                     aria-label="프로젝트별 진행 현황 접기"
@@ -6853,6 +6921,7 @@ function UserDashboard({
   role,
   identity,
   projectNo,
+  workflowActionTarget,
   teamAccounts,
   onAssignProjectDeveloper,
   onDeleteProject,
@@ -6866,6 +6935,7 @@ function UserDashboard({
   role: AccountRole;
   identity: PortalIdentity | null;
   projectNo?: string;
+  workflowActionTarget?: {projectNo:string;journeyStep:number;deliveryPhase?:"design"|"development";nonce:number} | null;
   teamAccounts: TeamAccount[];
   onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
   onDeleteProject: (projectNo: string) => void;
@@ -6916,11 +6986,20 @@ function UserDashboard({
   const hasProjects = projectItems.length > 0;
   const current = projectItems[selected] || projectItems[0] || emptyProject;
   useEffect(() => {
-    if(current.source === "database"){
-      setSelectedJourney(current.journeyStep);
-      if(current.journeyStep===5)setSelectedDeliveryPhase(current.deliveryPhase||"design");
+    if (current.source === "database") {
+      const requestedAction = workflowActionTarget?.projectNo === current.no ? workflowActionTarget : null;
+      setSelectedJourney(requestedAction?.journeyStep ?? current.journeyStep);
+      if (requestedAction?.deliveryPhase) setSelectedDeliveryPhase(requestedAction.deliveryPhase);
+      else if (current.journeyStep === 5) setSelectedDeliveryPhase(current.deliveryPhase || "design");
     }
-  }, [current.no,current.journeyStep,current.source,current.deliveryPhase]);
+  }, [current.no,current.journeyStep,current.source,current.deliveryPhase,workflowActionTarget?.nonce]);
+  useEffect(() => {
+    if (!workflowActionTarget || workflowActionTarget.projectNo !== current.no || selectedJourney !== workflowActionTarget.journeyStep) return;
+    const frame = window.requestAnimationFrame(() => {
+      currentStageDetailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [workflowActionTarget?.nonce, current.no, selectedJourney]);
   useEffect(() => {
     // Synchronize the persisted intake conversation when the selected project changes.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -7264,6 +7343,7 @@ function UserDashboard({
               <span>{finalizingImport ? "이관 완료 처리 중…" : "과거 이관 완료"}</span>
             </button>}
           </section>}
+          {current.source === "database" && current.fastTrack?.requested && <FastTrackPanel key={current.no + ":" + JSON.stringify([current.fastTrack,current.ardLite,current.developerIds])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
           <WorkflowJourney project={current} selected={selectedJourney} onSelect={(step: number, phase?: "design" | "development") => {setSelectedJourney(step);if(phase)setSelectedDeliveryPhase(phase);}} />
           {current.source === "database" && <WorkflowControls key={current.no + ":" + JSON.stringify([current.journeyStep,current.deliveryPhase,current.gateChecks,current.uatRecord,current.lowRoute])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
 
@@ -7341,7 +7421,7 @@ function UserDashboard({
             <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
-          {hasProjects && current.source === "database" && !current.historicalImport && current.journeyStep <= 1 && !current.feaCompleted && selectedJourney <= 1 && (
+          {hasProjects && current.source === "database" && !current.historicalImport && (!current.fastTrack?.requested || current.fastTrack.status === "REJECTED") && current.journeyStep <= 1 && !current.feaCompleted && selectedJourney <= 1 && (
             <IntakeAgentPanel key={current.no} projectNo={current.no} />
           )}
           <div
@@ -15119,6 +15199,12 @@ function RequestWizard({
       clientRequestId?: string;
       g1Decision?: "GO" | "CONDITIONAL";
       g1Reason?: string;
+      fastTrackRequest?: {
+        requested: boolean;
+        externalFactor: string;
+        externalDeadline: string;
+        externalReason: string;
+      };
     },
   ) => Promise<boolean>;
 }) {
@@ -15164,6 +15250,10 @@ function RequestWizard({
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
   const [projectOwnerEmail, setProjectOwnerEmail] = useState("");
+  const [fastTrackRequested, setFastTrackRequested] = useState(false);
+  const [fastTrackExternalFactor, setFastTrackExternalFactor] = useState("");
+  const [fastTrackExternalDeadline, setFastTrackExternalDeadline] = useState("");
+  const [fastTrackExternalReason, setFastTrackExternalReason] = useState("");
   const submissionRequestId = useRef(crypto.randomUUID());
   const isHistorical = isAiTeam && registrationMode === "HISTORICAL";
   const eligibleDevelopers = teamAccounts;
@@ -15213,6 +15303,7 @@ function RequestWizard({
       (isHistorical || Boolean(requesterDepartment.trim())) &&
       resolvedRequester &&
       requestTitle.trim() &&
+      (!fastTrackRequested || Boolean(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim())) &&
       !submitted,
   );
   const submitRequest = async () => {
@@ -15239,6 +15330,12 @@ function RequestWizard({
         clientRequestId: submissionRequestId.current,
         g1Decision: requiresHistoricalG1Record ? historicalG1Decision : undefined,
         g1Reason: requiresHistoricalG1Record ? historicalG1Reason.trim() : undefined,
+        fastTrackRequest: !isHistorical && fastTrackRequested ? {
+          requested: true,
+          externalFactor: fastTrackExternalFactor,
+          externalDeadline: fastTrackExternalDeadline,
+          externalReason: fastTrackExternalReason.trim(),
+        } : undefined,
       },
     );
     if (saved) close();
@@ -15334,6 +15431,41 @@ function RequestWizard({
               <span><b>과거 과제 이관</b><small>최소 정보와 현재 단계만 먼저 등록합니다.</small></span>
             </button>
           </div>
+        )}
+        {!isHistorical && (
+          <section className={`fast-track-request ${fastTrackRequested ? "selected" : ""}`}>
+            <label className="fast-track-request-toggle">
+              <input
+                type="checkbox"
+                checked={fastTrackRequested}
+                onChange={(event) => setFastTrackRequested(event.target.checked)}
+              />
+              <span>
+                <b>Fast Track(긴급 트랙) 신청</b>
+                <small>감사·법규 시행일·외부 계약처럼 조직 밖에서 정해진 기한이 있을 때만 신청합니다. 내부 일정 압박은 대상이 아닙니다.</small>
+              </span>
+            </label>
+            {fastTrackRequested && (
+              <div className="fast-track-request-fields">
+                <label>
+                  <span>외부 기한 유형 · 필수</span>
+                  <select value={fastTrackExternalFactor} onChange={(event) => setFastTrackExternalFactor(event.target.value)}>
+                    <option value="">선택하세요</option>
+                    {FAST_TRACK_EXTERNAL_FACTORS.map((factor) => <option key={factor.value} value={factor.value}>{factor.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>외부 명시 기한 · 필수</span>
+                  <input type="date" value={fastTrackExternalDeadline} onChange={(event) => setFastTrackExternalDeadline(event.target.value)} />
+                </label>
+                <label className="wide">
+                  <span>긴급 사유와 외부 근거 · 필수</span>
+                  <textarea value={fastTrackExternalReason} onChange={(event) => setFastTrackExternalReason(event.target.value)} placeholder="예: 2026-10-01 시행 법규 대응. 시행 공문과 적용 조항을 확인했습니다." />
+                  <small>신청 즉시 승인되지 않습니다. AI 활성화팀장이 자격을 판정한 뒤 ARD-Lite와 GF 긴급 착수 승인을 진행합니다.</small>
+                </label>
+              </div>
+            )}
+          </section>
         )}
         {!isHistorical && <div className="request-writing-modes" role="tablist" aria-label="요구 접수서 작성 방식">
           <button

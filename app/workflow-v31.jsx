@@ -2,18 +2,21 @@
 import {useState} from 'react';
 import {CaretDown,Check,X} from '@phosphor-icons/react';
 import {JOURNEY_V31,requiredApprovers,ROLE_LABELS,gateSummary,gateGaps,isLowRoute,designDocumentComplete,developmentEvdComplete,releaseEvdComplete} from '../shared/workflow-v31.mjs';
+import {isFastTrack,FAST_TRACK_STATUSES} from '../shared/fast-track.mjs';
 import './workflow-v31.css';
 export function WorkflowJourney({project,selected,onSelect}){
-  const low=isLowRoute(project),step=Number(project.journeyStep),phase=project.deliveryPhase||'design';
+  const low=isLowRoute(project),fast=isFastTrack(project),fastActive=fast&&project.fastTrack?.status!==FAST_TRACK_STATUSES.REJECTED,step=Number(project.journeyStep),phase=project.deliveryPhase||'design';
   const gateRejected=gate=>gate==='G1'?project.g1Resolution?.decision==='DROP':Object.values(project.workflowApprovals?.[gate]||{}).some(v=>['REWORK','REJECTED'].includes(v?.decision));
   const currentGate=JOURNEY_V31.find(node=>node.gate&&node.step===step)?.gate;
   const returning=Boolean(currentGate&&gateRejected(currentGate));
   const visualStep=returning?step-1:step;
   const visualPhase=returning&&step===6?'development':phase;
   return <><nav className="workflow-v31-track" aria-label="6단계 개발 진행 및 승인 게이트">{JOURNEY_V31.map((n,i)=>{
-    const excluded=low&&n.step>2,rejected=Boolean(n.gate&&gateRejected(n.gate)),active=!rejected&&n.step===visualStep&&(!n.phase||n.phase===visualPhase),done=!rejected&&(n.step<visualStep||(n.phase==='design'&&visualStep===5&&visualPhase==='development'));
-    return <button type="button" key={i} className={[n.gate?'gate':'stage',excluded?'excluded':rejected?'rejected':active?'current':done?'done':'',selected===n.step?'selected':''].join(' ')} onClick={()=>onSelect(n.step,n.phase)} aria-current={active?'step':undefined} aria-label={`${n.gate||n.number} ${n.title} · ${rejected?'보완 요청':excluded?'하 트랙 적용 제외':active?'현재 단계':done?'완료':'예정'}`}>{active&&<CaretDown className="workflow-current-marker" weight="fill" aria-hidden="true"/>}<span>{rejected?<X size={18} weight="bold" aria-hidden="true"/>:done?<Check size={18} weight="bold" aria-hidden="true"/>:n.gate||n.number}</span><b>{n.title}</b><small>{rejected?'보완 요청':excluded?'하 트랙 적용 제외':active?'현재 단계':done?'완료':'예정'}</small></button>;
-  })}</nav><div className="workflow-v31-footer">{low?<span>하 트랙 단축: G1 승인 → 운영대장 등록 → 배포 · G2~G4 승인 이력을 만들지 않습니다.</span>:<span>필수 승인자 전원 승인 후 다음 단계로 이동합니다.</span>}<button type="button" onClick={()=>onSelect(9)}>{low?'운영대장 등록·배포':'운영 이관'} →</button></div></>;
+    const fastExcluded=fastActive&&(n.step<=4||(n.step===5&&n.phase==='design')||n.gate==='G4');
+    const excluded=(low&&n.step>2)||fastExcluded,rejected=Boolean(n.gate&&gateRejected(n.gate)),active=!excluded&&!rejected&&n.step===visualStep&&(!n.phase||n.phase===visualPhase),done=!excluded&&!rejected&&(n.step<visualStep||(n.phase==='design'&&visualStep===5&&visualPhase==='development'));
+    const stateLabel=rejected?'보완 요청':excluded?fastActive?'GF 대체·정규화 예정':'하 트랙 적용 제외':active?'현재 단계':done?'완료':'예정';
+    return <button type="button" key={i} className={[n.gate?'gate':'stage',excluded?'excluded':rejected?'rejected':active?'current':done?'done':'',selected===n.step?'selected':''].join(' ')} onClick={()=>onSelect(n.step,n.phase)} aria-current={active?'step':undefined} aria-label={`${n.gate||n.number} ${n.title} · ${stateLabel}`}>{active&&<CaretDown className="workflow-current-marker" weight="fill" aria-hidden="true"/>}<span>{rejected?<X size={18} weight="bold" aria-hidden="true"/>:done?<Check size={18} weight="bold" aria-hidden="true"/>:n.gate||n.number}</span><b>{n.title}</b><small>{stateLabel}</small></button>;
+  })}</nav><div className="workflow-v31-footer">{low?<span>하 트랙 단축: G1 승인 → 운영대장 등록 → 배포 · G2~G4 승인 이력을 만들지 않습니다.</span>:fastActive?<span>Fast Track: 팀장 자격 판정 → ARD-Lite → GF 승인 → 개발·EVD → G3 · INT·FEA·ARD·DES는 30일 내 정규화합니다.</span>:<span>필수 승인자 전원 승인 후 다음 단계로 이동합니다.</span>}<button type="button" onClick={()=>onSelect(9)}>{low?'운영대장 등록·배포':'운영 이관'} →</button></div></>;
 }
 function useSave(onSave){const [busy,setBusy]=useState(false),[message,setMessage]=useState('');return {busy,message,save:async change=>{setBusy(true);setMessage('');try{const ok=await onSave(change);setMessage(ok===false?'저장하지 못했습니다. 오류 안내를 확인해 주세요.':'저장되었습니다.');}catch(e){setMessage(e.message);}finally{setBusy(false);}}};}
 export function WorkflowGate({project,gate,identity,people,onSave}){
@@ -44,6 +47,7 @@ export function WorkflowControls({project,identity,people,onSave}){
   const admin=identity?.appRole==='admin',author=admin||people.some(p=>p.email?.toLowerCase()===identity?.email?.toLowerCase()&&project.developerIds?.includes(String(p.id)));
   const requester=identity?.email?.toLowerCase()===(project.requesterEmail||'').toLowerCase();
   if(project.historicalImport&&!project.historicalImportFinalizedAt)return null;
+  if(isFastTrack(project)&&step===7)return null;
   if(isLowRoute(project)&&step===9)return <section className="workflow-v31-panel"><h3>하 트랙 · 운영대장 등록 후 배포</h3><p>오너: {project.projectOwner||project.owner} / 개발·운영: {project.developerNames?.join(' · ')||'미배정'}</p><p>상태: {project.lowRoute.phase==='operating'?'배포·운영 중':project.lowRoute.registeredAt?'운영대장 등록 완료 · 배포 대기':'운영대장 등록 대기'}</p>{author&&project.lowRoute.phase!=='operating'&&<div className="workflow-v31-actions"><select aria-label="지식갱신 담당자" value={person} onChange={e=>setPerson(e.target.value)}><option value="">지식갱신 담당자 선택</option>{people.map(p=><option key={p.id} value={p.id}>{p.displayName}</option>)}</select><button type="button" disabled={busy||!person} onClick={()=>save({lowRouteAction:'register',lowKnowledgeOwnerId:person})}>운영대장 등록</button><button type="button" disabled={busy||!project.lowRoute.registeredAt} onClick={()=>save({lowRouteAction:'deploy'})}>하 트랙 배포 완료</button></div>}<p role="status">{message}</p></section>;
   if(![5,6,7,8].includes(step))return null;
   return <section className="workflow-v31-panel"><h3>{step<=6?'설계·개발·평가 진행 및 배포 조건':'파일럿 결과 및 확산 조건'}</h3>{step===5&&<div className="workflow-v31-actions"><span>{project.deliveryPhase==='development'?'⑤ 개발·평가 진행 중':'④ 설계 진행 중 · DES .md 첨부 후 개발·평가 시작'}</span>{author&&project.deliveryPhase!=='development'&&<button type="button" disabled={busy||!designDocumentComplete(project)} onClick={()=>save({deliveryPhase:'development'})}>개발·평가 시작 →</button>}</div>}

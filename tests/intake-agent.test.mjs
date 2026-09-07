@@ -91,7 +91,7 @@ test('re-asking has bounded counts and held slots accept later answers',()=>{
   assert.ok(!state.agentSession.held.includes('int.countPerMonth'));
 });
 test('classification and ROI are deterministic with confirmed inputs, not model verdicts',()=>{
-  const state=blank();for(const [key,value] of Object.entries({countPerMonth:'20',asIsMinutes:'45',people:'2',savedMinutes:'30',effectBasis:'실측한 처리 시간 차이',businessIdentity:'false',writeExec:'false',sensitive:'false',damageFinancial:'false',scope:'TEAM',autonomy:'L2',agentType:'혼합형'})) {setField(state,`fea.${key}`,value);state.agentSession.confirmed[`fea.${key}`]={value};}
+  const state=blank();for(const [key,value] of Object.entries({countPerMonth:'20',asIsMinutes:'45',people:'2',savedMinutes:'30',effectBasis:'실측한 처리 시간 차이',businessIdentity:'false',writeExec:'false',sensitive:'false',damageFinancial:'false',scope:'TEAM',track:'HIGH',autonomy:'L2',agentType:'혼합형'})) {setField(state,`fea.${key}`,value);state.agentSession.confirmed[`fea.${key}`]={value};}
   assert.equal(deterministicSummary(state).roi.monthlyHours,10);assert.equal(deterministicSummary(state).classification.label,'상');
   assert.equal(state.g1Resolution,undefined);
 });

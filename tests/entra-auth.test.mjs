@@ -105,6 +105,7 @@ test("client and database routes use the server-authenticated identity", async (
   assert.match(sessionRoute, /resolvePortalIdentity/);
   assert.match(sessionRoute, /ensurePortalUser/);
   assert.match(sessionRoute, /portalUser\.app_role/);
+  assert.match(sessionRoute, /userId: String\(portalUser\.id\)/);
   assert.match(databaseRoute, /resolvePortalIdentity\(request\.headers\)/);
   assert.match(databaseRoute, /actorEmail: identity\.email/);
 });

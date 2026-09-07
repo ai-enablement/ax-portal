@@ -104,6 +104,34 @@ test('historical registration preserves the split design and development phase o
  assert.equal(later.deliveryPhase,'development');
  assert.equal(newProject.deliveryPhase,undefined);
 });
+test('Fast Track accepts only an explicit external deadline request',()=>{
+ assert.throws(()=>sanitizeNewWorkflow({historicalImport:false,fastTrack:{requested:true,externalFactor:'',externalDeadline:'',externalReason:''}}),/Fast Track 필수/);
+ const s=sanitizeNewWorkflow({historicalImport:false,journeyStep:1,intakeDraftCompleted:true,fastTrack:{requested:true,externalFactor:'AUDIT',externalDeadline:'2026-10-01',externalReason:'외부 감사 시정 기한'}});
+ assert.equal(s.fastTrack.status,'REQUESTED');
+ assert.equal(s.journeyStep,0);
+ assert.equal(s.status,'Fast Track 자격 판정 대기');
+});
+test('Fast Track requires leader qualification, complete ARD-Lite and developer assignment before GF',()=>{
+ let s=sanitizeNewWorkflow({historicalImport:false,journeyStep:0,developerIds:[],fastTrack:{requested:true,externalFactor:'REGULATION',externalDeadline:'2026-10-01',externalReason:'법규 시행일'}});
+ assert.throws(()=>run(s,{fastTrackAction:{type:'qualify',reason:'외부 기한 확인'}},admin),/팀장/);
+ s=run(s,{fastTrackAction:{type:'qualify',reason:'시행 공문 확인'}},leader);
+ assert.equal(s.fastTrack.status,'QUALIFIED');
+ assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/ARD-Lite/);
+ const ardLite={definition:'품질 담당자가 시행일부터 규정 질의를 확인',outOfScope:'자동 승인 제외',autonomy:'L1 초안 생성',successCriteria:'정확도 90% 이상',prohibitedActions:'근거 없는 승인 금지',emergencyReasonAndDeadline:'법규 시행 2026-10-01'};
+ s=run(s,{fastTrackAction:{type:'save_ard_lite',ardLite}},requester);
+ assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/개발 담당자/);
+ s=run(s,{developerIds:['5']},admin);
+ s=run(s,{fastTrackAction:{type:'approve_gf'}},leader);
+ assert.equal(s.fastTrack.status,'GF_APPROVED');
+ assert.equal(s.journeyStep,5);
+ assert.equal(s.deliveryPhase,'development');
+ assert.ok(s.fastTrack.ownerNotificationDueAt);
+ s={...s,journeyStep:7,securityReviewerId:'6',workflowApprovals:{G3:{team_leader:{decision:'APPROVED'},security_reviewer:{decision:'APPROVED'}}}};
+ s=run(s,{fastTrackAction:{type:'start_temporary'}},leader);
+ assert.equal(s.fastTrack.status,'TEMPORARY');
+ assert.ok(s.fastTrack.regularizationDueAt.startsWith('2026-10-07'));
+ assert.throws(()=>run(s,{fastTrackAction:{type:'regularization_vote',role:'requester',decision:'APPROVED'}},requester),/정규화 필수/);
+});
 test('only requester records positive UAT count and evidence',()=>{
  assert.throws(()=>run(gateState(5),{uatConfirm:{cases:5,evidence:'확인'}},admin),/요구자/);
  assert.throws(()=>run(gateState(5),{uatConfirm:{cases:0,evidence:'확인'}},requester),/건수/);

@@ -5,7 +5,7 @@ import {AGENT_FIELDS,FIELD_MAP,setField,missingFields,acceptModelTurn} from '../
 import {completionGaps,persistIntakeFeaV3} from '../server/intake-standard.mjs';
 import {classifyProject} from '../shared/project-classification.mjs';
 const intake=()=>({intakeStandardVersion:'3.0',journeyStep:0,intakeAnswers:['부품 변경 때 문서를 수동 대조합니다.','','','',''],intakeDetails:{performer:'품질팀 담당자',countPerMonth:'20',asIsMinutes:'30',people:'2',quantityBasis:'월평균 약 20건, 담당자의 추정',failureImpact:'재작업 비용과 납기 지연'}});
-const fea=()=>({standardVersion:'3.0',alternatives:['규정 변경만으로 대조를 대체하지 못함','시스템에 대조 기능이 없음','문서 양식이 달라 규칙 불가','단순 챗에는 근거 추적 불가'],conclusion:'사람이 검토할 대조 결과가 필요함',writeExec:false,sensitive:false,businessIdentity:true,scope:'TEAM',damageFinancial:false,maximumDamage:'누락 시 재작업',agentType:'혼합형',autonomy:'L1',recommendation:'GO',targetDate:'2026-12-01'});
+const fea=()=>({standardVersion:'3.0',alternatives:['규정 변경만으로 대조를 대체하지 못함','시스템에 대조 기능이 없음','문서 양식이 달라 규칙 불가','단순 챗에는 근거 추적 불가'],conclusion:'사람이 검토할 대조 결과가 필요함',writeExec:false,sensitive:false,businessIdentity:true,scope:'TEAM',damageFinancial:false,maximumDamage:'누락 시 재작업',track:'MEDIUM',agentType:'혼합형',autonomy:'L1',recommendation:'GO',targetDate:'2026-12-01'});
 test('model quotation formatting is accepted only for verbatim source evidence',()=>{
   const s={...intake(),agentSession:{confirmed:{},proposals:[]}};
   const run=(value,evidence)=>acceptModelTurn(s,{reply:'확인해 주세요.',target:'',question:'',proposals:[{key:'int.countPerMonth',value,evidence,kind:'extracted'}]},'월평균 약 25건입니다.').state.agentSession.proposals;

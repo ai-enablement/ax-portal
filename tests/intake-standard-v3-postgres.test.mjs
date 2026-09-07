@@ -24,7 +24,7 @@ test('INT/FEA v3 real PostgreSQL saves, reloads and preserves legacy versions', 
       intakeDetails:{performer:'가상 담당자',countPerMonth:'20',asIsMinutes:'30',people:'2',quantityBasis:'추정',currentProcess:'수동 대조',failureImpact:'재작업 발생'},
       feaDraft:{standardVersion:'3.0',summary:'테스트 요약',alternatives:['규정만으로 부족','기존 기능 없음','다양한 양식으로 어려움','추적성 부족'],conclusion:'근거 포함 대조 초안 필요',
         expectedEffect:'재작업 감소',savedMinutes:'10',effectBasis:'가상 시범 측정',developmentCost:'3일',
-        writeExec:false,sensitive:false,businessIdentity:true,scope:'TEAM',damageFinancial:false,maximumDamage:'재작업',agentType:'혼합형',autonomy:'L1',recommendation:'GO',targetDate:'2099-12-01'}};
+        writeExec:false,sensitive:false,businessIdentity:true,scope:'TEAM',damageFinancial:false,maximumDamage:'재작업',track:'MEDIUM',agentType:'혼합형',autonomy:'L1',recommendation:'GO',targetDate:'2099-12-01'}};
     assert.deepEqual(completionGaps({journeyStep:1},{feaCompleted:true},state),[]);
     const project={id:1,project_code:'2099-999',project_name:'Synthetic integration test'};
     await persistIntakeFeaV3(adapter,project,state,1,{});

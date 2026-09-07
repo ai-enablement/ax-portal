@@ -8820,11 +8820,146 @@ body {
 }
 .team-portfolio-table button > span:nth-child(5) {
   color: #687386;
-  font-size: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
 }
 .team-portfolio-table button > span:nth-child(5).urgent {
   color: #c34e36;
+  font-size: 14px;
   font-weight: 850;
+}
+
+/* Fast Track v3.1 */
+.fast-track-request {
+  margin: 0 20px 14px;
+  padding: 14px 16px;
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+.fast-track-request.selected {
+  border-color: #f0a55a;
+  background: #fff9f2;
+  box-shadow: inset 3px 0 #e87b24;
+}
+.fast-track-request-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  cursor: pointer;
+}
+.fast-track-request-toggle input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: #df6f17;
+  cursor: pointer;
+}
+.fast-track-request-toggle > span {
+  flex: 1;
+  min-width: 0;
+}
+.fast-track-request-toggle span,
+.fast-track-request-toggle b,
+.fast-track-request-toggle small { display: block; }
+.fast-track-request-toggle b { color: #25344d; font-size: 15px; }
+.fast-track-request-toggle small { margin-top: 3px; color: #667085; font-size: 13px; line-height: 1.5; }
+.fast-track-request-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f1d8bd;
+}
+.fast-track-request-fields label,
+.ard-lite-form label,
+.fast-track-assignment label { display: grid; gap: 6px; color: #344054; font-size: 14px; font-weight: 700; }
+.fast-track-request-fields .wide { grid-column: 1/-1; }
+.fast-track-request-fields :where(input,select,textarea),
+.ard-lite-form :where(input,select,textarea),
+.fast-track-assignment select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cfd8e6;
+  border-radius: 8px;
+  background: #fff;
+  color: #182230;
+  font: inherit;
+}
+.fast-track-request-fields textarea,
+.ard-lite-form textarea { min-height: 78px; resize: vertical; }
+.fast-track-request-fields small { color: #667085; font-weight: 500; }
+.fast-track-panel {
+  margin: 16px;
+  overflow: hidden;
+  border: 1px solid #edc28f;
+  border-radius: 12px;
+  background: #fffdf9;
+}
+.fast-track-panel > header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #f1dcc2;
+  background: #fff8ef;
+}
+.fast-track-panel > header h3 { margin: 1px 0; font-size: 19px; }
+.fast-track-panel > header p { margin: 0; color: #667085; }
+.fast-track-panel > header > strong { color: #9a4c0d; font-size: 14px; }
+.fast-track-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 9px; color: #fff; background: #df6f17; }
+.fast-track-facts { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
+.fast-track-facts > div { padding: 12px 18px; border-bottom: 1px solid #edf0f5; }
+.fast-track-facts > div:first-child { border-right: 1px solid #edf0f5; }
+.fast-track-facts .wide { grid-column: 1/-1; }
+.fast-track-facts dt { color: #778296; font-size: 13px; }
+.fast-track-facts dd { margin: 4px 0 0; color: #23334d; font-size: 15px; font-weight: 700; }
+.fast-track-decision,.ard-lite-form,.fast-track-assignment { margin: 14px 18px; padding: 15px; border: 1px solid #e0e6ef; border-radius: 10px; background: #fff; }
+.fast-track-decision > div,.fast-track-result { display: flex; align-items: flex-start; gap: 10px; }
+.fast-track-decision p,.fast-track-decision p span,.fast-track-result span,.fast-track-result small { display: block; margin: 0; }
+.fast-track-decision label { display: grid; gap: 6px; margin-top: 12px; font-weight: 700; }
+.fast-track-decision textarea { min-height: 74px; padding: 10px; border: 1px solid #ccd6e3; border-radius: 8px; }
+.fast-track-decision footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.fast-track-result { margin: 14px 18px; padding: 13px 15px; color: #176448; border-radius: 9px; background: #edf9f4; }
+.fast-track-result.rejected { color: #9f2d2d; background: #fff0f0; }
+.fast-track-result.approved { align-items: center; }
+.fast-track-result.approved button { margin-left: auto; }
+.fast-track-result em { margin-left: auto; color: #176448; font-size: 13px; font-style: normal; font-weight: 800; }
+.ard-lite-form > header { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.ard-lite-form h4 { margin: 1px 0; font-size: 18px; }
+.ard-lite-form header p { margin: 0; color: #667085; }
+.ard-lite-form > header > span { color: #2f63a5; font-weight: 800; }
+.ard-lite-form > div { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ard-lite-form > button { margin-top: 12px; }
+.fast-track-assignment { display: flex; align-items: end; gap: 10px; }
+.fast-track-assignment label { flex: 1; }
+.fast-track-gf { display: block; margin: 14px 18px 8px auto; }
+.fast-track-missing,.fast-track-panel > p[role="status"] { margin: 8px 18px 14px; color: #a05a1c; font-size: 13px; }
+.fast-track-regularization { margin: 14px 18px; padding: 16px; border: 1px solid #d9e2ef; border-radius: 10px; background: #fff; }
+.fast-track-regularization > header { display: flex; justify-content: space-between; gap: 14px; }
+.fast-track-regularization h4 { margin: 2px 0; font-size: 18px; }
+.fast-track-regularization header p { margin: 0; color: #667085; }
+.fast-track-regularization header strong { color: #a14e12; }
+.fast-track-checks { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin: 14px 0; }
+.fast-track-checks span { padding: 9px; border-radius: 7px; color: #7b8494; background: #f2f4f7; font-size: 13px; text-align: center; }
+.fast-track-checks span.done { color: #176448; background: #e9f8f1; font-weight: 800; }
+.fast-track-regularization-vote { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #edf0f4; }
+.fast-track-regularization-vote span,.fast-track-regularization-vote small { display: block; }
+@media (max-width: 760px) {
+  .fast-track-request-fields,.ard-lite-form > div,.fast-track-facts { grid-template-columns: 1fr; }
+  .fast-track-request-fields .wide,.fast-track-facts .wide { grid-column: auto; }
+  .fast-track-facts > div:first-child { border-right: 0; }
+  .fast-track-panel > header { grid-template-columns: auto 1fr; }
+  .fast-track-panel > header > strong { grid-column: 1/-1; }
+  .fast-track-assignment { align-items: stretch; flex-direction: column; }
+  .fast-track-checks { grid-template-columns: 1fr 1fr; }
 }
 .team-focus-card {
   align-self: start;
@@ -18218,6 +18353,11 @@ fieldset.fea-grid {
 .notification-panel > header small {
   display: block;
 }
+
+.notification-panel > div {
+  max-height: min(520px, calc(100vh - 150px));
+  overflow-y: auto;
+}
 .notification-panel > header b {
   font-size: 13px;
 }
@@ -18269,6 +18409,32 @@ fieldset.fea-grid {
 .notification-panel b,
 .notification-panel em {
   display: block;
+}
+
+.notification-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 28px 18px;
+  color: #62738a;
+  text-align: center;
+}
+
+.notification-empty svg {
+  color: #19966b;
+}
+
+.notification-empty b {
+  margin: 0;
+  color: #26364c;
+  font-size: 14px !important;
+}
+
+.notification-empty small {
+  max-width: 260px;
+  color: #738298;
+  font-size: 12px !important;
+  line-height: 1.5;
 }
 .notification-panel small {
   color: #8a95a5;

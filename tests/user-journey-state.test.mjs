@@ -154,6 +154,23 @@ test("keeps the new Agent request dialog readable", () => {
   assert.ok(css.includes("width: 100%"));
 });
 
+test("adds the v3.1 Fast Track request and controlled GF workflow", async () => {
+  const workflow = await readFile(new URL("../server/workflow-v31.mjs", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../app/fast-track-panel.jsx", import.meta.url), "utf8");
+  assert.ok(page.includes("Fast Track(긴급 트랙) 신청"));
+  assert.ok(page.includes("fastTrackExternalFactor"));
+  assert.ok(page.includes("fastTrackExternalDeadline"));
+  assert.ok(page.includes("긴급 사유와 외부 근거"));
+  assert.ok(page.includes("<FastTrackPanel"));
+  assert.match(workflow, /type==='approve_gf'/);
+  assert.match(workflow, /ownerNotificationDueAt/);
+  assert.match(panel, /ARD-Lite/);
+  assert.match(panel, /G3·EVD·요구자 UAT는 생략할 수 없습니다/);
+  assert.ok(css.includes("Fast Track v3.1"));
+  assert.match(css, /\.fast-track-request-toggle input\[type="checkbox"\]\s*\{[^}]*width:\s*18px[^}]*height:\s*18px/s);
+  assert.match(css, /\.fast-track-request-toggle > span\s*\{[^}]*flex:\s*1/s);
+});
+
 test("imports historical projects with past dates, a current stage, and deferred documents", () => {
   assert.ok(page.includes('registrationMode === "HISTORICAL"'));
   assert.ok(page.includes("과거 과제 이관"));
@@ -163,7 +180,7 @@ test("imports historical projects with past dates, a current stage, and deferred
   assert.ok(page.includes('{ value: "5:development", journeyStep: 5, deliveryPhase: "development" as const, title: "개발·평가" }'));
   assert.ok(page.includes('{ value: "7", journeyStep: 7, deliveryPhase: "development" as const, title: "배포·확산" }'));
   assert.ok(!page.includes('title: "파일럿",'));
-  assert.ok(page.includes('if(current.journeyStep===5)setSelectedDeliveryPhase(current.deliveryPhase||"design")'));
+  assert.match(page, /current\.journeyStep === 5\) setSelectedDeliveryPhase\(current\.deliveryPhase \|\| "design"\)/);
   assert.ok(page.includes("documentsDeferred: historical"));
   assert.ok(page.includes("historicalBaselineStep: historical ? journeyStep : undefined"));
   assert.ok(page.includes("과거 과제 등록 · 내용 보완 시작"));

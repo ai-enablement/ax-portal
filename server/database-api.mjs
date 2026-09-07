@@ -793,6 +793,8 @@ function portalProjectFromRow(row) {
     owner: runtime.owner || row.ownerName || row.requesterName,
     requester: runtime.requester || row.requesterName,
     projectOwner: runtime.projectOwner || row.ownerName || row.requesterName,
+    requesterId: row.requesterId ? String(row.requesterId) : undefined,
+    ownerId: row.ownerId ? String(row.ownerId) : undefined,
     // A legacy name-only owner may have been linked to the registrant. Do not infer their email.
     projectOwnerEmail: runtime.projectOwnerEmail ? row.ownerEmail || runtime.projectOwnerEmail : "",
     requesterEmail: row.requesterEmail || runtime.requesterEmail || "",
@@ -815,6 +817,7 @@ async function listOperationalProjects(identity) {
             p.progress_percent as "progressPercent", p.next_action as "nextAction",
             p.requested_completion_date as "requestedCompletionDate",
             p.created_at as "createdAt", p.updated_at as "updatedAt",
+            requester.id as "requesterId", owner_user.id as "ownerId",
             requester.display_name as "requesterName", owner_user.display_name as "ownerName",
             owner_user.email as "ownerEmail", requester.email as "requesterEmail",
             ir.raw_answers->'portalState' as "runtimeState",
@@ -1152,7 +1155,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};
     }
     if (previousState.historicalImport && changedDocuments.some(key=>Number(key)>portalJourneyStep(project.current_stage_code))) return {status:400,body:{error:"현재 단계 이후 문서는 아직 작성할 수 없습니다."}};
-    const generalUserKeys = new Set(["intakeAnswers", "intakeDetails", "intakeStandardVersion", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval", "gateVote", "uatConfirm"]);
+    const generalUserKeys = new Set(["intakeAnswers", "intakeDetails", "intakeStandardVersion", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval", "gateVote", "uatConfirm", "fastTrackAction"]);
     if (actor.app_role === "general_user" && changedKeys.some((key) => !generalUserKeys.has(key))) {
       return { status: 403, body: { error: "General users can only update their own intake content." } };
     }
@@ -1448,6 +1451,7 @@ export async function handleDatabaseRequest({ method, pathname, body = {}, ident
     try { return await createOperationalProject(body, identity); }
     catch (error) {
       if (error instanceof ProjectContactError) return {status:error.status,body:{error:error.message}};
+      if (error instanceof WorkflowError) return {status:error.status,body:{error:error.message}};
       throw error;
     }
   }

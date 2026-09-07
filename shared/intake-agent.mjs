@@ -25,7 +25,7 @@ export function setField(state, key, value) {
     if(/^\d$/.test(name)) { state.intakeAnswers ||= ['','','','','']; state.intakeAnswers[Number(name)] = value; if(name==='4') state.requestedDate=value; }
     else { state.intakeDetails ||= {}; state.intakeDetails[name] = value; }
   } else {
-    state.feaDraft ||= {summary:'',alternatives:['','','',''],conclusion:'',developmentCost:'',scope:'',autonomy:'',agentType:''};
+    state.feaDraft ||= {summary:'',alternatives:['','','',''],conclusion:'',developmentCost:'',scope:'',track:'',autonomy:'',agentType:''};
     state.feaDraft.standardVersion='3.0';
     if(index !== undefined) { state.feaDraft[name] ||= []; state.feaDraft[name][Number(index)] = value; }
     else state.feaDraft[name] = booleanKeys.has(key) ? value === 'true' : value;
@@ -121,7 +121,7 @@ export function acceptModelTurn(state, result, message, snapshot=state) {
 }
 export function deterministicSummary(state) {
   const f=state.feaDraft || {};
-  if(state.intakeStandardVersion==='3.0'||f.standardVersion==='3.0') {const metrics=intakeFeasibilityMetrics(state);const checked=['writeExec','sensitive','businessIdentity','scope','damageFinancial','autonomy','agentType'].every(k=>state.agentSession?.confirmed?.[`fea.${k}`]?.value===fieldValue(state,`fea.${k}`));return {classification:checked?classifyProject({...f,standardVersion:'3.0'}):null,roi:metrics.savedHours===null?null:{monthlyHours:metrics.savedHours,citation:'표준체계 v3.0 FEA 3번 · 월 총 건수 × 건당 절감 시간'},baselineHours:metrics.baselineHours};}
+  if(state.intakeStandardVersion==='3.0'||f.standardVersion==='3.0') {const metrics=intakeFeasibilityMetrics(state);const checked=['writeExec','sensitive','businessIdentity','scope','damageFinancial','track','autonomy','agentType'].every(k=>state.agentSession?.confirmed?.[`fea.${k}`]?.value===fieldValue(state,`fea.${k}`));return {classification:checked?classifyProject({...f,standardVersion:'3.0'}):null,roi:metrics.savedHours===null?null:{monthlyHours:metrics.savedHours,citation:'표준체계 v3.0 FEA 3번 · 월 총 건수 × 건당 절감 시간'},baselineHours:metrics.baselineHours};}
   const classification = ['writeExec','sensitive','scope','damageFinancial','autonomy','agentType'].every(k=>state.agentSession?.confirmed?.[`fea.${k}`]?.value===fieldValue(state,`fea.${k}`)) ? classifyProject(f) : null;
   const numbers=['countPerMonth','asIsMinutes','people','toBeMinutes'];
   const complete=numbers.every(k=>validField(FIELD_MAP.get(`fea.${k}`),String(f[k]??'')));

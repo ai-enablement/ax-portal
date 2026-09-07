@@ -15,5 +15,7 @@ export type StandardStageRecord = {
 };
 export const standardDocuments: Record<string, { title: string; sections: DocumentSection[] }>;
 export const stageDocumentCodes: Record<number, string[]>;
+export const ARD_INHERITED_FIELD_KEYS: Set<string>;
+export function inheritedArdFields(project?: import('./project-classification.mjs').OperationsProject): Record<string,string>;
 export function hydrateStandardDocuments(stage: number, record?: Partial<StandardStageRecord>, project?: import('./project-classification.mjs').OperationsProject): StandardStageRecord & { documents: Record<string, StandardDocument> };
 export function sectionHasContent(section: DocumentSection, fields: Record<string, FieldValue>): boolean;

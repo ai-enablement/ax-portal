@@ -56,8 +56,14 @@
 .standard-document-workspace .intake-chat footer button { flex-shrink: 0; width: 42px; border-radius: 6px; background: #183e6b; color: white; }
 .standard-guide-target { display: grid; gap: 6px; font-size: 12px; }
 .standard-legacy, .standard-intake-reference { padding: 15px; font-size: 12px; background: #fffbf1; overflow-wrap: anywhere; }
+.ard-inheritance-summary { margin: 0 18px 14px; padding: 15px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; border: 1px solid #cfe0f5; border-radius: 8px; background: #f3f8ff; }
+.ard-inheritance-summary > div { min-width: 0; padding: 10px 12px; border-radius: 6px; background: #fff; }
+.ard-inheritance-summary small { display: block; color: #6b7f99; font-size: 12px; }
+.ard-inheritance-summary b { display: block; margin-top: 4px; color: #173f70; font-size: 14px; overflow-wrap: anywhere; }
+.ard-inheritance-summary p { grid-column: 1 / -1; margin: 0; color: #49637f; font-size: 13px; line-height: 1.6; }
+.standard-field.inherited-field > small { display: block; margin-top: 6px; color: #2f6fae; font-size: 12px; }
 .standard-checklist { border: 1px solid #d8e1ee; padding: 12px; border-radius: 8px; }
 .standard-checklist label { display: flex; gap: 8px; align-items: start; margin: 10px 0; }
 .standard-document-workspace button:disabled { opacity: .5; cursor: not-allowed; }
 .standard-document-workspace :is(button,input,textarea,select):focus-visible { outline: 2px solid #2b71c7; outline-offset: 2px; }
-@media (max-width: 900px) { .intake-result-layout.standard-document-workspace { grid-template-columns: minmax(0,1fr); } .standard-document-workspace .intake-chat { height: 460px; } }
+@media (max-width: 900px) { .intake-result-layout.standard-document-workspace { grid-template-columns: minmax(0,1fr); } .standard-document-workspace .intake-chat { height: 460px; } .ard-inheritance-summary { grid-template-columns: 1fr; } .ard-inheritance-summary p { grid-column: 1; } }

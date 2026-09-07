@@ -37,6 +37,7 @@ export const FEA_FIELDS = [
   select('fea.scope','사용 범위',['PERSONAL','TEAM','DEPT','MULTI_DEPT','COMPANY']),
   select('fea.damageFinancial','오답이 금전적 손실·법적 문제로 이어지나요?',['true','false']),
   text('fea.maximumDamage','오답 최대 피해',true),
+  select('fea.track','트랙',['LOW','MEDIUM','HIGH']),
   select('fea.agentType','유형',['AI Agent (판단형)','업무지원 Agent (규칙형)','혼합형']),
   select('fea.autonomy','자율성 초안',['L0','L1','L2','L3','L4']),
 ];

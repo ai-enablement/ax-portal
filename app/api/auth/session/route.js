@@ -20,6 +20,7 @@ export async function GET(request) {
   }
   const effectiveIdentity = {
     ...identity,
+    userId: String(portalUser.id),
     email: portalUser.email,
     displayName: portalUser.display_name || identity.displayName,
     appRole: portalUser.app_role,

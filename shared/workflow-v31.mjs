@@ -1,4 +1,4 @@
-import {classifyProject} from './project-classification.mjs';
+import {classifyProject,TRACKS,TRACK_LABELS} from './project-classification.mjs';
 import {standardDocuments,sectionHasContent} from './standard-documents.mjs';
 import {intakeRequired,feaRequired} from './intake-standard.mjs';
 export const GATE_STEPS={G1:2,G2:4,G3:6,G4:8};
@@ -11,8 +11,15 @@ export const JOURNEY_V31=[
   {step:7,title:'배포·확산',number:6},{step:8,title:'확산 승인',gate:'G4'},
 ];
 export function projectTrack(state) {
-  const ardLevel=String(state.historicalDocuments?.[3]?.documents?.ARD?.fields?.['autonomy.level']||'').match(/^L([0-4])/);
+  const ard=state.historicalDocuments?.[3]?.documents?.ARD;
+  const ardLevel=String(ard?.fields?.['autonomy.level']||'').match(/^L([0-4])/);
   if(ardLevel&&Number(ardLevel[1])>=2)return 'HIGH';
+  const ardTrack=Object.entries(TRACK_LABELS).find(([,label])=>label===ard?.fields?.['autonomy.track'])?.[0];
+  if(ard?.status==='complete'&&ardTrack){
+    const feaTrack=state.feaDraft?classifyProject(state.feaDraft).track:'LOW';
+    const approvedTrack=TRACKS.includes(state.workflowTrack)?state.workflowTrack:'LOW';
+    return TRACKS[Math.max(TRACKS.indexOf(ardTrack),TRACKS.indexOf(feaTrack),TRACKS.indexOf(approvedTrack))];
+  }
   if(state.workflowTrack)return state.workflowTrack;
   const f=state.feaDraft;
   if(!f||['writeExec','sensitive','damageFinancial','scope','autonomy'].some(k=>f[k]===undefined||f[k]===''))return 'UNKNOWN';
