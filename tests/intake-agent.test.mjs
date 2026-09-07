@@ -23,8 +23,18 @@ test('INT interview sends only INT fields and excludes contact metadata',async()
   const context=JSON.parse(JSON.parse(request.body).messages[1].content);
   assert.ok(context.fields.every(field=>field.key.startsWith('int.')));
   assert.ok(Object.keys(context.values).every(key=>key.startsWith('int.')));
+  assert.deepEqual(context.intakeReference,{});
   assert.ok(!JSON.stringify(context).includes('test@example.com'));
   assert.deepEqual(context.computed,{});
+});
+test('FEA interview receives completed INT as read-only summary evidence',async()=>{
+  let request;
+  const state={...blank(),intakeAnswers:['회의실 예약이 번거롭습니다.','','','',''],intakeDetails:{performer:'팀원',countPerMonth:'20',asIsMinutes:'10',people:'1',failureImpact:'시간 낭비'}};
+  await generateTurn(state,'FEA 요약을 작성해 주세요.',{env:configured,fetcher:async(url,options)=>{request={url,...options};return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'요약했습니다.',proposals:[{key:'fea.summary',value:'회의실 예약 반복 업무를 개선합니다.',evidence:'회의실 예약이 번거롭습니다.',kind:'suggested'}],target:'fea.alternatives.0',question:'규정 개선으로 해결할 수 있나요?'})}}]})};}});
+  const context=JSON.parse(JSON.parse(request.body).messages[1].content);
+  assert.ok(context.fields.every(field=>field.key.startsWith('fea.')));
+  assert.equal(context.intakeReference['int.0'],'회의실 예약이 번거롭습니다.');
+  assert.equal(context.intakeReference['int.countPerMonth'],'20');
 });
 test('Azure failures and incomplete output do not expose provider diagnostics',async()=>{
   for(const response of [{ok:false,status:401},{ok:false,status:429},{ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:'secret'}}]})}]) {

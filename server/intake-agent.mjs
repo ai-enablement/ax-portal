@@ -30,9 +30,10 @@ export async function generateTurn(state,message,{env=process.env,fetcher=fetch}
   const phasePrefix=Number(state.journeyStep||0)===0?'int.':'fea.';
   const phaseFields=AGENT_FIELDS.filter(field=>field.key.startsWith(phasePrefix));
   const values=Object.fromEntries(phaseFields.map(field=>[field.key,fieldValue(state,field.key)]));
+  const intakeReference=phasePrefix==='fea.'?Object.fromEntries(AGENT_FIELDS.filter(field=>field.key.startsWith('int.')).map(field=>[field.key,fieldValue(state,field.key)])):{};
   const history=(state.intakeMessages||[]).slice(-16).map(item=>({role:item.role,text:item.text}));
-  const context={fields:phaseFields,values,held:(state.agentSession?.held||[]).filter(key=>key.startsWith(phasePrefix)),attempts:Object.fromEntries(Object.entries(state.agentSession?.attempts||{}).filter(([key])=>key.startsWith(phasePrefix))),missing:progress(state).missing,computed:phasePrefix==='fea.'?deterministicSummary(state):{},history,message};
-  const unsafeInput=[...Object.values(values),...history.map(item=>item.text),message].find(value=>typeof value==='string'&&!safeMessage(value));
+  const context={fields:phaseFields,values,intakeReference,held:(state.agentSession?.held||[]).filter(key=>key.startsWith(phasePrefix)),attempts:Object.fromEntries(Object.entries(state.agentSession?.attempts||{}).filter(([key])=>key.startsWith(phasePrefix))),missing:progress(state).missing,computed:phasePrefix==='fea.'?deterministicSummary(state):{},history,message};
+  const unsafeInput=[...Object.values(values),...Object.values(intakeReference),...history.map(item=>item.text),message].find(value=>typeof value==='string'&&!safeMessage(value));
   if(unsafeInput) throw new AgentError(400,'기존 접수 내용에 민감정보가 감지되었습니다. 직접 입력 화면에서 제거한 뒤 다시 시도해 주세요.');
   let response;
   const phasePrompt=Number(state.journeyStep||0)===0?'현재 INT 요구 접수 단계다. int.* 항목만 수집·추출한다. FEA 질문과 제안은 아직 하지 않는다. INT 필수 답변이 확인되면 AI 검토 완료 버튼으로 FEA에 넘어가도록 안내한다.':'현재 FEA 단계다. 기존 INT와 대화에서 요구 요약 3줄을 직접 정리해 fea.summary에 제안한다. 사용자에게 요약 작성을 요구하지 않는다. 미확보 사실은 만들지 않는다. 대안·효과·위험을 수집한다. 작성자에게 Go/Drop 판정안을 묻지 않으며 이와 관련한 이전 지침은 적용하지 않는다. FEA 검토·보완 후 작성 완료로 G1을 요청하고 팀장이 판정한다.';
