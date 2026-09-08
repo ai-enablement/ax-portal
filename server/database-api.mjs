@@ -813,6 +813,11 @@ async function listOperationalProjects(identity) {
   const pool = getPool();
   const actor = await findUser(pool, identity);
   if (!actor || !actor.is_active) return { status: 403, body: { error: "Active portal account is required." } };
+  return listNotificationProjectsForActor(pool, actor);
+}
+
+// Internal worker only. Reuse the same visibility predicate and DB projection as the UI.
+export async function listNotificationProjectsForActor(pool, actor) {
   const result = await pool.query(
     `select p.project_code as "projectCode", p.project_name as "projectName",
             p.project_category as "projectCategory", p.project_summary as "projectSummary",

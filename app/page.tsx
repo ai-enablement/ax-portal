@@ -1375,6 +1375,20 @@ export default function Home() {
     [userProjectItems, identity?.userId, identity?.appRole, identity?.canSwitchRole, actorEmail, role],
   );
 
+  const mailLinkHandled = useRef(false);
+  useEffect(() => {
+    if(mailLinkHandled.current || databaseStatus !== 'connected' || !identity?.userId) return;
+    const code = new URL(window.location.href).searchParams.get('workProject');
+    if(!code) return;
+    const project = userProjectItems.find(p=>p.no===code && p.source==='database');
+    if(!project) return; // Never load a project outside the authenticated API result.
+    mailLinkHandled.current=true;
+    const action=notifications.find(n=>n.projectNo===code);
+    setWorkflowTarget(code);
+    if(action) setWorkflowActionTarget({projectNo:code,journeyStep:action.journeyStep,deliveryPhase:action.deliveryPhase,nonce:Date.now()});
+    setView(action?.view==='intake'?'intake':action?.view==='definition'?'definition':action?.view==='delivery'?'delivery':'home');
+  }, [databaseStatus, identity?.userId, userProjectItems, notifications]);
+
   const openHub = (project?: (typeof projects)[0]) => {
     setHubProject(project || null);
     setDetail(null);
