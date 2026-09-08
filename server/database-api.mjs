@@ -1037,6 +1037,7 @@ async function createOperationalProject(body, identity) {
   sanitizeNewWorkflow(submittedState);
   delete submittedState.historicalImportFinalizedAt;
   delete submittedState.historicalResumeStep;
+  delete submittedState.historicalCompletedThrough;
   delete submittedState.finalizeHistoricalImport;
   delete submittedState.agentSession;
   return withTransaction(async (client) => {

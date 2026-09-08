@@ -6,7 +6,7 @@ test('home project list becomes a modal drawer without wrapping the document pan
  const page=read('../app/page.tsx');
  assert.match(page,/<ProjectListDrawer count=\{projectItems.length\}>/);
  assert.match(page,/<\/ProjectListDrawer>\s*<article className="panel selected-project-status oneview-status">/);
- assert.match(page,/data-project-select\s+onClick=\{\(\) => selectProject\(index\)\}/);
+ assert.match(page,/data-project-select\s+onClick=\{\(\) => selectProject\(project\)\}/);
 });
 test('drawer exposes accessible open close and selection affordances',()=>{
  const drawer=read('../app/project-list-drawer.tsx');

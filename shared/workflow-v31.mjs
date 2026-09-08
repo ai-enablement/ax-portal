@@ -1,6 +1,7 @@
 import {classifyProject,TRACKS,TRACK_LABELS} from './project-classification.mjs';
 import {standardDocuments,sectionHasContent} from './standard-documents.mjs';
 import {intakeRequired,feaRequired} from './intake-standard.mjs';
+import {isHistoricalDocumentComplete} from './historical-import-policy.mjs';
 export const GATE_STEPS={G1:2,G2:4,G3:6,G4:8};
 export const ROLE_LABELS={requester:'요구자',owner:'Project Owner',team_leader:'AI 활성화팀장',security_reviewer:'정보보호 승인자'};
 export const JOURNEY_V31=[
@@ -44,10 +45,12 @@ export function historicalGateComplete(gate,state){
   return state.historicalImport===true&&Number.isFinite(baseline)&&Number.isFinite(gateStep)&&gateStep<baseline;
 }
 export function documentComplete(state,stage,code){
+  if(isHistoricalDocumentComplete(state,stage,code))return true;
   const d=state.historicalDocuments?.[stage]?.documents?.[code];
   return d?.status==='complete'&&standardDocuments[code]?.sections.every(s=>sectionHasContent(s,d.fields));
 }
 export function markdownDocumentComplete(state,code,phase){
+  if(isHistoricalDocumentComplete(state,phase==='deployment_rollout'?7:5,phase==='design'?'DES':'EVD'))return true;
   const record=state.markdownDocuments?.[code]?.phases?.[phase];
   if(!record||Number(record.version)<=0)return false;
   // Records created before phase completion was separated from upload have no status.
@@ -57,7 +60,7 @@ export function designDocumentComplete(state){return markdownDocumentComplete(st
 export function developmentEvdComplete(state){return markdownDocumentComplete(state,'EVD','development_evaluation')||documentComplete(state,5,'EVR');}
 export function releaseEvdComplete(state){return markdownDocumentComplete(state,'EVD','deployment_rollout')||documentComplete(state,7,'DEP');}
 export function gateGaps(gate,state){
-  if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...intakeRequired(state).map(f=>f.label),...feaRequired(state).map(f=>f.label)];
+  if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...(isHistoricalDocumentComplete(state,0)?[]:intakeRequired(state).map(f=>f.label)),...(isHistoricalDocumentComplete(state,1)?[]:feaRequired(state).map(f=>f.label))];
   if(gate==='G2')return documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료'];
   if(gate==='G3'){
     const c=state.gateChecks?.G3||{};

@@ -1,10 +1,10 @@
 import {intakeDocument,intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
-import {canBackfillDocument} from '../shared/historical-import-policy.mjs';
+import {canBackfillDocument,isHistoricalDocumentComplete} from '../shared/historical-import-policy.mjs';
 export function completionGaps(previous,changes,merged) {
   const intDone=changes.intakeDraftCompleted===true || (Number(previous.journeyStep)===0 && Number(merged.journeyStep)>0);
   const feaDone=changes.feaCompleted===true || (Number(previous.journeyStep)<=1 && Number(merged.journeyStep)>1);
-  if(feaDone&&!canBackfillDocument(previous,1))return [...intakeRequired(merged),...feaRequired(merged)];
-  if(intDone&&!canBackfillDocument(previous,0))return intakeRequired(merged);
+  if(feaDone&&!canBackfillDocument(previous,1)&&!isHistoricalDocumentComplete(merged,1))return [...(isHistoricalDocumentComplete(merged,0)?[]:intakeRequired(merged)),...feaRequired(merged)];
+  if(intDone&&!canBackfillDocument(previous,0)&&!isHistoricalDocumentComplete(merged,0))return intakeRequired(merged);
   return [];
 }
 // Preserve the earlier document version on first v3 write.

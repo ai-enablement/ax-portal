@@ -1,5 +1,5 @@
 import {allApproved,requiredApprovers,eligibleRole,gateGaps,gateBasis,projectTrack,documentComplete,designDocumentComplete,developmentEvdComplete,releaseEvdComplete,isLowRoute,GATE_STEPS,displayStage} from '../shared/workflow-v31.mjs';
-import {isImportInProgress} from '../shared/historical-import-policy.mjs';
+import {isImportInProgress,needsImportCompletionRepair} from '../shared/historical-import-policy.mjs';
 import {ardLiteGaps,fastTrackRequestGaps,FAST_TRACK_STATUSES} from '../shared/fast-track.mjs';
 import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
@@ -39,6 +39,13 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   if(!previous.historicalImport&&step===0&&(changes.feaDraft||changes.feaCompleted||Number(merged.journeyStep)>0))deny('요구 접수 Agent 검토를 완료한 뒤 FEA를 작성해 주세요.');
   const author=actor.app_role==='admin'||(previous.developerIds||[]).map(String).includes(String(actor.id));
   const importOpen=isImportInProgress(previous);
+  if(changes.finalizeHistoricalImport && (importOpen || needsImportCompletionRepair(previous))) {
+    if(!author && !(!previous.developerIds?.length && ['team_leader','team_member'].includes(actor.app_role)))deny('이관 담당자만 완료할 수 있습니다.',403);
+    // applyImportLifecycle establishes the immutable historical boundary before this call.
+    if(!merged.historicalCompletedThrough)deny('이관 완료 기준이 필요합니다.');
+    merged.stage=displayStage(merged);
+    return merged;
+  }
   if(changes.deliveryPhase)deny('설계 문서의 완료 버튼으로 다음 단계로 이동해 주세요.');
   if([5,7].includes(step)&&Number(changes.journeyStep)>step&&!changes.markdownCompleteAction)deny('현재 문서의 완료 버튼으로 다음 Gate를 요청해 주세요.');
   let markdownPhaseChanged=false;

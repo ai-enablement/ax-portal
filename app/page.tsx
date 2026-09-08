@@ -5,7 +5,8 @@ import "./operations-documents.css";
 import "./team-dashboard-compact.css";
 import "./team-dashboard-readability.css";
 import "./status-badges.css";
-import {isImportInProgress, canBackfillDocument} from "../shared/historical-import-policy.mjs";
+import {isImportInProgress, canBackfillDocument, needsImportCompletionRepair} from "../shared/historical-import-policy.mjs";
+import {selectedProjectNumber,currentWorkflowTarget} from "../shared/project-selection.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
 import MarkdownDocumentWorkspace from "./markdown-document-workspace";
@@ -259,6 +260,7 @@ type UserProject = {
   historicalBaselineStep?: number;
   historicalImportFinalizedAt?: string;
   historicalResumeStep?: number;
+  historicalCompletedThrough?: {step:number;phase:string;source:string;at:string};
   finalizeHistoricalImport?: boolean;
   documentsDeferred?: boolean;
   source?: "database";
@@ -7019,7 +7021,7 @@ function UserDashboard({
   const isAiTeamMember = role === ACCOUNT_ROLES.member;
   const isAiTeam = isLeader || isAiTeamMember;
   const isProjectContributor = isAiTeam || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.bpSolution;
-  const [selected, setSelected] = useState(0);
+  const [selectedProjectNo, setSelectedProjectNo] = useState(projectNo || projectItems[0]?.no || "");
   const [filter, setFilter] = useState("전체");
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [selectedDeliveryPhase, setSelectedDeliveryPhase] = useState<"design" | "development">("design");
@@ -7032,31 +7034,23 @@ function UserDashboard({
   const currentStageDetailRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState(defaultIntakeMessages);
   useEffect(() => {
-    if (projectItems.length === 0) {
-      // Keep the master-detail selection stable while the production dataset is empty.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelected(0);
-      setSelectedJourney(0);
-      return;
-    }
-    const targetIndex = projectNo
-      ? projectItems.findIndex((project) => project.no === projectNo)
-      : -1;
-    const nextIndex = targetIndex >= 0 ? targetIndex : 0;
-    // Synchronize an externally selected project with the local master-detail view.
-    setSelected(nextIndex);
-    setSelectedJourney(projectItems[nextIndex].journeyStep);
+    // Only explicit external navigation resets a user's locally selected project.
+    if(projectNo)setSelectedProjectNo(projectNo);
     setFilter("전체");
-    // projectItems is rebuilt by the role filter; its length and projectNo are
-    // the stable synchronization inputs for this master-detail selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAiTeam, role, projectNo, projectItems.length]);
+  }, [isAiTeam, role, projectNo]);
+
+  useEffect(()=>{
+    // Keep the key during an empty/loading list. Settle a fallback only when
+    // the selected project has actually disappeared from a nonempty result.
+    if(projectItems.length)setSelectedProjectNo(no=>selectedProjectNumber(projectItems,no));
+  },[projectItems]);
 
   const hasProjects = projectItems.length > 0;
-  const current = projectItems[selected] || projectItems[0] || emptyProject;
+  const currentNo=selectedProjectNumber(projectItems,selectedProjectNo);
+  const current = projectItems.find(project=>project.no===currentNo) || emptyProject;
   useEffect(() => {
     if (current.source === "database") {
-      const requestedAction = workflowActionTarget?.projectNo === current.no ? workflowActionTarget : null;
+      const requestedAction = currentWorkflowTarget(current,workflowActionTarget);
       setSelectedJourney(requestedAction?.journeyStep ?? current.journeyStep);
       if (requestedAction?.deliveryPhase) setSelectedDeliveryPhase(requestedAction.deliveryPhase);
       else if (current.journeyStep === 5) setSelectedDeliveryPhase(current.deliveryPhase || "design");
@@ -7092,11 +7086,11 @@ function UserDashboard({
   const importInProgress = isImportInProgress(current);
   const [finalizingImport, setFinalizingImport] = useState(false);
   const finishHistoricalImport = async () => {
-    if (!canAuthorHistoricalDocument || finalizingImport || !window.confirm("먼저 작성 중인 문서를 저장해 주세요. 이관을 완료하면 현재 단계부터 필수 작성·승인 순서를 적용합니다. 이관을 완료하시겠습니까?")) return;
+    if (!canAuthorHistoricalDocument || finalizingImport || !window.confirm("먼저 작성 중인 문서를 저장해 주세요. 이관 기준 문서 단계까지는 필수 항목이 비어 있어도 완료로 인정하고 다음 단계로 이동합니다. 현재 단계가 승인 Gate라면 승인은 생략하지 않습니다. 이관을 완료하시겠습니까?")) return;
     setFinalizingImport(true);
     try {
       const saved = await onUpdateProject(current.no, {finalizeHistoricalImport:true});
-      if (saved !== false) notify("과거 이관을 완료했습니다. 현재 단계부터 정식 절차를 적용합니다.");
+      if (saved === true) notify("과거 이관 기준 문서를 완료로 반영했습니다. 이후 단계는 정식 작성·승인 절차로 진행합니다.");
     } finally { setFinalizingImport(false); }
   };
   const deleteCurrentProject = () => {
@@ -7109,7 +7103,6 @@ function UserDashboard({
     )
       return;
     onDeleteProject(current.no);
-    setSelected(0);
     notify(`${current.name} 과제가 삭제되었습니다.`);
   };
   const importedG1Record = current.historicalDocuments?.["2"];
@@ -7183,15 +7176,15 @@ function UserDashboard({
     if (matches.length === 0) return;
     if (next !== "전체") {
       const project = matches.find(item => item.no === current.no) || matches[0];
-      setSelected(projectItems.indexOf(project));
+      setSelectedProjectNo(project.no);
       setSelectedJourney(project.journeyStep);
       return;
     }
     setSelectedJourney(current.journeyStep);
   };
-  const selectProject = (index: number) => {
-    setSelected(index);
-    setSelectedJourney(projectItems[index].journeyStep);
+  const selectProject = (project: UserProject) => {
+    setSelectedProjectNo(project.no);
+    setSelectedJourney(project.journeyStep);
     setHistoricalIntakeEditing(false);
   };
   const sendDraftAnswer = () => {
@@ -7324,9 +7317,9 @@ function UserDashboard({
               return (
                 <button
                   key={project.no}
-                  className={selected === index ? "selected" : ""}
+                  className={current.no === project.no ? "selected" : ""}
                   data-project-select
-                  onClick={() => selectProject(index)}
+                  onClick={() => selectProject(project)}
                 >
                   <span className={`project-stage-number ${project.tone}`}>
                     {index + 1}
@@ -7392,10 +7385,10 @@ function UserDashboard({
           </header>
 
           {current.historicalImport && <section className="historical-import-banner">
-            <div><b>{importInProgress ? "과거 이관 · 내용 보완 중" : "과거 이관 완료"}</b><p>{importInProgress ? "현재 단계까지 확인된 내용만 저장할 수 있습니다. 누락 문서는 지정 개발 담당자가 계속 수정할 수 있습니다." : "현재 진행 단계부터 필수 작성·승인 순서를 적용합니다. 이전 단계 문서는 별도로 보완할 수 있습니다."}</p></div>
-            {importInProgress && canAuthorHistoricalDocument && <button type="button" className="primary historical-import-complete" disabled={finalizingImport} aria-busy={finalizingImport} onClick={()=>void finishHistoricalImport()}>
+            <div><b>{importInProgress ? "과거 이관 · 내용 보완 중" : "과거 이관 완료"}</b><p>{importInProgress ? "확인된 내용만 저장해도 됩니다. 이관 완료 시 기준 문서 단계까지 완료로 인정하고 다음 단계로 이동합니다. 승인 Gate는 생략하지 않습니다." : needsImportCompletionRepair(current) ? "기존 이관 완료 건입니다. 이관 완료 반영을 누르면 누락 항목과 관계없이 기준 문서 단계를 완료 처리합니다." : "이관 기준 문서는 누락 항목이 있어도 완료로 인정됩니다. 이후 단계부터 정식 작성·승인을 진행하며 이전 내용은 계속 보완할 수 있습니다."}</p></div>
+            {(importInProgress || needsImportCompletionRepair(current)) && canAuthorHistoricalDocument && <button type="button" className="primary historical-import-complete" disabled={finalizingImport} aria-busy={finalizingImport} onClick={()=>void finishHistoricalImport()}>
               <CheckCircle size={20} weight="bold" aria-hidden="true" />
-              <span>{finalizingImport ? "이관 완료 처리 중…" : "과거 이관 완료"}</span>
+              <span>{finalizingImport ? "이관 완료 처리 중…" : importInProgress ? "과거 이관 완료" : "이관 완료 반영"}</span>
             </button>}
           </section>}
           {current.source === "database" && current.fastTrack?.requested && <FastTrackPanel key={current.no + ":" + JSON.stringify([current.fastTrack,current.ardLite,current.developerIds])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
