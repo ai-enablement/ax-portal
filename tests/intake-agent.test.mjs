@@ -5,6 +5,21 @@ import {AGENT_FIELDS,FIELD_MAP,validField,fieldValue,missingFields,interviewMiss
 import {azureConfiguration,generateTurn,assertAgentAccess,AgentError} from '../server/intake-agent.mjs';
 const configured={AZURE_OPENAI_ENDPOINT:'https://test.openai.azure.com/',AZURE_OPENAI_API_KEY:'test-only',AZURE_OPENAI_DEPLOYMENT:'test-deployment'};
 const blank=()=>({journeyStep:1,name:'테스트 과제',intakeAnswers:['','','','',''],agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}});
+test('FEA distinguishes collected proposals from reflected document and never asks for an autonomy code',()=>{
+ const state=blank();
+ for(const field of AGENT_FIELDS.filter(f=>f.key.startsWith('fea.')&&!f.optional&&f.key!=='fea.autonomy')){
+  const value=field.choices?.[0]||'확인한 업무 근거입니다.';setField(state,field.key,value);state.agentSession.confirmed[field.key]={value};
+ }
+ const followup=acceptModelTurn(state,{reply:'실행 방식을 확인하겠습니다.',target:'fea.autonomy',question:'자율성 초안을 알려주세요.',proposals:[]},'예약 자동화');
+ assert.ok(followup.reply.includes('사람이 실행 전에 승인'));assert.ok(!followup.reply.includes('자율성 초안을 알려'));
+ const collected=acceptModelTurn(state,{reply:'승인 후 예약 실행으로 분류했습니다.',target:'',question:'',proposals:[{key:'fea.autonomy',value:'L2',kind:'suggested',evidence:'사람이 승인한 뒤 예약을 실행합니다.'}]},'사람이 승인한 뒤 예약을 실행합니다.');
+ assert.equal(progress(collected.state).collectionComplete,true);assert.equal(progress(collected.state).canComplete,false);
+ assert.ok(collected.reply.includes('모든 정보 수집이 완료되었습니다. 우측'));
+ const reflected=applyProposals(collected.state,['fea.autonomy'],'7').state;
+ assert.equal(progress(reflected).canComplete,true);assert.equal(reflected.feaDraft.autonomy,'L2');
+ const stale=structuredClone(collected.state);setField(stale,'fea.autonomy','L0');
+ assert.equal(progress(stale).collectionComplete,false);
+});
 test('Azure configuration fails closed and never accepts key exfiltration destinations',()=>{
   assert.throws(()=>azureConfiguration({}),e=>e.status===503);
   for(const endpoint of ['http://test.openai.azure.com','https://evil.example','https://test.openai.azure.com.evil.example','https://test.openai.azure.com/?key=x','https://user:pass@test.openai.azure.com']) assert.throws(()=>azureConfiguration({...configured,AZURE_OPENAI_ENDPOINT:endpoint}));

@@ -50,7 +50,9 @@ export function progress(state) {
   const missing = missingFields(state,prefix);
   const interviewMissing = interviewMissingFields(state,prefix);
   const held = state.agentSession?.held || [];
-  return {phase:prefix==='int.'?'INT':'FEA',total:AGENT_FIELDS.filter(f=>!f.optional&&f.key.startsWith(prefix)).length, missing:missing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})),interviewMissing:interviewMissing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})), ready:missing.length===0};
+  const pending=(state.agentSession?.proposals||[]).filter(p=>p.key.startsWith(prefix)&&FIELD_MAP.has(p.key));
+  const unanswered=missing.filter(f=>!pending.some(p=>p.key===f.key&&validField(f,p.value)&&p.baseValue===fieldValue(state,p.key)));
+  return {phase:prefix==='int.'?'INT':'FEA',total:AGENT_FIELDS.filter(f=>!f.optional&&f.key.startsWith(prefix)).length, missing:missing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})),interviewMissing:interviewMissing.map(f=>({key:f.key,label:f.label,held:held.includes(f.key)})),collectionComplete:unanswered.length===0,ready:missing.length===0,canComplete:missing.length===0&&pending.length===0};
 }
 export function safeMessage(text) {
   return !/(?:\d{6}[- ]?[1-8]\d{6}|\b(?:sk-|AIza)[A-Za-z0-9_-]{20,}|-----BEGIN .*PRIVATE KEY-----|(?:api[_ -]?key|비밀키)\s*[:=：]\s*[A-Za-z0-9_-]{16,}|(?:계좌|카드)\s*(?:번호)?\s*[:：]?\s*[\d -]{10,})/i.test(text);
@@ -128,8 +130,10 @@ export function acceptModelTurn(state, result, message, snapshot=state) {
     session.attempts[target.key]=count;
     if(phasePrefix!=='int.'&&count >= (target.number ? 2 : 3)) session.held=[...new Set([...(session.held||[]),target.key])];
     question = target.key===result.target && typeof result.question==='string' && result.question.length<2000 && safeMessage(result.question) ? result.question : `${target.label}을 구체적으로 알려주세요. 확인이 어려우면 보류하고 나중에 보완할 수 있습니다.`;
+    if(target.key==='fea.autonomy')question='Agent가 정보를 보여주거나 초안만 만드나요, 실제 예약·등록까지 처리하나요? 실행한다면 사람이 실행 전에 승인하는지, 실행 후 결과를 확인하는지 알려주세요.';
   }
-  const reply = [result.reply,question,accepted.size ? '아래 확인 대기 항목을 검토해 주세요. 확인한 내용만 문서에 반영됩니다.' : '',!target && missingFields(next).length ? '아직 미확보 항목이 있습니다. 완료 처리하지 않고 보류하며, 나중에 답변을 주시면 다시 반영합니다.' : ''].filter(Boolean).join('\n\n');
+  const collected=phasePrefix==='fea.'&&progress(next).collectionComplete;
+  const reply = [result.reply,collected?'모든 정보 수집이 완료되었습니다. 우측의 정보를 확인 후 문서에 반영하여 FEA 작성을 완료해 주세요.':question,!collected&&accepted.size ? '우측 확인 대기 항목을 검토해 주세요. 확인한 내용만 문서에 반영됩니다.' : '',!collected&&!target && missingFields(next).length ? '아직 미확보 항목이 있습니다. 완료 처리하지 않고 보류하며, 나중에 답변을 주시면 다시 반영합니다.' : ''].filter(Boolean).join('\n\n');
   return {state:next, reply};
 }
 export function deterministicSummary(state) {

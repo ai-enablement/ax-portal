@@ -1151,6 +1151,7 @@ async function updateOperationalProject(projectCode, body, identity) {
     const editsAgentDocument = changedKeys.some(key=>["intakeAnswers","intakeMessages","intakeDetails","feaDraft","feaCompleted","intakeDraftCompleted"].includes(key));
     if (previousState.agentSession && editsAgentDocument && body.agentRevision !== previousState.agentSession.revision) return {status:409,body:{error:"AI 인터뷰에서 문서가 갱신되었습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요."}};
     if (previousState.agentSession && changes.intakeMessages) return {status:403,body:{error:"인터뷰 대화는 전용 Agent에서 입력해 주세요."}};
+    if(changes.feaCompleted===true&&previousState.agentSession?.proposals?.some(p=>p.key.startsWith('fea.')&&AGENT_FIELDS.some(f=>f.key===p.key)))return {status:400,body:{error:'우측 확인 대기 항목을 모두 검토하고 문서에 반영한 뒤 FEA 작성을 완료해 주세요.'}};
     const changedDocuments = Object.keys(changes.historicalDocuments || {}).filter(key=>JSON.stringify(changes.historicalDocuments[key])!==JSON.stringify(previousState.historicalDocuments?.[key]));
     if (previousState.historicalImport && !canWriteImport && (changes.finalizeHistoricalImport || "feaDraft" in changes || "intakeAnswers" in changes || changedDocuments.some(key=>![2,4,6,8].includes(Number(key))))) {
       return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};

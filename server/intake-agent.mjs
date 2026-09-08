@@ -25,6 +25,7 @@ export const OUTPUT_SCHEMA = {type:'object',additionalProperties:false,required:
   reply:{type:'string'},target:{type:'string',enum:['',...AGENT_FIELDS.map(f=>f.key)]},question:{type:'string'},
   proposals:{type:'array',items:{type:'object',additionalProperties:false,required:['key','value','evidence','kind'],properties:{key:{type:'string',enum:AGENT_FIELDS.map(f=>f.key)},value:{type:'string'},evidence:{type:'string'},kind:{type:'string',enum:['extracted','suggested']}}}},
 }};
+export const AUTONOMY_PROMPT = `자율성 초안은 사용자가 등급을 고르는 항목이 아니다. 기존 INT, FEA, 대화에서 실행 방식과 사람의 개입을 파악하여 fea.autonomy를 AI 제안(suggested)으로 분류하고 근거를 함께 제시한다. L0=조회·정보 제공만, L1=초안 생성 후 사람이 전량 검토하고 직접 처리, L2=Agent가 제안하고 사람이 승인한 뒤 Agent가 실행, L3=Agent가 자동 실행하고 사람이 사후 검토, L4=사람의 승인·사후 검토 없이 완전 자율 실행. 사용자에게 자율성 수준이나 L0~L4 등급을 알려달라고 하지 않는다. '사용자 확인 없이 실행'만으로 L3와 L4를 단정하지 않는다. 분류에 필요한 정보가 없으면 '실행 전에 사람이 승인하나요, 실행 후 결과를 확인하나요?'처럼 사람의 확인 시점만 질문한다. 이미 답한 사실은 다시 묻지 않는다. 트랙은 별도 질문 없이 서버가 계산한다.`;
 export async function generateTurn(state,message,{env=process.env,fetcher=fetch}={}) {
   const config=azureConfiguration(env);
   const phasePrefix=Number(state.journeyStep||0)===0?'int.':'fea.';
@@ -38,7 +39,7 @@ export async function generateTurn(state,message,{env=process.env,fetcher=fetch}
   if(unsafeInput) throw new AgentError(400,'기존 접수 내용에 민감정보가 감지되었습니다. 직접 입력 화면에서 제거한 뒤 다시 시도해 주세요.');
   let response;
   const phasePrompt=Number(state.journeyStep||0)===0?'현재 INT 요구 접수 단계다. int.* 항목만 수집·추출한다. FEA 질문과 제안은 아직 하지 않는다. 사용자가 명확히 답한 INT 사실은 원문 근거와 함께 extracted로 적극 추출한다. 현재 순서의 정보가 충분하지 않으면 같은 항목을 구체적으로 되묻고, 충분하면 다음 미확보 항목을 질문한다. INT 필수 답변이 확인되면 AI 검토 완료 버튼으로 FEA에 넘어가도록 안내한다.':'현재 FEA 단계다. 기존 INT와 대화에서 요구 요약 3줄을 직접 정리해 fea.summary에 제안한다. 사용자에게 요약 작성을 요구하지 않는다. 미확보 사실은 만들지 않는다. 대안·효과·위험을 수집한다. 작성자에게 Go/Drop 판정안을 묻지 않으며 이와 관련한 이전 지침은 적용하지 않는다. FEA 검토·보완 후 작성 완료로 G1을 요청하고 팀장이 판정한다.';
-  try {response=await fetcher(config.url,{method:'POST',redirect:'error',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json','api-key':config.key},body:JSON.stringify({model:config.deployment,messages:[{role:'system',content:SYSTEM_PROMPT+'\n'+phasePrompt},{role:'user',content:JSON.stringify(context)}],max_completion_tokens:6000,response_format:{type:'json_schema',json_schema:{name:'intake_feasibility_turn',strict:true,schema:OUTPUT_SCHEMA}}})});}
+  try {response=await fetcher(config.url,{method:'POST',redirect:'error',signal:AbortSignal.timeout(65000),headers:{'content-type':'application/json','api-key':config.key},body:JSON.stringify({model:config.deployment,messages:[{role:'system',content:SYSTEM_PROMPT+'\n'+phasePrompt+'\n'+AUTONOMY_PROMPT},{role:'user',content:JSON.stringify(context)}],max_completion_tokens:6000,response_format:{type:'json_schema',json_schema:{name:'intake_feasibility_turn',strict:true,schema:OUTPUT_SCHEMA}}})});}
   catch {throw new AgentError(502,'AI 응답을 받지 못했습니다. 답변은 DB에 보관되어 있으니 잠시 후 다시 시도해 주세요.');}
   if(!response.ok) throw new AgentError(response.status===429?429:502,response.status===429?'AI 사용량 제한입니다. 잠시 후 다시 시도해 주세요.':'AI 연결에 실패했습니다. Azure 모델 배포·접근 권한·구조화 출력 지원을 확인해 주세요.');
   let data;
@@ -113,6 +114,7 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
     }
     else if(body.action==='confirm') ({state:next,conflicts}=applyProposals(state,body.keys,actor.id));
     else {next.agentSession||={};next.agentSession.held=(next.agentSession.held||[]).filter(k=>!body.keys.includes(k));next.agentSession.attempts||={};for(const key of body.keys) next.agentSession.attempts[key]=0;}
+    next.agentSession||={confirmed:{},proposals:[],held:[],attempts:{}};
     next.agentSession.revision=(state.agentSession?.revision||0)+1;
     if(JSON.stringify(next.feaDraft)!==JSON.stringify(state.feaDraft))next.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
     await persistAgentState(client,project,next,actor.id,state);

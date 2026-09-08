@@ -4,8 +4,8 @@ import './intake-agent-panel.css';
 
 type Proposal={key:string;value:string;evidence:string;kind:string; baseValue:string};
 type MissingField={key:string;label:string;held:boolean};
-type Snapshot={configured:boolean;fields:{key:string;label:string}[];messages:{role:string;text:string}[];session:{revision?:number;proposals?:Proposal[];request?:{id:string;message:string;status:string}};progress:{total:number;ready:boolean;missing:MissingField[];interviewMissing?:MissingField[]};computed:{classification:{label:string;signals:string[]}|null;roi:{monthlyHours:number}|null};conflicts?:string[]};
-const choiceLabels:Record<string,string>={true:'해당',false:'비해당',PERSONAL:'개인',TEAM:'팀',DEPT:'부서',MULTI_DEPT:'여러 부서',COMPANY:'전사'};
+type Snapshot={configured:boolean;fields:{key:string;label:string}[];messages:{role:string;text:string}[];session:{revision?:number;proposals?:Proposal[];request?:{id:string;message:string;status:string}};progress:{total:number;ready:boolean;collectionComplete?:boolean;canComplete?:boolean;missing:MissingField[];interviewMissing?:MissingField[]};computed:{classification:{label:string;signals:string[]}|null;roi:{monthlyHours:number}|null};conflicts?:string[]};
+const choiceLabels:Record<string,string>={true:'해당',false:'비해당',PERSONAL:'개인',TEAM:'팀',DEPT:'부서',MULTI_DEPT:'여러 부서',COMPANY:'전사',L0:'L0 · 정보 제공',L1:'L1 · 초안 생성 후 사람이 검토·처리',L2:'L2 · 사람이 승인한 뒤 Agent 실행',L3:'L3 · 자동 실행 후 사람이 검토',L4:'L4 · 완전 자율 실행'};
 export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
   const [data,setData]=useState<Snapshot|null>(null);
   const [error,setError]=useState('');
@@ -30,17 +30,18 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
     const timer=setInterval(()=>void refresh(),5000);
     return()=>clearInterval(timer);
   },[serverRunning,busy,refresh]);
-  async function send(action:'message'|'confirm'|'resume'|'review_intake',keys:string[]=[],retryTurn?:{id:string;message:string}) {
+  async function send(action:'message'|'confirm'|'resume'|'review_intake'|'complete_fea',keys:string[]=[],retryTurn?:{id:string;message:string}) {
     if(inFlight.current) return;
     const turn=retryTurn || {id:crypto.randomUUID(),message:input.trim()};
     if(action==='message' && !turn.message) return;
     inFlight.current=true;setBusy(true);setError('');setNotice('');
     if(action==='message') setRetry(turn);
     try {
-      const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,keys,revision:data?.session.revision||0,...(action==='message'?{message:turn.message,requestId:turn.id}:{})})});
+      const r=action==='complete_fea'?await fetch(`/api/database/projects/${encodeURIComponent(projectNo)}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({changes:{feaCompleted:true},agentRevision:data?.session.revision||0})}):await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,keys,revision:data?.session.revision||0,...(action==='message'?{message:turn.message,requestId:turn.id}:{})})});
       const payload=await r.json();
       if(!r.ok) throw new Error(payload.error||'처리하지 못했습니다.');
       window.dispatchEvent(new Event('portal-agent-saved'));
+      if(action==='complete_fea'){setNotice('FEA 작성이 완료되어 G1 착수 승인을 요청했습니다.');return;}
       if(!mounted.current) return;
       setData(payload);setSelected([]);
       if(action==='message'){setInput('');setRetry(null);}
@@ -65,7 +66,8 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
         <div className="agent-conversation">
           <div ref={history} className="agent-history" role="log" aria-live="polite" aria-label="저장된 인터뷰 대화">
             {!data.messages.length && <><p>{phase==='INT'?'INT에서 아직 부족한 필수 정보만 하나씩 질문하겠습니다.':'확인된 INT를 바탕으로 FEA에 부족한 정보를 하나씩 질문하겠습니다.'} 아래 버튼으로 시작하거나 답변을 바로 입력해 주세요.</p><button type="button" disabled={busy||!data.configured} onClick={()=>void send('message',[],{id:crypto.randomUUID(),message:phase==='INT'?'현재 INT 필수 항목 중 부족한 정보만 하나씩 질문해 주세요.':'확인된 INT를 바탕으로 FEA의 부족한 정보를 하나씩 질문해 주세요.'})}>{phase==='INT'?'INT 부족 항목 인터뷰 시작':'FEA 인터뷰 시작'}</button></>}
-            {data.messages.map((m,i)=><div key={i} className={`agent-bubble ${m.role==='user'?'user':'agent'}`}><small>{m.role==='user'?'참여자':'요구 접수 Agent'}</small><p>{m.text}</p></div>)}
+            {data.messages.map((m,i)=><div key={i} className={`agent-bubble ${m.role==='user'?'user':'agent'}`}><small>{m.role==='user'?'참여자':'요구 접수 Agent'}</small><p>{m.role==='user'?m.text:m.text.replaceAll('아래 확인 대기 항목','우측 확인 대기 항목')}</p></div>)}
+            {phase==='FEA'&&data.progress.collectionComplete&&!busy&&<div className="agent-bubble agent"><p>{data.progress.canComplete?'우측의 정보가 모두 문서에 반영되었습니다. FEA 작성 완료 버튼을 눌러 주세요.':'모든 정보 수집이 완료되었습니다. 우측의 정보를 확인 후 문서에 반영하여 FEA 작성을 완료해 주세요.'}</p></div>}
             {busy && <p role="status">처리 중입니다. 답변을 정리하고 저장하고 있습니다…</p>}
           </div>
           <form onSubmit={e=>{e.preventDefault();void send('message');}}>
@@ -87,7 +89,7 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
           {!proposals.length&&<p>대화를 시작하면 확인할 초안이 여기에 표시됩니다.</p>}
           <button type="button" disabled={busy||!selected.length} onClick={()=>void send('confirm',selected)}>선택한 {selected.length}개 확인 · 문서 반영</button>
           <details open={phase==='INT'&&interviewMissing.length>0}><summary>{phase==='INT'?'추가 확인 필요':'미확보·보완 필요'} {interviewMissing.length}개</summary><ul>{interviewMissing.map(f=><li key={f.key}>{f.label}{f.held&&<><span>보류</span><button type="button" disabled={busy} onClick={()=>void send('resume',[f.key])}>다시 보완</button></>}</li>)}</ul></details>
-          {phase==='FEA'&&<button type="button" disabled={busy||serverRunning||!data.configured} onClick={()=>void send('message',[],{id:crypto.randomUUID(),message:'지금까지 확인한 요구 접수 내용으로 요구 요약 3줄을 자동 작성하고 FEA에 부족한 정보를 질문해 주세요.'})}>AI 요구 요약 작성 · FEA 인터뷰 계속</button>}
+          {phase==='FEA'&&(data.progress.collectionComplete?<button type="button" disabled={busy||serverRunning||!data.progress.canComplete} onClick={()=>void send('complete_fea')}>FEA 작성 완료</button>:<button type="button" disabled={busy||serverRunning||!data.configured} onClick={()=>void send('message',[],{id:crypto.randomUUID(),message:'지금까지 확인한 요구 접수 내용으로 요구 요약 3줄을 자동 작성하고 FEA에 부족한 정보를 질문해 주세요.'})}>FEA 인터뷰 계속</button>)}
           {data.progress.ready&&<p className="agent-notice">{phase==='INT'?'접수 내용을 확인하고 AI 검토 완료 버튼을 눌러 주세요.':'필수 정보가 확보되었습니다. FEA를 검토·보완한 뒤 작성 완료 · G1 요청을 눌러 주세요.'}</p>}
           <p>트랙: {data.computed.classification?`${data.computed.classification.label} · 표준체계 0.3절`:'위험 응답 확인 필요'}<br/>월 절감 시간: {data.computed.roi?`${data.computed.roi.monthlyHours.toFixed(1)}시간`:'정량 정보 미확보'}</p>
           <small>G1 판정 확정은 팀장님만 가능합니다. 이 Agent는 승인하지 않습니다.</small>

@@ -2,9 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {acceptModelTurn,progress} from '../shared/intake-agent.mjs';
-import {completeIntakeReview} from '../server/intake-agent.mjs';
+import {completeIntakeReview,handleAgentRequest} from '../server/intake-agent.mjs';
 import {applyWorkflow} from '../server/workflow-v31.mjs';
 const int=()=>({journeyStep:0,intakeAnswers:['문서 수작업 확인','','','',''],intakeDetails:{performer:'품질 담당',countPerMonth:'20',asIsMinutes:'30',people:'2',failureImpact:'재작업 발생'},agentSession:{request:{status:'complete'},proposals:[],confirmed:{}}});
+test('direct INT review creates a session and persists FEA transition without an AI call',async()=>{
+ const state={...int(),intakeStandardVersion:'3.0'};delete state.agentSession;
+ let stored,stage='INT';
+ const client={query:async(sql,params)=>{
+  if(sql.startsWith('select id,app_role'))return {rows:[{id:7,app_role:'admin',is_active:true,display_name:'실제 작성자'}]};
+  if(sql.startsWith('select p.*'))return {rows:[{id:1,project_code:'2026-999',project_name:'검증 과제',current_stage_code:stage,state:stored||state}]};
+  if(sql.startsWith('select agent_portal.change_project_stage'))stage='FEA';
+  if(sql.startsWith('update agent_portal.intake_requests set raw_answers='))stored=JSON.parse(params[1]);
+  if(sql.startsWith('select id,current_version'))return {rows:[{id:12,current_version:1}]};
+  if(sql.startsWith('select id from agent_portal.intake_conversations'))return {rows:[{id:13}]};
+  return {rows:[],rowCount:0};
+ }};
+ const args={identity:{email:'test@example.invalid'},code:'2026-999',pool:client,transaction:fn=>fn(client),generate:async()=>{assert.fail('INT review must not invoke Azure');}};
+ const result=await handleAgentRequest({...args,method:'POST',body:{action:'review_intake',keys:[],revision:0}});
+ assert.equal(stage,'FEA');assert.equal(result.project.journeyStep,1);assert.equal(result.progress.phase,'FEA');
+ assert.equal(stored.agentSession.revision,1);assert.deepEqual(stored.agentSession.proposals,[]);assert.equal(stored.intakeReview.actorName,'실제 작성자');
+ assert.deepEqual((await handleAgentRequest({...args,method:'GET'})).project,stored);
+ assert.equal(state.agentSession,undefined);
+});
 test('INT review is required before FEA, never depends on FEA completeness',()=>{
  const s=int();assert.equal(progress(s).phase,'INT');assert.equal(progress(s).ready,true);
  const n=completeIntakeReview(s,{id:7,display_name:'실제 요구자'});assert.equal(n.journeyStep,1);assert.equal(n.intakeReview.actorName,'실제 요구자');assert.equal(n.feaCompleted,undefined);assert.equal(n.g1Resolution,undefined);
