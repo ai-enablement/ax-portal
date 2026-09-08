@@ -4,20 +4,30 @@ export const AGENT_TYPES = ['AI Agent (판단형)', '업무지원 Agent (규칙�
 export const AUTONOMY_LEVELS = ['L0', 'L1', 'L2', 'L3', 'L4'];
 export const TRACKS = ['LOW', 'MEDIUM', 'HIGH'];
 export const TRACK_LABELS = {LOW:'하',MEDIUM:'중',HIGH:'상'};
+export const FEA_TRACK_INPUTS = ['writeExec','sensitive','businessIdentity','scope','damageFinancial','autonomy'];
+export function automaticTrackReady(input = {}) {
+  return typeof input.writeExec==='boolean' && typeof input.sensitive==='boolean' && typeof input.businessIdentity==='boolean' &&
+    ['PERSONAL','TEAM','DEPT','MULTI_DEPT','COMPANY'].includes(input.scope) && typeof input.damageFinancial==='boolean' && AUTONOMY_LEVELS.includes(input.autonomy);
+}
 export function classifyProject(input = {}) {
   if(input.standardVersion==='3.0') {
     const high=[input.writeExec&&'쓰기·실행 권한',input.sensitive&&'민감 개인정보',input.damageFinancial&&'금전·법적 피해 가능성',['L2','L3','L4'].includes(input.autonomy)&&'자율성 L2 이상',input.scope==='COMPANY'&&'전사 사용'].filter(Boolean);
     const medium=input.businessIdentity||['DEPT','MULTI_DEPT'].includes(input.scope);
-    const calculated=high.length?'HIGH':medium?'MEDIUM':'LOW';
-    const selected=TRACKS.includes(input.track)?input.track:calculated;
-    const track=TRACKS[Math.max(TRACKS.indexOf(calculated),TRACKS.indexOf(selected))];
-    const raised=selected!==track;
-    return {track,label:TRACK_LABELS[track],signals:high.length?high:[input.businessIdentity?'업무 식별정보 취급':medium?'부서 단위 이상 사용':selected!==calculated?`FEA 선택 ${TRACK_LABELS[selected]} 트랙`:'개인·팀 보조'],citation:'표준체계 v3.0 0.3절',raised};
+    const track=high.length?'HIGH':medium?'MEDIUM':'LOW';
+    return {track,label:TRACK_LABELS[track],signals:high.length?high:[input.businessIdentity?'업무 식별정보 취급':medium?'부서 단위 이상 사용':'개인·팀 보조'],citation:'표준체계 v3.0 0.3절',raised:false};
   }
   const signals = [input.writeExec && '쓰기·실행 권한', input.sensitive && '개인정보·기밀 취급', input.damageFinancial && '금전·법적 피해 가능성', ['L2','L3','L4'].includes(input.autonomy) && '자율성 L2 이상', input.scope === 'COMPANY' && '전사 사용'].filter(Boolean);
   const medium = ['DEPT','MULTI_DEPT'].includes(input.scope);
   const track = signals.length ? 'HIGH' : medium ? 'MEDIUM' : 'LOW';
   return {track, label: {HIGH:'상',MEDIUM:'중',LOW:'하'}[track], signals: signals.length ? signals : [medium ? '부서 단위 이상 사용' : '개인·팀 내 보조 도구'], citation:'에이전트 개발 표준체계 0.3절'};
+}
+export function withAutomaticFeaTrack(input = {}) {
+  const next={...input};
+  if(next.standardVersion==='3.0') {
+    if(automaticTrackReady(next)) next.track=classifyProject(next).track;
+    else delete next.track;
+  }
+  return next;
 }
 
 // OPS reflects upstream source records, never stale manually entered classification/names.

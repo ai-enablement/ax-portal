@@ -9,6 +9,7 @@ import {applyWorkflow,persistWorkflowApprovals,WorkflowError,sanitizeNewWorkflow
 import {isLowRoute,displayStage} from '../shared/workflow-v31.mjs';
 import {ProjectContactError, registrationContacts, resolveContactUser} from "./project-contacts.mjs";
 import {assertGalleryCategory,galleryCodes,primaryGalleryDataClass} from "../shared/gallery-options.mjs";
+import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -1179,6 +1180,7 @@ async function updateOperationalProject(projectCode, body, identity) {
     if(changedDocuments.some(k=>[2,4,6,8].includes(Number(k))&&Number(k)>=portalJourneyStep(project.current_stage_code))&&!(previousState.historicalImport&&!previousState.historicalImportFinalizedAt))return {status:403,body:{error:"게이트 문서 저장으로 승인할 수 없습니다. 승인자별 승인 버튼을 사용해 주세요."}};
     const merged = assertPortalProjectState({ ...applyImportLifecycle(previousState,changes,portalJourneyStep(project.current_stage_code)), no: projectCode, source: "database" });
     if(changes.intakeDetails || changes.intakeAnswers)merged.intakeStandardVersion='3.0';
+    if(merged.feaDraft?.standardVersion==='3.0')merged.feaDraft=withAutomaticFeaTrack(merged.feaDraft);
     if(merged.agentSession && (changes.intakeDetails || changes.intakeAnswers || changes.feaDraft)) {
       merged.agentSession=structuredClone(merged.agentSession);
       merged.agentSession.confirmed||={};

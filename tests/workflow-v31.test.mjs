@@ -25,6 +25,11 @@ test('six stages and every regular gate remain visible in order',()=>{
  assert.deepEqual(JOURNEY_V31.filter(n=>n.gate).map(n=>n.gate),['G1','G2','G3','G4']);
  assert.deepEqual(JOURNEY_V31.filter(n=>n.step===5).map(n=>n.phase),['design','development']);
 });
+test('journey footer does not expose the removed operations handoff button',async()=>{
+ const source=await readFile(new URL('../app/workflow-v31.jsx',import.meta.url),'utf8');
+ assert.doesNotMatch(source,/>운영 이관/);
+ assert.doesNotMatch(source,/>운영대장 등록·배포/);
+});
 test('historical gates before the immutable import baseline display as complete',()=>{
  const imported={historicalImport:true,historicalBaselineStep:7,historicalResumeStep:7,journeyStep:7};
  assert.equal(historicalGateComplete('G1',imported),true);
