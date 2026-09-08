@@ -6703,11 +6703,23 @@ function HistoricalIntakeEditor({project,onSave,onCancel}: {
     finally {setSaving(false);}
   };
   return <section className="historical-intake-editor"><header><div><small>INT · {project.no} · v3.0</small><h3>에이전트 요구 접수서</h3><p>확인된 내용부터 저장합니다. 작성 완료 시 필수 항목을 확인합니다.</p></div></header>
-    <fieldset disabled={saving} className="intfea-section"><legend>요구자 · Project Owner 계정 연결</legend>
-      <p>미등록된 MS 계정 이메일을 입력하면 저장 시 과제와 연결됩니다. 모르는 이메일은 비워 두세요. 이미 연결된 이메일은 변경할 수 없습니다.</p>
-      <div className="intfea-grid">
-        <label>요구자: {project.requester}<input type="email" value={requesterEmail} readOnly={Boolean(project.requesterEmail)} onChange={e=>setRequesterEmail(e.target.value)} aria-label="이관 요구자 MS 계정 이메일" aria-invalid={Boolean(requesterEmail&&!isContactEmail(normalizeContactEmail(requesterEmail)))} placeholder="name@company.com"/></label>
-        <label>Project Owner: {project.projectOwner||project.owner}<input type="email" value={ownerEmail} readOnly={Boolean(project.projectOwnerEmail)} onChange={e=>setOwnerEmail(e.target.value)} aria-label="이관 Project Owner MS 계정 이메일" aria-invalid={Boolean(ownerEmail&&!isContactEmail(normalizeContactEmail(ownerEmail)))} placeholder="name@company.com"/></label>
+    <fieldset disabled={saving} className="historical-contact-section" aria-labelledby="historical-contact-title">
+      <div className="historical-contact-heading"><h4 id="historical-contact-title">담당자 계정 연결</h4><p>미등록된 MS 계정 이메일을 입력해 주세요. 보완 내용 저장 시 과제와 연결됩니다.</p></div>
+      <div className="historical-contact-grid">
+        <label className="historical-contact-card">
+          <span className="historical-contact-role">요구자 <small>{project.requesterEmail ? "연결됨" : "이메일 미등록"}</small></span>
+          <strong>{project.requester?.split('·')[0]?.trim() || "미등록"}</strong>
+          <span className="historical-contact-label">MS 계정 이메일</span>
+          <input type="email" value={requesterEmail} readOnly={Boolean(project.requesterEmail)} onChange={e=>setRequesterEmail(e.target.value)} aria-label="이관 요구자 MS 계정 이메일" aria-describedby="historical-requester-hint" aria-invalid={Boolean(requesterEmail&&!isContactEmail(normalizeContactEmail(requesterEmail)))} placeholder="name@company.com"/>
+          <span id="historical-requester-hint" className="historical-contact-hint">{requesterEmail&&!isContactEmail(normalizeContactEmail(requesterEmail)) ? "올바른 이메일 형식을 입력해 주세요." : project.requesterEmail ? "연결된 이메일은 이 화면에서 변경할 수 없습니다." : "이메일을 모르면 비워 두고 저장할 수 있습니다."}</span>
+        </label>
+        <label className="historical-contact-card">
+          <span className="historical-contact-role">Project Owner <small>{project.projectOwnerEmail ? "연결됨" : "이메일 미등록"}</small></span>
+          <strong>{(project.projectOwner||project.owner)?.split('·')[0]?.trim() || "미등록"}</strong>
+          <span className="historical-contact-label">MS 계정 이메일</span>
+          <input type="email" value={ownerEmail} readOnly={Boolean(project.projectOwnerEmail)} onChange={e=>setOwnerEmail(e.target.value)} aria-label="이관 Project Owner MS 계정 이메일" aria-describedby="historical-owner-hint" aria-invalid={Boolean(ownerEmail&&!isContactEmail(normalizeContactEmail(ownerEmail)))} placeholder="name@company.com"/>
+          <span id="historical-owner-hint" className="historical-contact-hint">{ownerEmail&&!isContactEmail(normalizeContactEmail(ownerEmail)) ? "올바른 이메일 형식을 입력해 주세요." : project.projectOwnerEmail ? "연결된 이메일은 이 화면에서 변경할 수 없습니다." : "이메일을 모르면 비워 두고 저장할 수 있습니다."}</span>
+        </label>
       </div>
     </fieldset>
     <fieldset disabled={saving}><IntakeV3Fields answers={answers} details={details} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setDetails(d);}}/></fieldset>
