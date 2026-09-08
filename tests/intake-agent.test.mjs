@@ -45,8 +45,17 @@ test('historical FEA panel is mounted after import completion and offers continu
  const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');
  assert.match(page,/selectedJourney===1&&canUseResumedFeaAgent\(current,identity\)/);
  assert.match(page,/resumedHistorical=\{Boolean\(current.historicalImport\)\}/);
- assert.match(panel,/저장된 INT로 FEA 인터뷰 시작·계속/);
+ assert.match(panel,/INT 기반 FEA 인터뷰 시작·계속/);
  assert.doesNotMatch(panel,/신규 과제 전용/);
+});
+
+test('FEA has one INT-based interview action for both new and resumed projects',async()=>{
+ const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');
+ assert.equal((panel.match(/>INT 기반 FEA 인터뷰 시작·계속<\/button>/g)||[]).length,1);
+ assert.doesNotMatch(panel,/>FEA 인터뷰 시작<|>FEA 인터뷰 계속<|저장된 INT로 FEA 인터뷰 시작·계속/);
+ assert.match(panel,/phase==='FEA'&&!data.progress.collectionComplete&&<button/);
+ assert.match(panel,/저장된 INT를 바탕으로 요구 요약 3줄을 제안하고 FEA에서 아직 부족한 정보를 하나씩 질문/);
+ assert.match(panel,/phase==='FEA'&&data.progress.collectionComplete&&<button[^]*?send\('complete_fea'\)/);
 });
 test('FEA distinguishes collected proposals from reflected document and never asks for an autonomy code',()=>{
  const state=blank();
