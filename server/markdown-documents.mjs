@@ -59,6 +59,10 @@ function completionEntry(previous, row) {
 }
 export function applyMarkdownUpload(state, documentType, row) {
   const next=structuredClone(state||{}),gate=markdownReworkGate(next,documentType,row.lifecycle_phase);
+  if(documentType==='EVD'&&row.lifecycle_phase==='development_evaluation'&&next.uatRecord){
+    next.uatHistory=[...(next.uatHistory||[]),{...next.uatRecord,reason:'개발·평가 EVD 새 버전 첨부로 재확인 필요',invalidatedAt:row.created_at,replacedByVersion:row.version_number}];
+    delete next.uatRecord;
+  }
   if(gate){
     next.workflowApprovalHistory=[...(next.workflowApprovalHistory||[]),{gate,approvals:structuredClone(next.workflowApprovals?.[gate]||{}),reason:'보완 문서 새 버전 첨부',at:row.created_at}];
     next.workflowApprovals={...(next.workflowApprovals||{}),[gate]:{}};

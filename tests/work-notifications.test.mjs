@@ -13,6 +13,26 @@ const base = {
   developerIds: ["21"],
   journeyStep: 3,
 };
+test('FEA requester and Owner receive work alerts but unrelated users do not',()=>{
+ const project={...base,journeyStep:1};
+ for(const id of ['11','12'])assert.equal(buildWorkNotifications([project],{id,appRole:'general_user'})[0].journeyStep,1);
+ assert.equal(buildWorkNotifications([project],{id:'99',appRole:'general_user'}).length,0);
+ assert.equal(buildWorkNotifications([{...project,feaCompleted:true}],{id:'11',appRole:'general_user'}).length,0);
+});
+test('G3 still notifies requester until UAT is recorded',()=>{
+ const project={...base,journeyStep:6,workflowTrack:'MEDIUM'};
+ const actor={id:'11',appRole:'general_user'};
+ assert.equal(buildWorkNotifications([project],actor)[0].title,'요구자 UAT 확인');
+ assert.equal(buildWorkNotifications([project],actor)[0].journeyStep,6);
+ assert.equal(buildWorkNotifications([{...project,uatRecord:{completed:true}}],actor).length,0);
+});
+test('one account with multiple G2 roles keeps an alert until every role has voted',()=>{
+ const project={...base,journeyStep:4,ownerId:'11',projectOwnerEmail:base.requesterEmail,workflowApprovals:{G2:{requester:{decision:'APPROVED'}}}};
+ const actor={id:'11',appRole:'general_user'};
+ assert.equal(buildWorkNotifications([project],actor)[0].title,'G2 승인 요청');
+ project.workflowApprovals.G2.owner={decision:'APPROVED'};
+ assert.equal(buildWorkNotifications([project],actor).length,0);
+});
 
 test("assigned developer receives the current ARD action and another developer does not", () => {
   const assigned = buildWorkNotifications([base], { id: "21", appRole: "team_member", email: "dev@changshininc.com" });

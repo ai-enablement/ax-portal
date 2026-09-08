@@ -2,7 +2,7 @@ import { getPool, withTransaction } from "./db/pool.mjs";
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 import { mergeStoredStandardDocuments, persistStandardDocuments } from "./standard-documents.mjs";
 import {applyImportLifecycle, assertImportTransition} from "../shared/historical-import-policy.mjs";
-import {missingFields, AGENT_FIELDS, fieldValue} from "../shared/intake-agent.mjs";
+import {missingFields, AGENT_FIELDS} from "../shared/intake-agent.mjs";
 import {completionGaps,persistIntakeFeaV3} from './intake-standard.mjs';
 import {intakeRequired} from '../shared/intake-standard.mjs';
 import {applyWorkflow,persistWorkflowApprovals,WorkflowError,sanitizeNewWorkflow} from './workflow-v31.mjs';
@@ -10,6 +10,7 @@ import {isLowRoute,displayStage} from '../shared/workflow-v31.mjs';
 import {ProjectContactError, registrationContacts, resolveContactUser} from "./project-contacts.mjs";
 import {assertGalleryCategory,galleryCodes,primaryGalleryDataClass} from "../shared/gallery-options.mjs";
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
+import {canCompleteOwnFea,reconcileManualAgentFields} from './fea-review-policy.mjs';
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -1151,13 +1152,13 @@ async function updateOperationalProject(projectCode, body, identity) {
     const editsAgentDocument = changedKeys.some(key=>["intakeAnswers","intakeMessages","intakeDetails","feaDraft","feaCompleted","intakeDraftCompleted"].includes(key));
     if (previousState.agentSession && editsAgentDocument && body.agentRevision !== previousState.agentSession.revision) return {status:409,body:{error:"AI 인터뷰에서 문서가 갱신되었습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요."}};
     if (previousState.agentSession && changes.intakeMessages) return {status:403,body:{error:"인터뷰 대화는 전용 Agent에서 입력해 주세요."}};
-    if(changes.feaCompleted===true&&previousState.agentSession?.proposals?.some(p=>p.key.startsWith('fea.')&&AGENT_FIELDS.some(f=>f.key===p.key)))return {status:400,body:{error:'우측 확인 대기 항목을 모두 검토하고 문서에 반영한 뒤 FEA 작성을 완료해 주세요.'}};
     const changedDocuments = Object.keys(changes.historicalDocuments || {}).filter(key=>JSON.stringify(changes.historicalDocuments[key])!==JSON.stringify(previousState.historicalDocuments?.[key]));
     if (previousState.historicalImport && !canWriteImport && (changes.finalizeHistoricalImport || "feaDraft" in changes || "intakeAnswers" in changes || changedDocuments.some(key=>![2,4,6,8].includes(Number(key))))) {
       return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};
     }
     if (previousState.historicalImport && changedDocuments.some(key=>Number(key)>portalJourneyStep(project.current_stage_code))) return {status:400,body:{error:"현재 단계 이후 문서는 아직 작성할 수 없습니다."}};
     const generalUserKeys = new Set(["intakeAnswers", "intakeDetails", "intakeStandardVersion", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval", "gateVote", "uatConfirm", "fastTrackAction"]);
+    if(canCompleteOwnFea(actor,project,previousState,changes))generalUserKeys.add('feaCompleted');
     if (actor.app_role === "general_user" && changedKeys.some((key) => !generalUserKeys.has(key))) {
       return { status: 403, body: { error: "General users can only update their own intake content." } };
     }
@@ -1182,15 +1183,8 @@ async function updateOperationalProject(projectCode, body, identity) {
     const merged = assertPortalProjectState({ ...applyImportLifecycle(previousState,changes,portalJourneyStep(project.current_stage_code)), no: projectCode, source: "database" });
     if(changes.intakeDetails || changes.intakeAnswers)merged.intakeStandardVersion='3.0';
     if(merged.feaDraft?.standardVersion==='3.0')merged.feaDraft=withAutomaticFeaTrack(merged.feaDraft);
-    if(merged.agentSession && (changes.intakeDetails || changes.intakeAnswers || changes.feaDraft)) {
-      merged.agentSession=structuredClone(merged.agentSession);
-      merged.agentSession.confirmed||={};
-      for(const field of AGENT_FIELDS) {
-        const [,name]=field.key.split('.');
-        const supplied=field.key.startsWith('int.') ? (/^\d$/.test(name)?changes.intakeAnswers?.[Number(name)]!==undefined:changes.intakeDetails?.[name]!==undefined) : changes.feaDraft?.[name]!==undefined;
-        if(supplied)merged.agentSession.confirmed[field.key]={value:fieldValue(merged,field.key),kind:'manual',actorId:String(actor.id),at:new Date().toISOString()};
-      }
-    }
+    reconcileManualAgentFields(merged,changes,actor);
+    if(changes.feaCompleted===true&&merged.agentSession?.proposals?.some(p=>p.key.startsWith('fea.')&&AGENT_FIELDS.some(f=>f.key===p.key)))return {status:400,body:{error:'우측 확인 대기 항목을 모두 검토하고 문서에 반영한 뒤 FEA 작성을 완료해 주세요.'}};
     const v3Gaps=completionGaps(previousState,changes,merged);
     if(v3Gaps.length)return {status:400,body:{error:`필수 항목을 확인해 주세요: ${v3Gaps.map(f=>f.label).join(', ')}`}};
     if(!previousState.historicalImport) {

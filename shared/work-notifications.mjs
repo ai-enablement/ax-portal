@@ -51,7 +51,7 @@ function item(project, title, body, journeyStep = project.journeyStep, tone = "i
 }
 
 function gateRoleForActor(project, actor, relations, gate) {
-  const roles = requiredApprovers(gate, project);
+  const roles = requiredApprovers(gate, project).filter(role=>!project.workflowApprovals?.[gate]?.[role]?.decision);
   if (roles.includes("team_leader") && relations.teamLeader) return "team_leader";
   if (roles.includes("requester") && relations.requester) return "requester";
   if (roles.includes("owner") && relations.owner) return "owner";
@@ -128,7 +128,7 @@ function projectNotification(project, actor) {
   }
 
   if (step === 1) {
-    if (relations.aiTeam && !project.feaCompleted) {
+    if ((relations.aiTeam || relations.requester || relations.owner) && !project.feaCompleted) {
       return item(project, "타당성 평가서 작성", "AI 초안을 확인·보완하고 FEA 작성을 완료해 주세요.", 1, "danger");
     }
     return null;
@@ -176,7 +176,10 @@ function projectNotification(project, actor) {
     return null;
   }
 
-  if (step === 6) return currentGateNotification(project, actor, relations, "G3");
+  if (step === 6) {
+    if(relations.requester&&!project.uatRecord?.completed)return item(project,"요구자 UAT 확인","실제 업무 케이스의 확인 결과를 등록해 주세요.",6,"danger","development");
+    return currentGateNotification(project, actor, relations, "G3");
+  }
 
   if (step === 7) {
     if (fast?.status === "GF_APPROVED" && (relations.admin || relations.teamLeader)) {

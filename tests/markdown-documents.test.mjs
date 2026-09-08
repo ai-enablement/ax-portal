@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { validateMarkdownUpload, buildCumulativeMarkdown, allowedPhase, applyMarkdownUpload } from '../server/markdown-documents.mjs';
 import { developmentEvdComplete, releaseEvdComplete, gateGaps } from '../shared/workflow-v31.mjs';
+import {buildWorkNotifications} from '../shared/work-notifications.mjs';
+test('new evaluation EVD invalidates UAT, retains its history and asks requester to recheck',()=>{
+ const state={source:'database',no:'2099-999',requesterId:'7',journeyStep:6,workflowTrack:'MEDIUM',uatRecord:{completed:true,actorId:'7',cases:5},workflowApprovals:{G3:{team_leader:{decision:'REWORK'}}}};
+ const row={lifecycle_phase:'development_evaluation',version_number:2,created_at:'2026-09-08T00:00:00Z'};
+ const next=applyMarkdownUpload(state,'EVD',row).state;
+ assert.equal(next.uatRecord,undefined);assert.equal(next.uatHistory[0].actorId,'7');assert.equal(next.uatHistory[0].cases,5);
+ assert.ok(gateGaps('G3',next).includes('요구자 UAT 완료'));
+ assert.equal(buildWorkNotifications([next],{id:'7',appRole:'general_user'})[0].title,'요구자 UAT 확인');
+ assert.equal(state.uatRecord.completed,true);
+ assert.equal(applyMarkdownUpload({...state,journeyStep:7},'EVD',{...row,lifecycle_phase:'deployment_rollout'}).state.uatRecord.completed,true);
+});
 
 test('Markdown uploads require a non-empty UTF-8 .md file within the size limit',()=>{
   assert.equal(validateMarkdownUpload('design.md',Buffer.from('# 설계\n\n|항목|값|\n|-|-|\n|A|B|')) .startsWith('# 설계'),true);
