@@ -233,6 +233,7 @@ type UserProject = {
   projectOwner?: string;
   projectOwnerEmail?: string;
   requesterEmail?: string;
+  historicalContactUpdate?: {requesterEmail:string;projectOwnerEmail:string};
   ownerMode?: "SELF" | "OTHER";
   developerIds?: string[];
   developerNames?: string[];
@@ -2345,6 +2346,7 @@ function LegacyTeamWorkspaceDashboard({
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("전체");
   const [assigneeFilter, setAssigneeFilter] = useState("전체");
+  const [categoryFilter, setCategoryFilter] = useState("전체");
   const [selectedId, setSelectedId] = useState(requirements[0]?.id || "");
   const [popupItem, setPopupItem] = useState<TeamRequirement | null>(null);
   const [selectedLifecycleMarker, setSelectedLifecycleMarker] = useState("1");
@@ -2363,9 +2365,10 @@ function LegacyTeamWorkspaceDashboard({
             : item.status === statusFilter);
         const matchesAssignee =
           assigneeFilter === "전체" || item.assignedUserIds?.includes(assigneeFilter);
-        return matchesStatus && matchesAssignee;
+        const matchesCategory = categoryFilter === "전체" || item.category === categoryFilter;
+        return matchesStatus && matchesAssignee && matchesCategory;
       }),
-    [requirements, statusFilter, assigneeFilter],
+    [requirements, statusFilter, assigneeFilter, categoryFilter],
   );
 
   const selected =
@@ -2518,6 +2521,7 @@ function LegacyTeamWorkspaceDashboard({
         }
         setStatusFilter(status);
         setAssigneeFilter("전체");
+        setCategoryFilter("전체");
         revealDetails();
       }}
     >
@@ -2550,6 +2554,7 @@ function LegacyTeamWorkspaceDashboard({
             if (detailOpen) return setDetailOpen(false);
             setStatusFilter("전체");
             setAssigneeFilter("전체");
+            setCategoryFilter("전체");
             revealDetails();
           }}
           aria-expanded={detailOpen}
@@ -2710,7 +2715,7 @@ function LegacyTeamWorkspaceDashboard({
                 <div>
                   <h2>프로젝트별 진행 현황</h2>
                   <p>
-                    <b>{statusFilter}</b> 항목의 담당자, 현재 단계와 다음 행동을
+                    <b>{categoryFilter !== "전체" ? categoryFilter : statusFilter}</b> · {filtered.length}건의 담당자, 현재 단계와 다음 행동을
                     확인합니다.
                   </p>
                 </div>
@@ -2791,7 +2796,15 @@ function LegacyTeamWorkspaceDashboard({
         requirements={requirements}
         onMember={(memberId) => {
           setStatusFilter("전체");
+          setCategoryFilter("전체");
           setAssigneeFilter(memberId);
+          revealDetails();
+        }}
+        selectedCategory={detailOpen ? categoryFilter : "전체"}
+        onCategory={(category) => {
+          setStatusFilter("전체");
+          setAssigneeFilter("전체");
+          setCategoryFilter(category);
           revealDetails();
         }}
         onProject={openProject}
@@ -2811,11 +2824,15 @@ function TeamPortfolioAnalytics({
   members: registeredMembers,
   requirements,
   onMember,
+  onCategory,
+  selectedCategory,
   onProject,
 }: {
   members: TeamAccount[];
   requirements: TeamRequirement[];
   onMember: (memberId: string) => void;
+  onCategory: (category: string) => void;
+  selectedCategory: string;
   onProject: (item: TeamRequirement) => void;
 }) {
   const [workloadView, setWorkloadView] = useState<"member" | "category">("member");
@@ -2990,7 +3007,10 @@ function TeamPortfolioAnalytics({
               <b>{member.total}</b>
             </button>
           )) : categories.map((category) => (
-            <div className="category-workload-row" key={category.category}>
+            <button type="button" className="category-workload-row" key={category.category}
+              onClick={() => onCategory(category.category)}
+              aria-pressed={selectedCategory === category.category}
+              aria-label={`${category.category} 과제 ${category.total}건 보기`}>
               <span className="workload-category">
                 <span className="category-mark" />
                 <strong>{category.category}</strong>
@@ -3011,7 +3031,7 @@ function TeamPortfolioAnalytics({
               <span>{category.done}</span>
               <span className={category.risk ? "risk-count" : ""}>{category.risk}</span>
               <b>{category.total}</b>
-            </div>
+            </button>
           ))}
         </div>
       </article>
@@ -6661,15 +6681,37 @@ function UserOperationsResult({
 
 function HistoricalIntakeEditor({project,onSave,onCancel}: {
   project: UserProject;
-  onSave: (answers:string[],details:NonNullable<UserProject["intakeDetails"]>,complete:boolean)=>void;
+  onSave: (answers:string[],details:NonNullable<UserProject["intakeDetails"]>,complete:boolean,contacts:{requesterEmail:string;projectOwnerEmail:string})=>Promise<boolean>;
   onCancel:()=>void;
 }) {
   const [answers,setAnswers]=useState(Array.from({length:5},(_,i)=>project.intakeAnswers?.[i]||""));
   const [details,setDetails]=useState(project.intakeDetails||{});
+  const [requesterEmail,setRequesterEmail]=useState(project.requesterEmail||"");
+  const [ownerEmail,setOwnerEmail]=useState(project.projectOwnerEmail||"");
+  const [saving,setSaving]=useState(false);
   const [message,setMessage]=useState("");
   const canComplete=!canBackfillDocument(project,0)&&project.journeyStep===0;
-  const save=(complete:boolean)=>{const gaps=intakeRequired({...project,intakeAnswers:answers,intakeDetails:details});if(complete&&gaps.length){setMessage("필수 항목을 확인해 주세요: "+gaps.map(f=>f.label).join(", "));return;}onSave(answers,details,complete);};
-  return <section className="historical-intake-editor"><header><div><small>INT · {project.no} · v3.0</small><h3>에이전트 요구 접수서</h3><p>확인된 내용부터 저장합니다. 작성 완료 시 필수 항목을 확인합니다.</p></div></header><IntakeV3Fields answers={answers} details={details} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setDetails(d);}}/>{message&&<p role="alert">{message}</p>}<footer><button className="secondary" onClick={onCancel}>취소</button><button className="primary" onClick={()=>save(false)}>보완 내용 저장</button>{canComplete&&<button className="primary" onClick={()=>save(true)}>INT 작성 완료</button>}</footer></section>;
+  const save=async(complete:boolean)=>{
+    if(saving)return;
+    const contacts={requesterEmail:normalizeContactEmail(requesterEmail),projectOwnerEmail:normalizeContactEmail(ownerEmail)};
+    if(Object.values(contacts).some(email=>email&&!isContactEmail(email))){setMessage("MS 계정 이메일 형식을 확인해 주세요.");return;}
+    const gaps=intakeRequired({...project,intakeAnswers:answers,intakeDetails:details});
+    if(complete&&gaps.length){setMessage("필수 항목을 확인해 주세요: "+gaps.map(f=>f.label).join(", "));return;}
+    setSaving(true);setMessage("");
+    try {if(!await onSave(answers,details,complete,contacts))setMessage("저장하지 못했습니다. 오류 안내를 확인하고 다시 시도해 주세요.");}
+    catch {setMessage("저장 연결을 확인하고 다시 시도해 주세요.");}
+    finally {setSaving(false);}
+  };
+  return <section className="historical-intake-editor"><header><div><small>INT · {project.no} · v3.0</small><h3>에이전트 요구 접수서</h3><p>확인된 내용부터 저장합니다. 작성 완료 시 필수 항목을 확인합니다.</p></div></header>
+    <fieldset disabled={saving} className="intfea-section"><legend>요구자 · Project Owner 계정 연결</legend>
+      <p>미등록된 MS 계정 이메일을 입력하면 저장 시 과제와 연결됩니다. 모르는 이메일은 비워 두세요. 이미 연결된 이메일은 변경할 수 없습니다.</p>
+      <div className="intfea-grid">
+        <label>요구자: {project.requester}<input type="email" value={requesterEmail} readOnly={Boolean(project.requesterEmail)} onChange={e=>setRequesterEmail(e.target.value)} aria-label="이관 요구자 MS 계정 이메일" aria-invalid={Boolean(requesterEmail&&!isContactEmail(normalizeContactEmail(requesterEmail)))} placeholder="name@company.com"/></label>
+        <label>Project Owner: {project.projectOwner||project.owner}<input type="email" value={ownerEmail} readOnly={Boolean(project.projectOwnerEmail)} onChange={e=>setOwnerEmail(e.target.value)} aria-label="이관 Project Owner MS 계정 이메일" aria-invalid={Boolean(ownerEmail&&!isContactEmail(normalizeContactEmail(ownerEmail)))} placeholder="name@company.com"/></label>
+      </div>
+    </fieldset>
+    <fieldset disabled={saving}><IntakeV3Fields answers={answers} details={details} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setDetails(d);}}/></fieldset>
+    {message&&<p role="alert">{message}</p>}<footer><button className="secondary" disabled={saving} onClick={onCancel}>취소</button><button className="primary" disabled={saving} onClick={()=>save(false)}>{saving?"저장 중…":"보완 내용 저장"}</button>{canComplete&&<button className="primary" disabled={saving} onClick={()=>save(true)}>INT 작성 완료</button>}</footer></section>;
 }
 
 
@@ -7576,8 +7618,9 @@ function UserDashboard({
               key={current.no}
               project={current}
               onCancel={() => setHistoricalIntakeEditing(false)}
-              onSave={(answers,details,complete) => {
-                onUpdateProject(current.no, {
+              onSave={async(answers,details,complete,contacts) => {
+                const saved=await onUpdateProject(current.no, {
+                  ...(current.historicalImport ? {historicalContactUpdate:contacts} : {}),
                   intakeAnswers: answers,
                   intakeDetails: details,
                   intakeStandardVersion: "3.0",
@@ -7588,8 +7631,10 @@ function UserDashboard({
                     status: `${userJourney[1].title} 진행 중`,
                   } : {}),
                 });
+                if(saved!==true)return false;
                 setHistoricalIntakeEditing(false);
                 notify("에이전트 요구 접수서 보완 내용을 저장했습니다.");
+                return true;
               }}
             />
           ) : selectedJourney === 0 ? (

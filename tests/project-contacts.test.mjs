@@ -2,7 +2,29 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
 import {isContactEmail, normalizeContactEmail} from '../shared/project-contacts.mjs';
-import {registrationContacts, resolveContactUser} from '../server/project-contacts.mjs';
+import {registrationContacts, resolveContactUser,validateHistoricalContactUpdate,linkHistoricalContacts} from '../server/project-contacts.mjs';
+
+test('historical email supplementation requires admin or assigned developer and only fills missing contacts',()=>{
+ const state={historicalImport:true,developerIds:['21'],requester:'실제 요구자',projectOwner:'오너'};
+ assert.deepEqual(validateHistoricalContactUpdate(state,{requesterEmail:' NEW@example.com '},{id:21,app_role:'team_member'}),{requesterEmail:'new@example.com'});
+ assert.deepEqual(validateHistoricalContactUpdate(state,{projectOwnerEmail:'owner@example.com'},actor),{projectOwnerEmail:'owner@example.com'});
+ for(const denied of [{id:22,app_role:'team_member'},{id:21,app_role:'general_user'},{id:3,app_role:'team_leader'}])assert.throws(()=>validateHistoricalContactUpdate(state,{},denied),e=>e.status===403);
+ assert.throws(()=>validateHistoricalContactUpdate({...state,historicalImport:false},{},actor),e=>e.status===403);
+ assert.throws(()=>validateHistoricalContactUpdate({...state,requesterEmail:'old@example.com'},{requesterEmail:'new@example.com'},actor),e=>e.status===409);
+ assert.throws(()=>validateHistoricalContactUpdate(state,{requesterEmail:'bad'},actor),e=>e.status===400);
+ assert.throws(()=>validateHistoricalContactUpdate(state,{ownerId:1},actor),e=>e.status===400);
+});
+
+test('contact linkage updates project and membership without touching other relationships',async()=>{
+ const calls=[];const client={query:async(sql,args)=>{calls.push({sql,args});return {rows:[{id:99}]};}};
+ const state={requester:'요구자',projectOwner:'오너'};
+ await linkHistoricalContacts(client,{id:43,organization_id:1},state,{requesterEmail:'requester@example.com',projectOwnerEmail:'owner@example.com'},2);
+ assert.equal(state.requesterId,'99');assert.equal(state.ownerId,'99');
+ assert.equal(state.requesterEmail,'requester@example.com');
+ assert.ok(calls.some(c=>c.sql.includes('requester_id=$2')));
+ assert.ok(calls.some(c=>c.sql.includes('owner_id=$2')));
+ assert.deepEqual(calls.filter(c=>c.sql.includes('set ended_at=now()')).map(c=>c.args[1]),['requester','owner']);
+});
 
 const actor = {id: 1, app_role: 'admin', email: 'admin@example.com'};
 const state = {requester: '요구자 · 부서 · requester@example.com', projectOwner: '현업 오너', projectOwnerEmail: ' Owner@Example.com '};

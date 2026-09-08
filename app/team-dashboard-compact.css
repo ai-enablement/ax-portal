@@ -112,6 +112,14 @@
   background: #fff;
   color: #526076;
 }
+.workload-table > button.category-workload-row:hover,
+.workload-table > button.category-workload-row[aria-pressed="true"] {
+  background: #eef5ff;
+}
+.workload-table > button.category-workload-row:focus-visible {
+  outline: 2px solid #2865b8;
+  outline-offset: -2px;
+}
 .category-workload-row > span:not(:nth-child(-n+3)),
 .category-workload-row > b {
   text-align: center;

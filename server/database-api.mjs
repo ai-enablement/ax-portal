@@ -7,7 +7,8 @@ import {completionGaps,persistIntakeFeaV3} from './intake-standard.mjs';
 import {intakeRequired} from '../shared/intake-standard.mjs';
 import {applyWorkflow,persistWorkflowApprovals,WorkflowError,sanitizeNewWorkflow} from './workflow-v31.mjs';
 import {isLowRoute,displayStage} from '../shared/workflow-v31.mjs';
-import {ProjectContactError, registrationContacts, resolveContactUser} from "./project-contacts.mjs";
+import {ProjectContactError, registrationContacts, resolveContactUser, validateHistoricalContactUpdate, linkHistoricalContacts} from "./project-contacts.mjs";
+import {emailFromPartyLabel} from '../shared/project-contacts.mjs';
 import {assertGalleryCategory,galleryCodes,primaryGalleryDataClass} from "../shared/gallery-options.mjs";
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
 import {canCompleteOwnFea,reconcileManualAgentFields} from './fea-review-policy.mjs';
@@ -799,7 +800,7 @@ function portalProjectFromRow(row) {
     ownerId: row.ownerId ? String(row.ownerId) : undefined,
     // A legacy name-only owner may have been linked to the registrant. Do not infer their email.
     projectOwnerEmail: runtime.projectOwnerEmail ? row.ownerEmail || runtime.projectOwnerEmail : "",
-    requesterEmail: row.requesterEmail || runtime.requesterEmail || "",
+    requesterEmail: runtime.historicalImport ? runtime.requesterEmail || emailFromPartyLabel(runtime.requester) || "" : row.requesterEmail || runtime.requesterEmail || "",
     developerIds: developers.map((developer) => String(developer.id)),
     developerNames: developers.map((developer) => developer.name),
     handler: developers.length ? developers.map((developer) => developer.name).join(" · ") : "담당자 배정 필요",
@@ -1145,6 +1146,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       return { status: 403, body: { error: "You are not assigned to update this project." } };
     }
     const changedKeys = Object.keys(changes);
+    const contactUpdates = 'historicalContactUpdate' in changes ? validateHistoricalContactUpdate(previousState,changes.historicalContactUpdate,actor) : null;
     if (changedKeys.some(key => ["projectOwnerEmail", "requesterEmail", "ownerMode"].includes(key))) {
       return {status:403,body:{error:"연락처는 계정 연결 정보입니다. 일반 문서 저장으로 변경할 수 없습니다."}};
     }
@@ -1208,6 +1210,8 @@ async function updateOperationalProject(projectCode, body, identity) {
     try {Object.assign(merged,applyWorkflow(previousState,changes,merged,actor,project));}
     catch(error){if(error instanceof WorkflowError)return {status:error.status,body:{error:error.message}};throw error;}
     if(changes.feaDraft||changes.feaCompleted)merged.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
+    delete merged.historicalContactUpdate;
+    if(contactUpdates)await linkHistoricalContacts(client,project,merged,contactUpdates,actor.id);
     // Approval roles and transitions are validated by applyWorkflow under this row lock.
     const requestedStageCode = portalStageCode(merged.journeyStep);
     if(!isLowRoute(merged)&&merged.workflowVersion!=='3.1')assertImportTransition(previousState, merged, portalJourneyStep(project.current_stage_code));
@@ -1455,7 +1459,8 @@ export async function handleDatabaseRequest({ method, pathname, body = {}, ident
   if (method === "PATCH" && pathname.startsWith("/projects/")) {
     const projectCode = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "");
     if (!projectCode) return { status: 400, body: { error: "Project code is required." } };
-    return updateOperationalProject(projectCode, body, identity);
+    try { return await updateOperationalProject(projectCode, body, identity); }
+    catch(error){if(error instanceof ProjectContactError)return {status:error.status,body:{error:error.message}};throw error;}
   }
   if (method === "DELETE" && pathname.startsWith("/projects/")) {
     const projectCode = decodeURIComponent(pathname.split("/").filter(Boolean).at(-1) || "");
