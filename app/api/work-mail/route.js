@@ -3,6 +3,7 @@ import {resolvePortalIdentity} from '../../../server/auth.mjs';
 import {ensurePortalUser} from '../../../server/database-api.mjs';
 import {getPool} from '../../../server/db/pool.mjs';
 import {deliverMail,mailPayload} from '../../../server/work-mail.mjs';
+import {mailAppOrigin} from '../../../server/mail-config.mjs';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 async function admin(request) {
@@ -20,7 +21,7 @@ export async function POST(request) {
   const actor=await admin(request);
   if(!actor)return Response.json({error:'Admin required'},{status:403});
   let origin;
-  try {origin=new URL(process.env.NEXT_PUBLIC_APP_URL).origin;} catch {return Response.json({error:'Configuration required'},{status:503});}
+  try {origin=mailAppOrigin();} catch {return Response.json({error:'Configuration required: HTTPS portal URL'},{status:503});}
   if(request.headers.get('origin')!==origin)return Response.json({error:'Invalid origin'},{status:403});
   const body=await request.json().catch(()=>null);
   if(body?.action!=='send-self-test')return Response.json({error:'Unsupported action'},{status:400});

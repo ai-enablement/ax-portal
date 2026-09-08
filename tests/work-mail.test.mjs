@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mailKey,mailPayload,managedIdentityToken,deliveryOutcome,deliverMail} from '../server/work-mail.mjs';
+import {mailKey,mailPayload,managedIdentityToken,deliveryOutcome,deliverMail,WORK_MAIL_INTERVAL_MS} from '../server/work-mail.mjs';
+test('automatic work mail checks run hourly',()=>{
+ assert.equal(WORK_MAIL_INTERVAL_MS,3600000);
+});
 const item={projectNo:'2026-001',projectName:'<script>x</script>',journeyStep:4,title:'G2 승인 요청',body:'확인 & 승인'};
 test('mail keys are stable, distinguish recipients externally and rework reasons',()=>{
  assert.equal(mailKey(item),mailKey({...item,body:'상태 표시 변경'}));

@@ -2,6 +2,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {buildWorkNotifications} from '../shared/work-notifications.mjs';
 import {listNotificationProjectsForActor} from './database-api.mjs';
 import {getPool} from './db/pool.mjs';
+import {mailAppOrigin} from './mail-config.mjs';
 
 export function mailKey(item) {
   return createHash('sha256').update(JSON.stringify([
@@ -80,7 +81,7 @@ export async function scanWorkMail(client, env=process.env, loadProjects=listNot
           const recipient=env.PORTAL_MAIL_MODE==='test'?env.PORTAL_MAIL_TEST_RECIPIENT:actor.email;
           if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient||'')) throw new Error('MAIL_RECIPIENT_INVALID');
           const id=randomUUID();
-          const payload=mailPayload(item,recipient,env.NEXT_PUBLIC_APP_URL,id);
+          const payload=mailPayload(item,recipient,mailAppOrigin(env),id);
           // Refresh pending content/contact values before sending, including test/live mode changes.
           await client.query(`update agent_portal.work_mail_outbox set payload=($3::jsonb || jsonb_build_object('notificationId',id::text)) where actor_id=$1 and notification_key=$2 and status='pending'`,[actor.id,key,JSON.stringify(payload)]);
           if(old.has(key)) continue;
@@ -123,6 +124,7 @@ export async function runWorkMailCycle(env=process.env) {
   }
 }
 
+export const WORK_MAIL_INTERVAL_MS=60*60*1000;
 let started=false;
 export function startWorkMailWorker() {
   if(started || !['baseline','test','live'].includes(process.env.PORTAL_MAIL_MODE)) return;
@@ -135,7 +137,7 @@ export function startWorkMailWorker() {
     catch {console.error('Work mail worker failed; inspect DB/configuration. No credentials logged.');}
     finally {busy=false;}
   };
-  const timer=setInterval(tick,30000);
+  const timer=setInterval(tick,WORK_MAIL_INTERVAL_MS);
   timer.unref();
   void tick();
 }
