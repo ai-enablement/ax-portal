@@ -15,7 +15,9 @@ export default function MailSettings(){
     try{
       const response=await fetch('/api/work-mail',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'send-self-test'})});
       const result=await response.json();
-      setMessage(response.ok?'Outlook 발송 성공 응답을 확인했습니다. 받은 편지함을 확인해 주세요.':`완료 확인 불가: ${result.code||result.error||result.status}. 중복 발송을 피하려면 Flow 실행 기록을 먼저 확인해 주세요.`);
+      const stageNames={flow_url:'Flow URL 검증',identity_settings:'관리 ID 설정',identity_token:'관리 ID 토큰 발급',flow_request:'Flow HTTP 호출',flow_receipt:'메일 발송 완료 응답',mail_server:'메일 서버 처리'};
+      const detail=`${stageNames[result.stage]||'포털 요청'} · ${result.code||result.error||result.status}${result.httpStatus?` · HTTP ${result.httpStatus}`:''}${result.notificationId?` · 진단 ID: ${result.notificationId}`:''}`;
+      setMessage(response.ok?'Outlook 발송 성공 응답을 확인했습니다. 받은 편지함을 확인해 주세요.':`${result.status==='not_sent'?'메일 호출 전 중단':'완료 확인 불가'}: ${detail}. ${result.status==='not_sent'?'진단 결과를 전달해 주세요.':'중복 발송을 피하려면 Flow 실행 기록을 먼저 확인해 주세요.'}`);
     }catch{setMessage('결과를 확인하지 못했습니다. 다시 보내기 전에 Flow 실행 기록을 확인해 주세요.');}
     finally{setBusy(false);}
   }

@@ -3,6 +3,7 @@ import {buildWorkNotifications} from '../shared/work-notifications.mjs';
 import {listNotificationProjectsForActor} from './database-api.mjs';
 import {getPool} from './db/pool.mjs';
 import {mailAppOrigin} from './mail-config.mjs';
+import {MailDiagnosticError} from './mail-diagnostics.mjs';
 
 export function mailKey(item) {
   return createHash('sha256').update(JSON.stringify([
@@ -26,14 +27,18 @@ export function mailPayload(item, recipient, baseUrl, id) {
 }
 
 export async function managedIdentityToken(env=process.env, fetcher=fetch) {
-  if(!env.IDENTITY_ENDPOINT || !env.IDENTITY_HEADER) throw new Error('MANAGED_IDENTITY_UNAVAILABLE');
-  const url=new URL(env.IDENTITY_ENDPOINT);
+  if(!env.IDENTITY_ENDPOINT || !env.IDENTITY_HEADER) throw new MailDiagnosticError('MANAGED_IDENTITY_UNAVAILABLE');
+  let url;
+  try {url=new URL(env.IDENTITY_ENDPOINT);} catch {throw new MailDiagnosticError('MANAGED_IDENTITY_URL_INVALID');}
   url.searchParams.set('api-version','2019-08-01');
   url.searchParams.set('resource','https://service.flow.microsoft.com/');
-  const response=await fetcher(url,{headers:{'X-IDENTITY-HEADER':env.IDENTITY_HEADER},signal:AbortSignal.timeout(10000)});
-  if(!response.ok) throw new Error('MANAGED_IDENTITY_TOKEN_FAILED');
-  const token=await response.json();
-  if(!token.access_token) throw new Error('MANAGED_IDENTITY_TOKEN_MISSING');
+  let response;
+  try {response=await fetcher(url,{headers:{'X-IDENTITY-HEADER':env.IDENTITY_HEADER},signal:AbortSignal.timeout(10000)});}
+  catch {throw new MailDiagnosticError('MANAGED_IDENTITY_REQUEST_FAILED');}
+  if(!response.ok) throw new MailDiagnosticError('MANAGED_IDENTITY_TOKEN_FAILED',response.status);
+  let token;
+  try {token=await response.json();} catch {throw new MailDiagnosticError('MANAGED_IDENTITY_RESPONSE_INVALID',response.status);}
+  if(!token?.access_token) throw new MailDiagnosticError('MANAGED_IDENTITY_TOKEN_MISSING',response.status);
   return token.access_token;
 }
 
@@ -46,20 +51,21 @@ export function deliveryOutcome(status) {
 }
 
 export async function deliverMail(payload, env=process.env, fetcher=fetch) {
-  const url=new URL(env.POWER_AUTOMATE_MAIL_URL);
+  let url;
+  try {url=new URL(env.POWER_AUTOMATE_MAIL_URL);} catch {throw new MailDiagnosticError('MAIL_FLOW_URL_INVALID');}
   if(url.protocol!=='https:' || !url.hostname.endsWith('.environment.api.powerplatform.com') || url.username || url.password)
-    throw new Error('MAIL_FLOW_URL_INVALID');
+    throw new MailDiagnosticError('MAIL_FLOW_URL_INVALID');
   const token=await managedIdentityToken(env,fetcher);
   let response;
   try {
     response=await fetcher(url,{method:'POST',redirect:'error',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(55000)});
-  } catch { return {status:'uncertain',code:'HTTP_OUTCOME_UNKNOWN'}; }
+  } catch { return {status:'uncertain',stage:'flow_request',code:'HTTP_OUTCOME_UNKNOWN'}; }
   let status=deliveryOutcome(response.status);
   if(status==='sent') {
     const receipt=await response.json().catch(()=>null);
     if(receipt?.notificationId!==payload.notificationId || receipt?.status!=='sent') status='uncertain';
   }
-  return {status,code:`HTTP_${response.status}`};
+  return {status,stage:response.status===200?'flow_receipt':'flow_request',code:response.status===200 && status==='uncertain'?'FLOW_RECEIPT_INVALID':`HTTP_${response.status}`,httpStatus:response.status};
 }
 
 export async function scanWorkMail(client, env=process.env, loadProjects=listNotificationProjectsForActor) {

@@ -4,6 +4,7 @@ import {ensurePortalUser} from '../../../server/database-api.mjs';
 import {getPool} from '../../../server/db/pool.mjs';
 import {deliverMail,mailPayload} from '../../../server/work-mail.mjs';
 import {mailAppOrigin} from '../../../server/mail-config.mjs';
+import {safeMailDiagnostic} from '../../../server/mail-diagnostics.mjs';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 async function admin(request) {
@@ -30,5 +31,9 @@ export async function POST(request) {
   try {
     const result=await deliverMail(mailPayload({projectNo:'TEST',projectName:'메일 연동 테스트',title:'업무 알림 연동 확인',body:'본인 계정으로 발송하는 연결 테스트입니다. 실제 과제는 변경하지 않습니다.'},actor.email,origin,notificationId));
     return Response.json({...result,notificationId},{status:result.status==='sent'?200:502});
-  } catch {return Response.json({error:'Managed identity or flow configuration failed'},{status:503});}
+  } catch(error) {
+    const diagnostic=safeMailDiagnostic(error);
+    console.error('Work mail self-test failed',JSON.stringify({notificationId,...diagnostic}));
+    return Response.json({status:diagnostic.code==='MAIL_INTERNAL_ERROR'?'uncertain':'not_sent',...diagnostic,notificationId},{status:503});
+  }
 }
