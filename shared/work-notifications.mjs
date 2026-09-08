@@ -18,8 +18,18 @@ const same = (left, right) =>
 const sameEmail = (left, right) =>
   Boolean(left && right && String(left).trim().toLowerCase() === String(right).trim().toLowerCase());
 
+export function isAssignedDeveloper(project, actorId) {
+  return Boolean(actorId !== '' && (project.developerIds || []).some((id) => same(id, actorId)));
+}
+
+export function filterProjectList(projects, filter, actorId) {
+  if (filter === '내 할 일') return projects.filter(project => isAssignedDeveloper(project, actorId));
+  if (filter === '진행 중') return projects.filter(project => project.status !== '내 작성 필요');
+  return projects;
+}
+
 function actorRelations(project, actor) {
-  const developer = (project.developerIds || []).some((id) => same(id, actor.id));
+  const developer = isAssignedDeveloper(project, actor.id);
   return {
     developer,
     author: actor.appRole === "admin" || developer,
@@ -96,7 +106,7 @@ function projectNotification(project, actor) {
   const fast = project.fastTrack;
 
   if (project.historicalImport && !project.historicalImportFinalizedAt) {
-    if (relations.author) {
+    if (relations.developer) {
       return item(project, "과거 과제 이관 보완", "현재 단계까지의 누락 내용을 보완하거나 이관을 완료해 주세요.", step, "warning", project.deliveryPhase);
     }
     return null;

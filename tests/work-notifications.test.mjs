@@ -1,6 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkNotifications } from "../shared/work-notifications.mjs";
+import { buildWorkNotifications, filterProjectList } from "../shared/work-notifications.mjs";
+
+test('historical supplementation notifies only assigned developers, including assigned admins', () => {
+ const project={...base,historicalImport:true,journeyStep:5,deliveryPhase:'design',developerIds:['21',2]};
+ for(const actor of [{id:'21',appRole:'team_member'},{id:'2',appRole:'admin'}]) {
+  const alerts=buildWorkNotifications([project],actor);
+  assert.equal(alerts.length,1);
+  assert.equal(alerts[0].title,'과거 과제 이관 보완');
+  assert.equal(alerts[0].deliveryPhase,'design');
+ }
+ for(const actor of [{id:'3',appRole:'admin'},{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'1',appRole:'team_leader'}])assert.equal(buildWorkNotifications([project],actor).length,0);
+ assert.equal(buildWorkNotifications([{...project,developerIds:[]}],{id:'2',appRole:'admin'}).length,0);
+ assert.ok(buildWorkNotifications([{...project,historicalImportFinalizedAt:'2026-09-08'}],{id:'21',appRole:'team_member'}).every(n=>n.title!=='과거 과제 이관 보완'));
+});
+
+test('my work filters solely by developer assignment, not owner, admin or status',()=>{
+ const projects=[{...base,no:'1',developerIds:['21'],status:'진행 중'},{...base,no:'2',developerIds:['22'],status:'내 작성 필요',requesterId:'21'}, {...base,no:'3',developerIds:[21,'22'],status:'완료'},{...base,no:'4',developerIds:[],ownerId:'21'}];
+ assert.deepEqual(filterProjectList(projects,'내 할 일','21').map(p=>p.no),['1','3']);
+ assert.deepEqual(filterProjectList(projects,'내 할 일','99'),[]);
+ assert.deepEqual(filterProjectList(projects,'내 할 일',undefined),[]);
+ assert.deepEqual(filterProjectList(projects,'내 할 일',''),[]);
+ assert.equal(filterProjectList(projects,'전체','21').length,4);
+});
 
 const base = {
   no: "2026-101",

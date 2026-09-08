@@ -17,7 +17,7 @@ import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
 import FastTrackPanel from './fast-track-panel';
 import {isLowRoute} from '../shared/workflow-v31.mjs';
 import {FAST_TRACK_EXTERNAL_FACTORS} from '../shared/fast-track.mjs';
-import {buildWorkNotifications} from '../shared/work-notifications.mjs';
+import {buildWorkNotifications, filterProjectList} from '../shared/work-notifications.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
 import {GALLERY_CATEGORIES,GALLERY_PLATFORMS,GALLERY_DATA_CLASSES,gallerySelections,toggleGallerySelection} from "../shared/gallery-options.mjs";
@@ -7107,29 +7107,14 @@ function UserDashboard({
           ? "승인 대기"
           : "진행 중"
         : "생성 전";
-  const assignedProjects = projectItems;
-  const visible = assignedProjects.filter(
-    (project) =>
-      filter === "전체" ||
-      (filter === "내 할 일"
-        ? project.status === "내 작성 필요"
-        : project.status !== "내 작성 필요"),
-  );
+  const developerActorId = identity?.userId || signedInTeamAccount?.id;
+  const visible: UserProject[] = filterProjectList(projectItems, filter, developerActorId);
   const applyFilter = (next: string) => {
     setFilter(next);
-    if (projectItems.length === 0) return;
-    if (next === "내 할 일") {
-      const project = isProjectContributor
-        ? projectItems.find((item) => item.no === "2026-033") || projectItems[0]
-        : projectItems.find((item) => item.status === "내 작성 필요") ||
-          projectItems[0];
-      setSelected(projectItems.indexOf(project));
-      setSelectedJourney(project.journeyStep);
-      return;
-    }
-    if (next === "진행 중") {
-      const project =
-        projectItems.find((item) => item.no === "2026-021") || projectItems[0];
+    const matches: UserProject[] = filterProjectList(projectItems, next, developerActorId);
+    if (matches.length === 0) return;
+    if (next !== "전체") {
+      const project = matches.find(item => item.no === current.no) || matches[0];
       setSelected(projectItems.indexOf(project));
       setSelectedJourney(project.journeyStep);
       return;
@@ -7252,6 +7237,7 @@ function UserDashboard({
             </div>
           </header>
           <div className="project-stack">
+            {hasProjects && visible.length === 0 && <div className="project-stack-empty"><b>{filter === "내 할 일" ? "개발 담당자로 배정된 과제가 없습니다." : "조건에 맞는 과제가 없습니다."}</b></div>}
             {!hasProjects && (
               <div className="project-stack-empty">
                 <ClipboardText size={30} weight="duotone" />
