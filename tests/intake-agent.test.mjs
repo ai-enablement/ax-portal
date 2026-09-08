@@ -3,8 +3,51 @@ import test from 'node:test';
 import {readFile} from 'node:fs/promises';
 import {AGENT_FIELDS,FIELD_MAP,validField,fieldValue,missingFields,interviewMissingFields,progress,safeMessage,applyProposals,autoApplyIntakeExtractions,acceptModelTurn,deterministicSummary,setField} from '../shared/intake-agent.mjs';
 import {azureConfiguration,generateTurn,assertAgentAccess,AgentError} from '../server/intake-agent.mjs';
+import {canUseResumedFeaAgent} from '../shared/fea-assignment.mjs';
 const configured={AZURE_OPENAI_ENDPOINT:'https://test.openai.azure.com/',AZURE_OPENAI_API_KEY:'test-only',AZURE_OPENAI_DEPLOYMENT:'test-deployment'};
 const blank=()=>({journeyStep:1,name:'테스트 과제',intakeAnswers:['','','','',''],agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}});
+
+test('finalized historical FEA reuses the agent for actual requester, assigned developer and admin only',()=>{
+ const project={requester_id:'1',owner_id:'2',current_stage_code:'FEA'};
+ const state={...blank(),historicalImport:true,historicalImportFinalizedAt:'2026-09-09',intakeDraftCompleted:true,developerIds:['3']};
+ for(const [id,app_role] of [['1','general_user'],['3','team_member'],['9','admin']]){
+  const actor={id,app_role,is_active:true};
+  assert.equal(canUseResumedFeaAgent({...state,requesterId:'1'},actor),true);
+  assert.doesNotThrow(()=>assertAgentAccess(actor,project,state,false));
+ }
+ for(const [id,app_role] of [['2','general_user'],['4','team_member'],['5','team_leader']])assert.throws(()=>assertAgentAccess({id,app_role,is_active:true},project,state,true),e=>e.status===403);
+ const actor={id:'1',app_role:'general_user',is_active:true};
+ for(const patch of [{historicalImportFinalizedAt:null},{intakeDraftCompleted:false},{feaCompleted:true},{journeyStep:0},{journeyStep:2}])assert.throws(()=>assertAgentAccess(actor,project,{...state,...patch},true));
+ assert.throws(()=>assertAgentAccess(actor,{...project,current_stage_code:'G1'},state,true));
+ assert.throws(()=>assertAgentAccess({...actor,is_active:false},project,state,true));
+});
+
+test('historical FEA receives INT evidence without changing import history or asking INT questions',async()=>{
+ const state={...blank(),historicalImport:true,historicalImportFinalizedAt:'2026-09-09',historicalBaselineStep:0,intakeDraftCompleted:true,intakeAnswers:['시화 일정을 매일 공유한다.','','','',''],intakeMessages:[{role:'user',text:'기존 INT 내용'}]};
+ const original=structuredClone(state);let context;
+ const output={reply:'일정 공유 내용을 요약합니다.',proposals:[{key:'fea.summary',value:'일정 공유를 자동화한다.',evidence:'시화 일정을 매일 공유한다.',kind:'suggested'}],target:'fea.alternatives.0',question:'업무 규정 변경으로 해결할 수 있나요?'};
+ const generated=await generateTurn(state,'FEA 인터뷰 시작',{env:configured,fetcher:async(_url,options)=>{context=JSON.parse(JSON.parse(options.body).messages[1].content);return {ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify(output)}}]})};}});
+ assert.ok(context.fields.every(f=>f.key.startsWith('fea.')));
+ assert.equal(context.intakeReference['int.0'],state.intakeAnswers[0]);
+ const next=acceptModelTurn(state,generated,'FEA 인터뷰 시작').state;
+ assert.deepEqual(state,original);
+ assert.deepEqual(next.intakeAnswers,original.intakeAnswers);
+ assert.equal(next.historicalImportFinalizedAt,original.historicalImportFinalizedAt);
+ assert.equal(next.historicalBaselineStep,0);
+ assert.equal(progress(next).phase,'FEA');
+ assert.equal(next.journeyStep,1);
+ assert.equal(next.feaCompleted,undefined);
+ assert.equal(next.workflowApprovals,undefined);
+});
+
+test('historical FEA panel is mounted after import completion and offers continuation despite old INT messages',async()=>{
+ const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');
+ const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');
+ assert.match(page,/selectedJourney===1&&canUseResumedFeaAgent\(current,identity\)/);
+ assert.match(page,/resumedHistorical=\{Boolean\(current.historicalImport\)\}/);
+ assert.match(panel,/저장된 INT로 FEA 인터뷰 시작·계속/);
+ assert.doesNotMatch(panel,/신규 과제 전용/);
+});
 test('FEA distinguishes collected proposals from reflected document and never asks for an autonomy code',()=>{
  const state=blank();
  for(const field of AGENT_FIELDS.filter(f=>f.key.startsWith('fea.')&&!f.optional&&f.key!=='fea.autonomy')){
@@ -137,7 +180,7 @@ test('portal wiring guards server state, revisions and completion; original data
   const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<IntakeAgentPanel/);assert.match(page,/portal-agent-saved/);
   const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');assert.match(panel,/phase==='INT'&&data\.progress\.ready&&!interviewMissing\.length/);assert.match(panel,/현재 INT 필수 항목 중 부족한 정보만/);
   assert.doesNotMatch(panel,/data\.session\.request\?\.status!=='complete'/);
-  assert.match(panel,/action==='review_intake'\?'INT 확인을 완료했습니다/);
+  assert.match(panel,/action==='review_intake'\?\(fastTrack\?'INT 확인을 완료했습니다/);
   assert.match(panel,/INT 자동 작성 중/);
   assert.match(panel,/phase==='INT'\?'int-simple'/);
   assert.equal(AGENT_FIELDS.filter(f=>f.key.startsWith('fea.fitNotes')).length,0);

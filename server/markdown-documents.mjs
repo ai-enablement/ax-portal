@@ -4,9 +4,11 @@ import { getPool, withTransaction } from './db/pool.mjs';
 import { documentAccess } from './document-files.mjs';
 import { INT_FIELDS, FEA_FIELDS, standardValue } from '../shared/intake-standard.mjs';
 import { standardDocuments } from '../shared/standard-documents.mjs';
+import {parseArdLiteMarkdown,ardLiteGaps} from '../shared/fast-track.mjs';
 
 export const MAX_MARKDOWN_BYTES = 5 * 1024 * 1024;
 export const MARKDOWN_DOCUMENTS = Object.freeze({
+  ARD_LITE: {phase:'fast_track_requirements',label:'최소 요구정의서[ARD-Lite]'},
   DES: { phase: 'design', label: '에이전트 설계서[DES]' },
   EVD: { phases: ['development_evaluation', 'deployment_rollout'], label: '개발·평가 문서[EVD]' },
   UG: { phase: 'deployment_rollout', label: '사용자 가이드[UG]' },
@@ -34,6 +36,7 @@ export function markdownReworkGate(state, documentType, phase) {
   return null;
 }
 export function allowedPhase(state, documentType, requestedPhase) {
+  if(documentType==='ARD_LITE')return state.fastTrack?.requested&&state.fastTrack.status==='QUALIFIED'&&state.intakeReview?.at&&Number(state.journeyStep)===0&&requestedPhase==='fast_track_requirements'?'fast_track_requirements':null;
   const step = Number(state.journeyStep ?? 0);
   const importing = state.historicalImport && !state.historicalImportFinalizedAt;
   const phase = documentType === 'DES' ? 'design' : documentType === 'UG' ? 'deployment_rollout' : requestedPhase;
@@ -152,9 +155,12 @@ export async function listMarkdownDocuments(identity, projectCode) {
 
 export async function uploadMarkdownDocument(identity, projectCode, documentType, requestedPhase, name, bytes) {
   const markdown = validateMarkdownUpload(name, bytes);
+  const ardLite=documentType==='ARD_LITE'?parseArdLiteMarkdown(markdown):null;
+  if(ardLite&&ardLiteGaps(ardLite).length)throw new Error(`ARD-Lite .md 양식의 항목을 채워 주세요: ${ardLiteGaps(ardLite).join(', ')}`);
   return withTransaction(async client => {
-    const access = await documentAccess(client, identity, projectCode, true, documentType);
+    const access = await documentAccess(client, identity, projectCode, documentType!=='ARD_LITE', documentType);
     if (!access) return { status: 403, body: { error: '이 문서를 작성할 권한이 없습니다.' } };
+    if(documentType==='ARD_LITE'&&!access.canWrite&&!access.related&&access.actor.app_role!=='team_leader')return {status:403,body:{error:'요구자·Owner·개발 담당자·팀장 또는 Admin만 요구정의를 첨부할 수 있습니다.'}};
     await client.query('select id from agent_portal.projects where id=$1 for update', [access.project.id]);
     const intake = (await client.query(`select id, coalesce(raw_answers->'portalState','{}'::jsonb) as state
       from agent_portal.intake_requests where project_id=$1 for update`, [access.project.id])).rows[0];
@@ -174,6 +180,7 @@ export async function uploadMarkdownDocument(identity, projectCode, documentType
       values($1,$2,$3,$4,$5,$6,'text/markdown',$7,$8,$9,$10,$11)`,
       [row.id, access.project.id, documentType, phase, version, row.original_name, bytes.length, bytes, markdown, checksum, access.actor.id]);
     const completion=applyMarkdownUpload(intake.state||{},documentType,row),state=completion.state;
+    if(ardLite)state.ardLite=ardLite;
     await client.query(`update agent_portal.intake_requests set raw_answers=jsonb_set(coalesce(raw_answers,'{}'::jsonb),'{portalState}',$2::jsonb),updated_at=now() where id=$1`, [intake.id, JSON.stringify(state)]);
     if(completion.resetGate){
       await client.query(`delete from agent_portal.gate_approvals where gate_id in (select id from agent_portal.gates where project_id=$1 and gate_code=$2)`,[access.project.id,completion.resetGate]);

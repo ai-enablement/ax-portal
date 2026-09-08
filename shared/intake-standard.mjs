@@ -14,14 +14,14 @@ export const INT_FIELDS = [
   text('int.currentProcess','지금은 어떻게 처리하나요?'),
   text('int.2','사용 시스템·파일·참고 규정 / 링크'),
   text('int.failureImpact','잘못 처리되면 어떤 일이 생기나요?',true),
-  {key:'int.4',label:'희망 시점',type:'date',required:false},
-  text('int.timingReason','희망 시점의 이유'),
+  {key:'int.4',label:'완료 요청일',type:'date',required:false},
+  text('int.timingReason','완료 요청일의 이유'),
 ];
 export const INT_SECTIONS = [
   {number:2,title:'어떤 업무가 힘든가요?',fields:INT_FIELDS.slice(0,6)},
   {number:3,title:'지금은 어떻게 처리하나요?',fields:INT_FIELDS.slice(6,8)},
   {number:4,title:'잘못 처리되면 어떤 일이 생기나요?',fields:INT_FIELDS.slice(8,9)},
-  {number:5,title:'희망 시점과 이유',fields:INT_FIELDS.slice(9)},
+  {number:5,title:'완료 요청일과 이유',fields:INT_FIELDS.slice(9)},
 ];
 export const FEA_FIELDS = [
   text('fea.summary','AI 요구 요약 · 3줄',true),

@@ -4,6 +4,20 @@ import { readFile } from 'node:fs/promises';
 import { validateMarkdownUpload, buildCumulativeMarkdown, allowedPhase, applyMarkdownUpload } from '../server/markdown-documents.mjs';
 import { developmentEvdComplete, releaseEvdComplete, gateGaps } from '../shared/workflow-v31.mjs';
 import {buildWorkNotifications} from '../shared/work-notifications.mjs';
+import {ARD_LITE_TEMPLATE,ARD_LITE_SECTIONS,parseArdLiteMarkdown,ardLiteGaps,ardLiteDocumentComplete} from '../shared/fast-track.mjs';
+
+test('Fast Track Markdown requires all six minimum agreements and never grants approval on upload',()=>{
+ assert.equal(ardLiteGaps(parseArdLiteMarkdown(ARD_LITE_TEMPLATE)).length,6);
+ const body=ARD_LITE_SECTIONS.map(([,label],i)=>`## ${i+1}. ${label}\n\n확인된 내용 ${i+1}`).join('\n\n');
+ assert.equal(ardLiteGaps(parseArdLiteMarkdown(body)).length,0);
+ const p={journeyStep:0,intakeReview:{at:'verified'},fastTrack:{requested:true,status:'QUALIFIED'}};
+ assert.equal(allowedPhase(p,'ARD_LITE','fast_track_requirements'),'fast_track_requirements');
+ for(const status of ['REQUESTED','REJECTED','GF_APPROVED'])assert.equal(allowedPhase({...p,fastTrack:{requested:true,status}},'ARD_LITE','fast_track_requirements'),null);
+ assert.equal(allowedPhase({...p,intakeReview:null},'ARD_LITE','fast_track_requirements'),null);
+ const next=applyMarkdownUpload(p,'ARD_LITE',{id:'v2',version_number:2,lifecycle_phase:'fast_track_requirements'}).state;
+ assert.equal(next.journeyStep,0);assert.equal(next.fastTrack.status,'QUALIFIED');
+ assert.equal(ardLiteDocumentComplete(next),false);
+});
 test('new evaluation EVD invalidates UAT, retains its history and asks requester to recheck',()=>{
  const state={source:'database',no:'2099-999',requesterId:'7',journeyStep:6,workflowTrack:'MEDIUM',uatRecord:{completed:true,actorId:'7',cases:5},workflowApprovals:{G3:{team_leader:{decision:'REWORK'}}}};
  const row={lifecycle_phase:'development_evaluation',version_number:2,created_at:'2026-09-08T00:00:00Z'};

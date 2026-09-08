@@ -2,9 +2,11 @@
 
 import {useEffect,useMemo,useState} from "react";
 import {CheckCircle,Lightning,WarningCircle} from "@phosphor-icons/react";
-import {ardLiteGaps,FAST_TRACK_EXTERNAL_FACTORS,FAST_TRACK_STATUSES} from "../shared/fast-track.mjs";
+import {ardLiteGaps,ardLiteDocumentComplete,FAST_TRACK_EXTERNAL_FACTORS,FAST_TRACK_STATUSES} from "../shared/fast-track.mjs";
 import {allApproved,designDocumentComplete,documentComplete} from "../shared/workflow-v31.mjs";
 import {intakeRequired,feaRequired} from "../shared/intake-standard.mjs";
+
+import MarkdownDocumentWorkspace from "./markdown-document-workspace";
 
 const STATUS_LABELS={
   [FAST_TRACK_STATUSES.REQUESTED]:"팀장 자격 판정 대기",
@@ -17,7 +19,7 @@ const STATUS_LABELS={
 
 function useSave(onSave){
   const [busy,setBusy]=useState(false),[message,setMessage]=useState("");
-  return {busy,message,save:async change=>{setBusy(true);setMessage("");try{const ok=await onSave(change);setMessage(ok===false?"저장하지 못했습니다. 오류 안내를 확인해 주세요.":"저장되었습니다.");}catch(error){setMessage(error instanceof Error?error.message:"저장하지 못했습니다.");}finally{setBusy(false);}}};
+  return {busy,message,save:async change=>{setBusy(true);setMessage("");try{const ok=await onSave(change);setMessage(ok===false?"저장하지 못했습니다. 오류 안내를 확인해 주세요.":"저장되었습니다.");return ok!==false;}catch(error){setMessage(error instanceof Error?error.message:"저장하지 못했습니다.");return false;}finally{setBusy(false);}}};
 }
 
 export default function FastTrackPanel({project,identity,people,onSave}){
@@ -30,8 +32,10 @@ export default function FastTrackPanel({project,identity,people,onSave}){
   const role=identity?.appRole,email=(identity?.email||"").toLowerCase();
   const leader=role==="team_leader",admin=role==="admin";
   const related=email===(project.requesterEmail||"").toLowerCase()||email===(project.projectOwnerEmail||"").toLowerCase();
-  const canEdit=admin||leader||related;
+  const assigned=people.some(p=>(project.developerIds||[]).map(String).includes(String(p.id))&&(p.email||"").toLowerCase()===email);
+  const canEdit=admin||leader||related||assigned;
   const gaps=useMemo(()=>ardLiteGaps(draft),[draft]);
+  const intakeReady=Boolean(project.intakeReview?.at&&project.intakeDraftCompleted&&!intakeRequired(project).length);
   const regularizationGaps=useMemo(()=>[
     ...intakeRequired(project).map(field=>field.label),
     ...feaRequired(project).map(field=>field.label),
@@ -60,20 +64,10 @@ export default function FastTrackPanel({project,identity,people,onSave}){
     {fast.status===FAST_TRACK_STATUSES.REJECTED&&<div className="fast-track-result rejected"><WarningCircle size={18} weight="fill"/><span><b>정규 접수 절차로 진행합니다.</b><small>{fast.eligibilityReason}</small></span></div>}
     {fast.status===FAST_TRACK_STATUSES.QUALIFIED&&<>
       <div className="fast-track-result"><CheckCircle size={18} weight="fill"/><span><b>{fast.qualifiedByName} 팀장 자격 인정</b><small>{fast.eligibilityReason}</small></span></div>
-      <section className="ard-lite-form">
-        <header><div><small>1 PAGE</small><h4>ARD-Lite</h4><p>합의할 최소 범위를 정합니다. 성공 기준과 금칙 목록이 없으면 GF 및 G3를 진행할 수 없습니다.</p></div><span>{6-gaps.length}/6 작성</span></header>
-        <div>
-          <label><span>1. 한 줄 정의 · 누가/언제/무엇을/어디까지</span><textarea disabled={!canEdit} value={draft.definition||""} onChange={event=>setField("definition",event.target.value)}/></label>
-          <label><span>2. Out of Scope · 하지 않는 일</span><textarea disabled={!canEdit} value={draft.outOfScope||""} onChange={event=>setField("outOfScope",event.target.value)}/></label>
-          <label><span>3. 자율성 수준</span><select disabled={!canEdit} value={draft.autonomy||""} onChange={event=>setField("autonomy",event.target.value)}><option value="">선택하세요</option>{["L0 정보 제공","L1 초안 생성","L2 승인 후 실행","L3 자동 실행·사후 검토","L4 완전 자율"].map(item=><option key={item}>{item}</option>)}</select></label>
-          <label><span>4. 성공 기준 · EVD 채점 기준</span><textarea disabled={!canEdit} value={draft.successCriteria||""} onChange={event=>setField("successCriteria",event.target.value)} placeholder="예: 핵심 평가셋 정확도 90% 이상"/></label>
-          <label><span>5. 금칙 목록 · EVD 채점 기준</span><textarea disabled={!canEdit} value={draft.prohibitedActions||""} onChange={event=>setField("prohibitedActions",event.target.value)} placeholder="절대 하면 안 되는 행동을 구체적으로 입력"/></label>
-          <label><span>6. 긴급 사유와 기한</span><textarea disabled={!canEdit} value={draft.emergencyReasonAndDeadline||""} onChange={event=>setField("emergencyReasonAndDeadline",event.target.value)}/></label>
-        </div>
-        {canEdit&&<button type="button" disabled={busy} onClick={()=>save({fastTrackAction:{type:"save_ard_lite",ardLite:draft}})}>ARD-Lite 저장</button>}
-      </section>
+      <MarkdownDocumentWorkspace key={project.no+":ard-lite"} project={project} phase="fast_track_requirements" canEdit={canEdit&&intakeReady} onComplete={(_phase,version)=>save({fastTrackAction:{type:"complete_ard_lite",version}})}/>
       {admin&&<div className="fast-track-assignment"><label>개발 담당자<select value={developer} onChange={event=>setDeveloper(event.target.value)}><option value="">선택하세요</option>{people.map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label><button type="button" disabled={busy||!developer} onClick={()=>save({developerIds:[developer]})}>개발 담당자 배정</button></div>}
-      {leader&&<button type="button" className="primary fast-track-gf" disabled={busy||gaps.length>0||!project.developerIds?.length} onClick={()=>save({fastTrackAction:{type:"approve_gf"}})}>GF 긴급 착수 승인 → 개발·평가</button>}
+      {!intakeReady&&<p className="fast-track-missing">INT AI 인터뷰·검토를 먼저 완료해 주세요. 요구정의를 작성해도 INT 검토 전에는 착수 승인할 수 없습니다.</p>}
+      {leader&&<button type="button" className="primary fast-track-gf" disabled={busy||!intakeReady||!ardLiteDocumentComplete(project)||!project.developerIds?.length} onClick={()=>save({fastTrackAction:{type:"approve_gf"}})}>GF 긴급 착수 승인 → 개발·평가</button>}
       {gaps.length>0&&<p className="fast-track-missing">미완료: {gaps.join(" · ")}</p>}
     </>}
     {fast.status===FAST_TRACK_STATUSES.GF_APPROVED&&<><div className="fast-track-result approved"><CheckCircle size={18} weight="fill"/><span><b>{fast.gfApprovedByName} 팀장 GF 승인 · G1·G2 대체</b><small>오너 통보 기한 {fast.ownerNotificationDueAt?.slice(0,16).replace("T"," ")} · EVD 평가와 요구자 UAT 후 G3 승인이 필요합니다.</small></span>{!fast.ownerNotifiedAt&&(admin||leader)&&<button type="button" disabled={busy} onClick={()=>save({fastTrackAction:{type:"notify_owner"}})}>오너 통보 기록</button>}{fast.ownerNotifiedAt&&<em>오너 통보 완료</em>}</div>{Number(project.journeyStep)===7&&allApproved("G3",project)&&(admin||leader)&&<button type="button" className="primary fast-track-gf" disabled={busy} onClick={()=>save({fastTrackAction:{type:"start_temporary"}})}>30일 한시 배포 시작</button>}</>}

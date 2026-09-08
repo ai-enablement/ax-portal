@@ -5,6 +5,17 @@ import {acceptModelTurn,progress} from '../shared/intake-agent.mjs';
 import {completeIntakeReview,handleAgentRequest} from '../server/intake-agent.mjs';
 import {applyWorkflow} from '../server/workflow-v31.mjs';
 const int=()=>({journeyStep:0,intakeAnswers:['문서 수작업 확인','','','',''],intakeDetails:{performer:'품질 담당',countPerMonth:'20',asIsMinutes:'30',people:'2',failureImpact:'재작업 발생'},agentSession:{request:{status:'complete'},proposals:[],confirmed:{}}});
+
+test('Fast Track INT review unlocks requirements without entering FEA or approving gates',()=>{
+ for(const status of ['REQUESTED','QUALIFIED']){
+  const result=completeIntakeReview({...int(),fastTrack:{requested:true,status}},{id:7,display_name:'요구자'});
+  assert.equal(result.journeyStep,0);
+  assert.ok(result.intakeReview.at);
+  assert.equal(result.fastTrack.status,status);
+  assert.equal(result.workflowApprovals,undefined);
+  assert.equal(result.feaCompleted,undefined);
+ }
+});
 test('direct INT review creates a session and persists FEA transition without an AI call',async()=>{
  const state={...int(),intakeStandardVersion:'3.0'};delete state.agentSession;
  let stored,stage='INT';

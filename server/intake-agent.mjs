@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {getPool, withTransaction} from './db/pool.mjs';
 import {syncProjectArtifacts} from './database-api.mjs';
+import {canUseResumedFeaAgent} from '../shared/fea-assignment.mjs';
 import {AGENT_FIELDS, fieldValue, progress, deterministicSummary, safeMessage, applyProposals, acceptModelTurn,autoApplyIntakeExtractions} from '../shared/intake-agent.mjs';
 
 export class AgentError extends Error { constructor(status,message) {super(message);this.status=status;} }
@@ -52,8 +53,11 @@ export async function generateTurn(state,message,{env=process.env,fetcher=fetch}
 export function assertAgentAccess(actor,project,state,related) {
   if(!actor?.is_active) throw new AgentError(403,'활성 포털 계정이 필요합니다.');
   if(!project || project.deleted_at) throw new AgentError(404,'과제를 찾을 수 없습니다.');
-  if(state.historicalImport) throw new AgentError(403,'과거 이관 과제에는 자동 인터뷰를 사용하지 않습니다.');
-  if(!['INT','FEA'].includes(project.current_stage_code) || state.feaCompleted) throw new AgentError(409,'INT·FEA 작성 중인 신규 과제에서만 사용할 수 있습니다.');
+  if(state.historicalImport){
+    if(project.current_stage_code!=='FEA'||!canUseResumedFeaAgent({...state,requester_id:project.requester_id},actor))throw new AgentError(403,'이관 완료 후 INT를 완료한 FEA 단계에서 요구자·지정 개발 담당자 또는 Admin이 사용할 수 있습니다.');
+    return;
+  }
+  if(!['INT','FEA'].includes(project.current_stage_code) || state.feaCompleted) throw new AgentError(409,'INT·FEA 작성 중인 과제에서만 사용할 수 있습니다.');
   const isRequester=[project.requester_id,project.owner_id].some(id=>String(id)===String(actor.id));
   const assigned=(state.developerIds||[]).map(String);
   const teamAllowed=['team_leader','team_member'].includes(actor.app_role) && (!assigned.length || assigned.includes(String(actor.id)));
@@ -93,7 +97,8 @@ function publicState(state) {
 export function completeIntakeReview(state,actor){
   if(Number(state.journeyStep)!==0||!progress(state).ready)throw new AgentError(400,'요구 접수 필수 답변을 먼저 완료해 주세요.');
   if(state.agentSession?.proposals?.some(p=>p.key.startsWith('int.')))throw new AgentError(400,'접수서 반영 대기 항목을 먼저 확인해 주세요.');
-  return {...structuredClone(state),intakeReview:{actorId:String(actor.id),actorName:actor.display_name,at:new Date().toISOString()},intakeDraftCompleted:true,journeyStep:1,stage:'타당성 평가',status:'타당성 평가 작성 중'};
+  const fastIntake=state.fastTrack?.requested&&['REQUESTED','QUALIFIED'].includes(state.fastTrack.status);
+  return {...structuredClone(state),intakeReview:{actorId:String(actor.id),actorName:actor.display_name,at:new Date().toISOString()},intakeDraftCompleted:true,...(fastIntake?{journeyStep:0,stage:'요구 접수',status:'INT 검토 완료 · Fast Track 요구정의 준비',nextAction:state.fastTrack.status==='QUALIFIED'?'ARD-Lite 작성':'AI 활성화팀장 Fast Track 자격 판정'}:{journeyStep:1,stage:'타당성 평가',status:'타당성 평가 작성 중'})};
 }
 export async function handleAgentRequest({method,identity,code,body={},generate=generateTurn,pool=getPool(),transaction=withTransaction}) {
   if(!/^\d{4}-\d{3,}$/.test(code)) throw new AgentError(400,'과제 번호가 올바르지 않습니다.');
@@ -108,7 +113,7 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
       next=autoApplyIntakeExtractions(state,actor.id);
       if(next.agentSession)next.agentSession.proposals=(next.agentSession.proposals||[]).filter(item=>!item.key.startsWith('int.')||item.kind==='extracted');
       next=completeIntakeReview(next,actor);
-      await client.query("select agent_portal.change_project_stage($1,'FEA',$2,'요구 접수 AI 검토 완료')",[project.id,actor.id]);
+      if(next.journeyStep===1)await client.query("select agent_portal.change_project_stage($1,'FEA',$2,'요구 접수 AI 검토 완료')",[project.id,actor.id]);
       next.nextAction='AI가 정리한 FEA 초안을 검토·보완해 주세요.';next.progress=22;
       await client.query("update agent_portal.projects set next_action=$2,progress_percent=22,updated_at=now() where id=$1",[project.id,next.nextAction]);
     }

@@ -20,6 +20,28 @@ function doc(code){
 }
 const gateState=(step=4)=>({journeyStep:step,workflowTrack:'MEDIUM',developerIds:['5'],historicalDocuments:{3:{documents:{ARD:doc('ARD')}},5:{documents:{EVR:doc('EVR')}}},markdownDocuments:{DES:{phases:{design:{version:1}}},EVD:{phases:{development_evaluation:{version:1},deployment_rollout:{version:2}}}},gateChecks:{G3:{criteriaPassed:true,zeroViolations:true,evidence:'평가 v1 전건 확인'},G4:{criteriaPassed:true,evidence:'사용 20건 오류 0건 만족도 4.5, 종료 조건 충족'}},uatRecord:{completed:true,cases:5,actorId:'1'}});
 const vote=(gate,role)=>({gateVote:{gate,role,decision:'APPROVED'}});
+
+test('completed bulk imports use real requester, Owner, developer and approvers throughout the resumed lifecycle',()=>{
+ const imported={historicalImport:true,historicalImportFinalizedAt:'2026-09-09',historicalBaselineStep:0,createdByUserId:String(admin.id),feaAuthor:{id:String(admin.id)}};
+ let s={...gateState(4),...imported};
+ for(const role of ['requester','owner','team_leader'])assert.throws(()=>run(s,vote('G2',role),admin),/담당자/);
+ s=run(s,vote('G2','requester'),requester);assert.equal(s.journeyStep,4);
+ s=run(s,vote('G2','owner'),owner);assert.equal(s.journeyStep,4);
+ s=run(s,vote('G2','team_leader'),leader);assert.equal(s.journeyStep,5);
+ const uat={uatConfirm:{cases:3,evidence:'요구자가 실제 업무 확인'}};
+ for(const a of [admin,owner,developer])assert.throws(()=>run(s,uat,a),/요구자/);
+ s=run(s,uat,requester);assert.equal(s.uatRecord.actorId,String(requester.id));
+ s={...s,journeyStep:6,workflowTrack:'HIGH',securityReviewerId:'6'};
+ assert.throws(()=>run(s,vote('G3','security_reviewer'),admin),/담당자/);
+ s=run(s,vote('G3','team_leader'),leader);assert.equal(s.journeyStep,6);
+ s=run(s,vote('G3','security_reviewer'),{id:6,is_active:true,app_role:'team_member',display_name:'보안 검토자'});assert.equal(s.journeyStep,7);
+ s={...s,journeyStep:8};
+ for(const a of [admin,requester,developer])assert.throws(()=>run(s,vote('G4','owner'),a),/담당자/);
+ s=run(s,vote('G4','owner'),owner);assert.equal(s.journeyStep,8);
+ s=run(s,vote('G4','team_leader'),leader);assert.equal(s.journeyStep,9);
+ assert.equal(s.createdByUserId,String(admin.id));
+ assert.equal(s.workflowApprovals.G4.owner.actorId,String(owner.id));
+});
 test('six stages and every regular gate remain visible in order',()=>{
  assert.equal(JOURNEY_V31.filter(n=>n.number).length,6);
  assert.deepEqual(JOURNEY_V31.filter(n=>n.gate).map(n=>n.gate),['G1','G2','G3','G4']);
@@ -112,6 +134,7 @@ test('no direct gate jump or fabricated approval; no future documents',()=>{
 test('Markdown upload stays draft until the author completes each phase',()=>{
  let design={...gateState(5),deliveryPhase:'design',markdownDocuments:{DES:{phases:{design:{version:2,status:'draft'}}}}};
  assert.throws(()=>run(design,{deliveryPhase:'development'},developer),/완료 버튼/);
+ assert.throws(()=>run(design,{markdownCompleteAction:{phase:'design',version:999}},developer),/최신 버전/);
  design=run(design,{markdownCompleteAction:{phase:'design'}},developer);
  assert.equal(design.markdownDocuments.DES.phases.design.status,'complete');
  assert.equal(design.markdownDocuments.DES.phases.design.completedVersion,2);
@@ -151,9 +174,17 @@ test('Fast Track requires leader qualification, complete ARD-Lite and developer 
  assert.throws(()=>run(s,{fastTrackAction:{type:'qualify',reason:'외부 기한 확인'}},admin),/팀장/);
  s=run(s,{fastTrackAction:{type:'qualify',reason:'시행 공문 확인'}},leader);
  assert.equal(s.fastTrack.status,'QUALIFIED');
+ assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/INT AI/);
+ s={...s,intakeDraftCompleted:true,intakeReview:{at:'2026-09-07T00:00:00Z'},intakeAnswers:['문서 수작업 확인'],intakeDetails:{performer:'품질 담당',countPerMonth:'20',asIsMinutes:'30',people:'2',failureImpact:'재작업 발생'}};
  assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/ARD-Lite/);
  const ardLite={definition:'품질 담당자가 시행일부터 규정 질의를 확인',outOfScope:'자동 승인 제외',autonomy:'L1 초안 생성',successCriteria:'정확도 90% 이상',prohibitedActions:'근거 없는 승인 금지',emergencyReasonAndDeadline:'법규 시행 2026-10-01'};
  s=run(s,{fastTrackAction:{type:'save_ard_lite',ardLite}},requester);
+ assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/최종 버전/);
+ s={...s,markdownDocuments:{ARD_LITE:{phases:{fast_track_requirements:{id:'document-1',version:1,status:'draft'}}}}};
+ assert.throws(()=>run(s,{fastTrackAction:{type:'complete_ard_lite',version:2}},requester),/최신/);
+ assert.throws(()=>run(s,{fastTrackAction:{type:'complete_ard_lite',version:1}},{...developer,id:88}),/권한/);
+ s=run(s,{fastTrackAction:{type:'complete_ard_lite',version:1}},requester);
+ assert.equal(s.journeyStep,0);
  assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/개발 담당자/);
  s=run(s,{developerIds:['5']},admin);
  s=run(s,{fastTrackAction:{type:'approve_gf'}},leader);

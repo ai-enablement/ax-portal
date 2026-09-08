@@ -6,7 +6,7 @@ import "./team-dashboard-compact.css";
 import "./team-dashboard-readability.css";
 import "./status-badges.css";
 import {isImportInProgress, canBackfillDocument, needsImportCompletionRepair} from "../shared/historical-import-policy.mjs";
-import {selectedProjectNumber,currentWorkflowTarget} from "../shared/project-selection.mjs";
+import {selectedProjectNumber,currentWorkflowTarget,savedProjectView} from "../shared/project-selection.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import StandardDocumentWorkspace from "./standard-document-workspace";
 import MarkdownDocumentWorkspace from "./markdown-document-workspace";
@@ -20,8 +20,10 @@ import {isLowRoute} from '../shared/workflow-v31.mjs';
 import {FAST_TRACK_EXTERNAL_FACTORS} from '../shared/fast-track.mjs';
 import {buildWorkNotifications, filterProjectList} from '../shared/work-notifications.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
+import {canWriteResumedFea,canWriteResumedIntake,canUseResumedFeaAgent} from '../shared/fea-assignment.mjs';
+import {isProjectDeveloper} from '../shared/project-actors.mjs';
 import { AGENT_TYPES, classifyProject } from "../shared/project-classification.mjs";
-import {GALLERY_CATEGORIES,GALLERY_PLATFORMS,GALLERY_DATA_CLASSES,gallerySelections,toggleGallerySelection} from "../shared/gallery-options.mjs";
+import {GALLERY_CATEGORIES,GALLERY_PLATFORMS,GALLERY_DATA_CLASSES,gallerySelections,galleryPlatformSelections,toggleGallerySelection} from "../shared/gallery-options.mjs";
 import type { StandardDocument } from "../shared/standard-documents.mjs";
 import {
   ArrowRight,
@@ -309,13 +311,14 @@ type UserProject = {
     prohibitedActions?: string;
     emergencyReasonAndDeadline?: string;
   };
-  fastTrackAction?: {type:string;reason?:string;ardLite?:UserProject["ardLite"];role?:string;decision?:string};
-  markdownCompleteAction?: {phase:"design"|"development_evaluation"|"deployment_rollout"};
+  fastTrackAction?: {type:string;reason?:string;version?:number;ardLite?:UserProject["ardLite"];role?:string;decision?:string};
+  markdownCompleteAction?: {phase:"design"|"development_evaluation"|"deployment_rollout";version?:number};
   gateVote?: {gate:string;role:string;decision:string;reason:string};
   uatConfirm?: {cases:number;evidence:string};
   lowRouteAction?: string;
   lowKnowledgeOwnerId?: string;
   intakeDraftCompleted?: boolean;
+  intakeReview?: {actorId:string;actorName?:string;at:string};
   feaCompleted?: boolean;
   feaDraft?: {
     standardVersion?: string;
@@ -1156,7 +1159,7 @@ export default function Home() {
         }
         return;
       }
-      setSubmittedProjects((current) => current.map((project) => project.no === projectNo ? payload.project! : project));
+      setSubmittedProjects((current) => current.map((project) => project.no === projectNo ? savedProjectView(project,payload.project!) : project));
       saved = true;
     }).finally(() => {
       if (projectUpdateQueue.current.get(projectNo) === request) projectUpdateQueue.current.delete(projectNo);
@@ -1814,6 +1817,7 @@ export default function Home() {
             role={role}
             identity={identity}
             projectNo={workflowTarget}
+            onSelectProject={(code) => {setWorkflowTarget(code);setWorkflowActionTarget(null);}}
             workflowActionTarget={workflowActionTarget}
             teamAccounts={teamAccounts}
             teamRequirementItems={teamDashboardRequirements}
@@ -2062,6 +2066,7 @@ function Dashboard({
   role,
   identity,
   projectNo,
+  onSelectProject,
   workflowActionTarget,
   teamAccounts,
   teamRequirementItems,
@@ -2079,6 +2084,7 @@ function Dashboard({
   role: AccountRole;
   identity: PortalIdentity | null;
   projectNo?: string;
+  onSelectProject: (code:string)=>void;
   workflowActionTarget?: {projectNo:string;journeyStep:number;deliveryPhase?:"design"|"development";nonce:number} | null;
   teamAccounts: TeamAccount[];
   teamRequirementItems: TeamRequirement[];
@@ -2115,6 +2121,7 @@ function Dashboard({
         role={role}
         identity={identity}
         projectNo={projectNo}
+        onSelectProject={onSelectProject}
         workflowActionTarget={workflowActionTarget}
         teamAccounts={teamAccounts}
         onAssignProjectDeveloper={onAssignProjectDeveloper}
@@ -2414,7 +2421,7 @@ function LegacyTeamWorkspaceDashboard({
       kind: "phase",
       document: "에이전트 요구 접수서[INT]",
       description:
-        "요구자가 접수 Agent와 해결하려는 문제, 현재 업무 방식, 기대 효과와 희망 완료일을 작성합니다.",
+        "요구자가 접수 Agent와 해결하려는 문제, 현재 업무 방식, 기대 효과와 완료 요청일을 작성합니다.",
       owner: "요구자 작성 · AI활성화팀 열람",
     },
     {
@@ -5411,7 +5418,7 @@ function GateApprovalResult({
               <CalendarBlank size={17} weight="fill" />
             </span>
             <p>
-              <small>요청 시 희망 완료일</small>
+              <small>요청 시 완료 요청일</small>
               <b>{project.requestedDate}</b>
             </p>
           </div>
@@ -6695,8 +6702,9 @@ function UserOperationsResult({
   );
 }
 
-function HistoricalIntakeEditor({project,onSave,onCancel}: {
+function HistoricalIntakeEditor({project,onSave,onCancel,canEditContacts=true}: {
   project: UserProject;
+  canEditContacts?:boolean;
   onSave: (answers:string[],details:NonNullable<UserProject["intakeDetails"]>,complete:boolean,contacts:{requesterEmail:string;projectOwnerEmail:string})=>Promise<boolean>;
   onCancel:()=>void;
 }) {
@@ -6719,7 +6727,7 @@ function HistoricalIntakeEditor({project,onSave,onCancel}: {
     finally {setSaving(false);}
   };
   return <section className="historical-intake-editor"><header><div><small>INT · {project.no} · v3.0</small><h3>에이전트 요구 접수서</h3><p>확인된 내용부터 저장합니다. 작성 완료 시 필수 항목을 확인합니다.</p></div></header>
-    <fieldset disabled={saving} className="historical-contact-section" aria-labelledby="historical-contact-title">
+    <fieldset disabled={saving||!canEditContacts} className="historical-contact-section" aria-labelledby="historical-contact-title">
       <div className="historical-contact-heading"><h4 id="historical-contact-title">담당자 계정 연결</h4><p>미등록된 MS 계정 이메일을 입력해 주세요. 보완 내용 저장 시 과제와 연결됩니다.</p></div>
       <div className="historical-contact-grid">
         <label className="historical-contact-card">
@@ -6992,6 +7000,7 @@ function UserDashboard({
   role,
   identity,
   projectNo,
+  onSelectProject,
   workflowActionTarget,
   teamAccounts,
   onAssignProjectDeveloper,
@@ -7006,6 +7015,7 @@ function UserDashboard({
   role: AccountRole;
   identity: PortalIdentity | null;
   projectNo?: string;
+  onSelectProject: (code:string)=>void;
   workflowActionTarget?: {projectNo:string;journeyStep:number;deliveryPhase?:"design"|"development";nonce:number} | null;
   teamAccounts: TeamAccount[];
   onAssignProjectDeveloper: (projectNo: string, userId: string) => Promise<void>;
@@ -7036,8 +7046,8 @@ function UserDashboard({
   useEffect(() => {
     // Only explicit external navigation resets a user's locally selected project.
     if(projectNo)setSelectedProjectNo(projectNo);
-    setFilter("전체");
   }, [isAiTeam, role, projectNo]);
+  useEffect(()=>setFilter('전체'),[isAiTeam,role]);
 
   useEffect(()=>{
     // Keep the key during an empty/loading list. Settle a fallback only when
@@ -7072,14 +7082,14 @@ function UserDashboard({
   const signedInTeamAccount = teamAccounts.find(
     (account) => account.email.toLowerCase() === identity?.email?.toLowerCase(),
   );
-  const isAssignedHistoricalDeveloper = Boolean(
-    signedInTeamAccount && assignedDeveloperIds.includes(signedInTeamAccount.id),
-  );
+  const isAssignedHistoricalDeveloper = isProjectDeveloper(current,{id:identity?.userId||signedInTeamAccount?.id});
   const canAuthorHistoricalDocument =
     role === ACCOUNT_ROLES.admin ||
     (assignedDeveloperIds.length > 0
       ? isAssignedHistoricalDeveloper
-      : role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member);
+      : isImportInProgress(current)&&(role === ACCOUNT_ROLES.leader || role === ACCOUNT_ROLES.member));
+  const canAuthorResumedFea=canWriteResumedFea(current,{id:identity?.userId,email:identity?.email});
+  const canAuthorResumedIntake=canWriteResumedIntake(current,{id:identity?.userId,email:identity?.email});
   const canDeleteCurrent =
     role === ACCOUNT_ROLES.admin ||
     (role === ACCOUNT_ROLES.user && current.journeyStep === 0);
@@ -7177,6 +7187,7 @@ function UserDashboard({
     if (next !== "전체") {
       const project = matches.find(item => item.no === current.no) || matches[0];
       setSelectedProjectNo(project.no);
+      onSelectProject(project.no);
       setSelectedJourney(project.journeyStep);
       return;
     }
@@ -7184,6 +7195,7 @@ function UserDashboard({
   };
   const selectProject = (project: UserProject) => {
     setSelectedProjectNo(project.no);
+    onSelectProject(project.no);
     setSelectedJourney(project.journeyStep);
     setHistoricalIntakeEditing(false);
   };
@@ -7391,7 +7403,7 @@ function UserDashboard({
               <span>{finalizingImport ? "이관 완료 처리 중…" : importInProgress ? "과거 이관 완료" : "이관 완료 반영"}</span>
             </button>}
           </section>}
-          {current.source === "database" && current.fastTrack?.requested && <FastTrackPanel key={current.no + ":" + JSON.stringify([current.fastTrack,current.ardLite,current.developerIds])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
+          {current.source === "database" && current.fastTrack?.requested && <FastTrackPanel key={current.no+":fast-track"} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
           <WorkflowJourney project={current} selected={selectedJourney} onSelect={(step: number, phase?: "design" | "development") => {setSelectedJourney(step);if(phase)setSelectedDeliveryPhase(phase);}} />
           {current.source === "database" && selectedJourney === effectiveJourneyStep && <WorkflowControls key={current.no + ":" + JSON.stringify([current.journeyStep,current.deliveryPhase,current.gateChecks,current.uatRecord,current.lowRoute])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
 
@@ -7429,7 +7441,7 @@ function UserDashboard({
             <div>
               <CalendarBlank size={17} weight="duotone" />
               <p>
-                <small>요청 시 희망 완료일</small>
+                <small>요청 시 완료 요청일</small>
                 <b>{current.requestedDate}</b>
               </p>
             </div>
@@ -7469,8 +7481,8 @@ function UserDashboard({
             <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
-          {hasProjects && current.source === "database" && !current.historicalImport && (!current.fastTrack?.requested || current.fastTrack.status === "REJECTED") && current.journeyStep <= 1 && !current.feaCompleted && selectedJourney <= 1 && (
-            <IntakeAgentPanel key={current.no} projectNo={current.no} />
+          {hasProjects && current.source === "database" && (current.historicalImport ? selectedJourney===1&&canUseResumedFeaAgent(current,identity) : (!current.fastTrack?.requested || current.fastTrack.status === "REJECTED" || (current.journeyStep === 0 && (!current.intakeReview || intakeRequired(current).length>0)))) && current.journeyStep <= 1 && !current.feaCompleted && selectedJourney <= 1 && (
+            <IntakeAgentPanel key={`${current.no}:${current.journeyStep}`} projectNo={current.no} resumedHistorical={Boolean(current.historicalImport)} fastTrack={Boolean(current.fastTrack?.requested && current.fastTrack.status !== "REJECTED")} />
           )}
           <div
             ref={currentStageDetailRef}
@@ -7499,7 +7511,7 @@ function UserDashboard({
               phase={selectedJourney === 7 ? "deployment_rollout" : selectedDeliveryPhase === "development" ? "development_evaluation" : "design"}
               canEdit={canEditSelectedHistoricalDocument}
               devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined}
-              onComplete={(phase) => onUpdateProject(current.no,{markdownCompleteAction:{phase}})}
+              onComplete={(phase,version) => phase==='fast_track_requirements'?false:onUpdateProject(current.no,{markdownCompleteAction:{phase,version}})}
             />
           ) : current.documentsDeferred &&
             selectedJourney !== 0 &&
@@ -7636,16 +7648,17 @@ function UserDashboard({
             <HistoricalIntakeEditor
               key={current.no}
               project={current}
+              canEditContacts={!canAuthorResumedIntake}
               onCancel={() => setHistoricalIntakeEditing(false)}
               onSave={async(answers,details,complete,contacts) => {
                 const saved=await onUpdateProject(current.no, {
-                  ...(current.historicalImport ? {historicalContactUpdate:contacts} : {}),
+                  ...(current.historicalImport && !canAuthorResumedIntake ? {historicalContactUpdate:contacts} : {}),
                   intakeAnswers: answers,
                   intakeDetails: details,
                   intakeStandardVersion: "3.0",
                   ...(complete ? {intakeDraftCompleted:true} : {}),
                   requestedDate: answers[4] || "미입력",
-                  ...(complete && current.historicalImport && !importInProgress && effectiveJourneyStep === 0 ? {
+                  ...(complete && current.historicalImport && !canAuthorResumedIntake && !importInProgress && effectiveJourneyStep === 0 ? {
                     journeyStep: 1,
                     status: `${userJourney[1].title} 진행 중`,
                   } : {}),
@@ -7776,7 +7789,7 @@ function UserDashboard({
                     </button>
                   </footer>
                 )}
-                {(current.historicalImport ? canAuthorHistoricalDocument : current.source==='database' && !current.feaCompleted) && (
+                {(current.historicalImport ? (canAuthorHistoricalDocument||canAuthorResumedIntake) : current.source==='database' && !current.feaCompleted) && (
                   <footer>
                     <span>이관 당시 입력한 내용을 유지한 채 보완할 수 있습니다.</span>
                     <button onClick={() => setHistoricalIntakeEditing(true)}>
@@ -7847,7 +7860,7 @@ function UserDashboard({
               state={selectedOutputState}
               editable={
                 current.historicalImport
-                  ? canAuthorHistoricalDocument
+                  ? selectedJourney<=effectiveJourneyStep&&(canAuthorHistoricalDocument||canAuthorResumedFea)
                   : hasProjects && isAiTeam
               }
               role={role}
@@ -7858,6 +7871,7 @@ function UserDashboard({
               }
               onSave={(feaDraft) => onUpdateProject(current.no, { feaDraft })}
               onComplete={(feaDraft) => {
+                if(canAuthorResumedFea){return onUpdateProject(current.no,{feaDraft,feaCompleted:true});}
                 if (current.historicalImport) {
                   onUpdateProject(current.no, {
                     feaDraft, feaCompleted: true,
@@ -8529,7 +8543,7 @@ function IntakeFeasibility({
         <div>
           <CalendarBlank size={17} weight="duotone" />
           <p>
-            <small>요청 시 희망 완료일</small>
+            <small>요청 시 완료 요청일</small>
             <b>{requestedCompletion}</b>
           </p>
         </div>
@@ -9525,7 +9539,7 @@ function RequirementDefinition({
         <div>
           <CalendarBlank size={17} weight="duotone" />
           <p>
-            <small>요청 시 희망 완료일</small>
+            <small>요청 시 완료 요청일</small>
             <b>2026.09.30</b>
           </p>
         </div>
@@ -10148,7 +10162,7 @@ function RequirementDefinition({
                   </header>
                   <dl>
                     <div>
-                      <dt>요청 시 희망 완료일</dt>
+                      <dt>요청 시 완료 요청일</dt>
                       <dd>2026.09.25</dd>
                     </div>
                     <div>
@@ -14092,7 +14106,7 @@ function Gallery({
     projectNo: sourceDraft.projectNo || "",
     name: sourceDraft.name || "",
     description: sourceDraft.description || "",
-    platform: gallerySelections(sourceDraft.platform || "Copilot Studio"),
+    platform: galleryPlatformSelections(sourceDraft.platform || "Copilot Studio"),
     artifactType: sourceDraft.artifactType || "Agent",
     category: GALLERY_CATEGORIES.includes(sourceDraft.category || "") ? sourceDraft.category! : "기타",
     accessUrl: "",
@@ -14204,7 +14218,7 @@ function Gallery({
       projectNo: application.projectNo || "",
       name: application.name,
       description: application.description,
-      platform: gallerySelections(application.platform),
+      platform: galleryPlatformSelections(application.platform),
       artifactType: application.artifactType,
       category: GALLERY_CATEGORIES.includes(application.category) ? application.category : "기타",
       accessUrl: application.accessUrl,
@@ -14454,7 +14468,7 @@ function Gallery({
 
       {tab === "applications" && (
         <section className="gallery-applications-panel">
-          <header><div><h2>{isTeam ? "Agent 등록 신청" : "내 Agent 등록 신청"}</h2><p>{isTeam ? "본인 제작 또는 대리 등록 신청과 검토 상태를 함께 확인합니다." : "접수부터 보완, 등록 완료까지 진행 상태를 확인합니다."}</p></div><button className="primary" onClick={startPersonalSubmission}>＋ {isTeam ? "Agent 올리기" : "내 Agent 올리기"}</button></header>
+          <header><div><h2>{isTeam ? "Agent 등록 신청" : "내 Agent 등록 신청"}</h2><p>{isTeam ? "본인 제작 또는 대리 등록 신청과 검토 상태를 함께 확인합니다." : "접수부터 보완, 등록 완료까지 진행 상태를 확인합니다."}</p></div></header>
           <div className="gallery-application-list">
             {applications.length === 0 && (
               <div className="gallery-empty-state">
@@ -15266,14 +15280,14 @@ function RequestWizard({
     "업무량",
     "자료 · 데이터",
     "실패 시 피해",
-    "희망 완료일",
+    "완료 요청일",
   ];
   const prompts = [
     "먼저 어떤 업무가 가장 힘들거나 실수가 잦은지 알려주세요.",
     "좋습니다. 이 업무가 얼마나 자주 발생하고 시간이 얼마나 드는지 확인할게요.",
     "현재 업무에 사용하는 시스템과 참고 자료를 알려주세요.",
     "잘못 처리되면 어떤 피해가 생기나요? 영향을 구체적으로 알려주세요.",
-    "마지막으로 언제까지 개발되었으면 좋겠는지 희망 완료일을 알려주세요. G2에서 실현 가능한 프로젝트 마감일로 확정합니다.",
+    "마지막으로 언제까지 개발되었으면 좋겠는지 완료 요청일을 알려주세요. G2에서 실현 가능한 프로젝트 마감일로 확정합니다.",
   ];
   const examples = [
     "예: 개발 BOM 변경 시 관련 부품과 품질 문서를 수작업으로 확인합니다.",
@@ -15332,7 +15346,8 @@ function RequestWizard({
   const resolvedProjectOwner =
     ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
   const resolvedRequesterEmail = normalizeContactEmail(isAiTeam ? requesterEmail : identity?.email);
-  const resolvedOwnerEmail = ownerMode === "SELF" ? resolvedRequesterEmail : normalizeContactEmail(projectOwnerEmail);
+  const ownerEmailInput = ownerMode === "SELF" ? (isAiTeam ? requesterEmail : identity?.email || "") : projectOwnerEmail;
+  const resolvedOwnerEmail = normalizeContactEmail(ownerEmailInput);
   const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim() || suggestedRequestTitle;
@@ -15355,12 +15370,25 @@ function RequestWizard({
       (isHistorical || Boolean(requesterDepartment.trim())) &&
       resolvedRequester &&
       requestTitle.trim() &&
-      (!fastTrackRequested || Boolean(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim())) &&
+      (isHistorical || !fastTrackRequested || Boolean(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim())) &&
       !submitted,
   );
+  const registrationGaps = [
+    ...(!(isHistorical ? manualTitle.trim() : answers[0].trim()) ? [isHistorical ? 'Agent 과제명' : '업무 문제'] : []),
+    ...(isHistorical && !receivedDate ? ['접수 날짜'] : []),
+    ...(!resolvedRequester ? ['요구자 이름·소속·MS 계정'] : []),
+    ...(!isHistorical && !requesterDepartment.trim() ? ['요구자 소속 부서'] : []),
+    ...(!resolvedProjectOwner ? ['Project Owner 이름·소속'] : []),
+    ...(!contactsValid ? ['요구자·Owner의 올바른 MS 계정 이메일'] : []),
+    ...(requiresHistoricalG1Record && !historicalDeveloperIds.length ? ['개발 담당자'] : []),
+    ...(requiresHistoricalG1Record && historicalG1Decision!=='GO' && !historicalG1Reason.trim() ? ['G1 조건부 판정 사유'] : []),
+    ...(!isHistorical && fastTrackRequested && !(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()) ? ['Fast Track 외부 기한 유형·날짜·사유'] : []),
+  ];
+  const [registrationError,setRegistrationError]=useState('');
   const submitRequest = async () => {
     if (!canSubmit) return;
-    setSubmitted(true);
+    setSubmitted(true);setRegistrationError('');
+    try {
     const saved = await onSubmit(
       [...answers],
       requestTitle,
@@ -15391,7 +15419,9 @@ function RequestWizard({
       },
     );
     if (saved) close();
-    else setSubmitted(false);
+    else setRegistrationError('등록하지 못했습니다. 화면의 오류 안내를 확인해 주세요. 입력한 내용은 유지됩니다.');
+    } catch {setRegistrationError('등록 요청에 실패했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');}
+    finally {setSubmitted(false);}
   };
   const advance = () => {
     if (stepRequired.length || submitted || (step === 5 && !canSubmit)) return;
@@ -15607,7 +15637,8 @@ function RequestWizard({
                     </fieldset>
                   )}
                   {!isAiTeam&&<label className="wizard-form-field"><span>요구자 소속 부서 · 필수</span><input value={requesterDepartment} onChange={e=>setRequesterDepartment(e.target.value)}/></label>}
-                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={(email) => ownerMode === "SELF" && isAiTeam ? setRequesterEmail(email) : setProjectOwnerEmail(email)} optionalEmail={isHistorical} selfEmailEditable={isAiTeam} name="project-owner-mode" />
+                  <label className="wizard-form-field wide"><span>Agent 과제명</span><input value={manualTitle} onChange={event=>setManualTitle(event.target.value)} placeholder={suggestedRequestTitle}/><small>비워두면 업무 문제를 바탕으로 이름이 자동 생성됩니다.</small></label>
+                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={ownerEmailInput} onEmailChange={(email) => ownerMode === "SELF" && isAiTeam ? setRequesterEmail(email) : setProjectOwnerEmail(email)} optionalEmail={isHistorical} selfEmailEditable={isAiTeam} name="project-owner-mode" />
                 </div>
                 )}
               </> : (
@@ -15628,6 +15659,8 @@ function RequestWizard({
                 {step === 5 ? "등록 후 AI 인터뷰 시작" : "다음"}
                 <ArrowRight size={15} weight="bold" />
               </button>
+              {step===5&&registrationGaps.length>0&&<p role="status">등록 전 확인: {registrationGaps.join(' · ')}</p>}
+              {registrationError&&<p role="alert">{registrationError}</p>}
             </div>
           </section>
           ) : (
@@ -15641,12 +15674,12 @@ function RequestWizard({
               </header>
               <div className="wizard-form-scroll">
                 <label className="wizard-form-field wide">
-                  <span>요청 제목</span>
+                  <span>Agent 과제명</span>
                   <input
                     value={manualTitle}
                     onChange={(event) => setManualTitle(event.target.value)}
                     placeholder={suggestedRequestTitle}
-                    aria-label="요청 제목"
+                    aria-label="Agent 과제명"
                   />
                   <small>{isHistorical ? "과거 과제 이관 시 제목은 필수입니다." : "비워두면 업무 문제를 바탕으로 제목이 자동 생성됩니다."}</small>
                 </label>
@@ -15768,7 +15801,9 @@ function RequestWizard({
                 {!isAiTeam&&<label className="wizard-form-field wide"><span>요구자 소속 부서 · 필수</span><input value={requesterDepartment} onChange={e=>setRequesterDepartment(e.target.value)}/></label>}
                 <div className="wide"><IntakeV3Fields answers={answers} details={intakeDetails} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setIntakeDetails(d);}} /></div>
                 {isHistorical&&<details className="wide"><summary>타당성 평가서[FEA] v3.0 입력 · 선택 / 나중에 보완 가능</summary><FeaV3Fields project={{intakeAnswers:answers,intakeDetails}} draft={historicalFea||{standardVersion:"3.0"}} onChange={setHistoricalFea}/></details>}
-                <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={resolvedOwnerEmail} onEmailChange={(email) => ownerMode === "SELF" && isAiTeam ? setRequesterEmail(email) : setProjectOwnerEmail(email)} optionalEmail={isHistorical} selfEmailEditable={isAiTeam} name="form-project-owner-mode" />
+                <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={ownerEmailInput} onEmailChange={(email) => ownerMode === "SELF" && isAiTeam ? setRequesterEmail(email) : setProjectOwnerEmail(email)} optionalEmail={isHistorical} selfEmailEditable={isAiTeam} name="form-project-owner-mode" />
+                {registrationGaps.length>0&&<p className="wide" role="status">등록 전 확인: {registrationGaps.join(' · ')}</p>}
+                {registrationError&&<p className="wide" role="alert">{registrationError}</p>}
               </div>
               <footer className="wizard-form-actions">
                 <span>{isHistorical ? `제목 · 접수 날짜 · 현재 단계 · 요구자 · Owner만 필수 · 개발 담당 ${historicalDeveloperIds.length}명` : `업무 문제 · 요구자 · Owner 필수 · 나머지는 AI 인터뷰에서 보완`}</span>
@@ -15794,7 +15829,7 @@ function RequestWizard({
                   ? "문서 없이 진행 이력만 먼저 등록할 수 있습니다"
                   : "두 방식에서 입력한 내용은 서로 유지됩니다"
                 : step === 5
-                ? "희망 완료일을 확인한 뒤 접수서를 제출하세요"
+                ? "완료 요청일을 확인한 뒤 접수서를 제출하세요"
                 : "등록 전 입력은 이 창에서만 유지됩니다"}
             </span>
           </div>

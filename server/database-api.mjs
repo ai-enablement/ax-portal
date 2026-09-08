@@ -9,9 +9,9 @@ import {applyWorkflow,persistWorkflowApprovals,WorkflowError,sanitizeNewWorkflow
 import {isLowRoute,displayStage} from '../shared/workflow-v31.mjs';
 import {ProjectContactError, registrationContacts, resolveContactUser, validateHistoricalContactUpdate, linkHistoricalContacts} from "./project-contacts.mjs";
 import {emailFromPartyLabel} from '../shared/project-contacts.mjs';
-import {assertGalleryCategory,galleryCodes,primaryGalleryDataClass} from "../shared/gallery-options.mjs";
+import {assertGalleryCategory,galleryCodes,galleryPlatformSelections,primaryGalleryDataClass} from "../shared/gallery-options.mjs";
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
-import {canCompleteOwnFea,reconcileManualAgentFields} from './fea-review-policy.mjs';
+import {canCompleteOwnFea,canSaveResumedFea,canSaveResumedIntake,reconcileManualAgentFields} from './fea-review-policy.mjs';
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -180,6 +180,7 @@ const gallerySelect = `
       when 'copilot_studio' then 'Copilot Studio'
       when 'power_automate' then 'Power Automate'
       when 'power_apps' then 'Power Apps'
+      when 'power_platform' then 'Power Platform'
       else '기타' end, ' · ' order by ordinality)
       from jsonb_array_elements_text(case when jsonb_array_length(gs.platforms)>0 then gs.platforms else jsonb_build_array(gs.platform) end) with ordinality), '기타') as "platform",
     case gs.artifact_kind
@@ -227,7 +228,7 @@ async function listGalleryApplications(identity) {
       order by gs.submitted_at desc`,
     canReview ? [] : [user.id],
   );
-  return { status: 200, body: { applications: result.rows } };
+  return { status: 200, body: { applications: result.rows.map(row=>({...row,platform:galleryPlatformSelections(row.platform).join(' · ')})) } };
 }
 
 function normalizePlatform(value) {
@@ -1143,7 +1144,7 @@ async function updateOperationalProject(projectCode, body, identity) {
     if (!project) return { status: 404, body: { error: "Project not found." } };
     const previousState = project.runtime_state || {};
     const developerIds = (previousState.developerIds || []).map(String);
-    const canWriteImport = actor.app_role === "admin" || (actor.app_role !== "general_user" && (developerIds.length ? developerIds.includes(String(actor.id)) : ["team_leader","team_member"].includes(actor.app_role)));
+    const canWriteImport = actor.app_role === "admin" || (actor.app_role !== "general_user" && (developerIds.length ? developerIds.includes(String(actor.id)) : !previousState.historicalImportFinalizedAt&&["team_leader","team_member"].includes(actor.app_role)));
     const related = String(previousState.securityReviewerId||'')===String(actor.id) || project.requester_id === actor.id || project.owner_id === actor.id || (await client.query(
       `select 1 from agent_portal.project_members where project_id=$1 and user_id=$2 and ended_at is null limit 1`,
       [project.id, actor.id],
@@ -1152,6 +1153,8 @@ async function updateOperationalProject(projectCode, body, identity) {
       return { status: 403, body: { error: "You are not assigned to update this project." } };
     }
     const changedKeys = Object.keys(changes);
+    const resumedFeaWrite=canSaveResumedFea(actor,project,previousState,changes);
+    const resumedIntakeWrite=canSaveResumedIntake(actor,project,previousState,changes);
     const contactUpdates = 'historicalContactUpdate' in changes ? validateHistoricalContactUpdate(previousState,changes.historicalContactUpdate,actor) : null;
     if (changedKeys.some(key => ["projectOwnerEmail", "requesterEmail", "ownerMode"].includes(key))) {
       return {status:403,body:{error:"연락처는 계정 연결 정보입니다. 일반 문서 저장으로 변경할 수 없습니다."}};
@@ -1161,12 +1164,13 @@ async function updateOperationalProject(projectCode, body, identity) {
     if (previousState.agentSession && editsAgentDocument && body.agentRevision !== previousState.agentSession.revision) return {status:409,body:{error:"AI 인터뷰에서 문서가 갱신되었습니다. 최신 내용을 확인한 뒤 다시 저장해 주세요."}};
     if (previousState.agentSession && changes.intakeMessages) return {status:403,body:{error:"인터뷰 대화는 전용 Agent에서 입력해 주세요."}};
     const changedDocuments = Object.keys(changes.historicalDocuments || {}).filter(key=>JSON.stringify(changes.historicalDocuments[key])!==JSON.stringify(previousState.historicalDocuments?.[key]));
-    if (previousState.historicalImport && !canWriteImport && (changes.finalizeHistoricalImport || "feaDraft" in changes || "intakeAnswers" in changes || changedDocuments.some(key=>![2,4,6,8].includes(Number(key))))) {
+    if (previousState.historicalImport && !canWriteImport && !resumedFeaWrite && !resumedIntakeWrite && (changes.finalizeHistoricalImport || changedKeys.some(key=>['feaDraft','feaCompleted','intakeAnswers','intakeDetails','intakeStandardVersion','intakeDraftCompleted','requestedDate'].includes(key)) || changedDocuments.some(key=>![2,4,6,8].includes(Number(key))))) {
       return {status:403,body:{error:"지정 개발 담당자만 이관 내용을 수정하거나 이관 완료할 수 있습니다."}};
     }
     if (previousState.historicalImport && changedDocuments.some(key=>Number(key)>portalJourneyStep(project.current_stage_code))) return {status:400,body:{error:"현재 단계 이후 문서는 아직 작성할 수 없습니다."}};
     const generalUserKeys = new Set(["intakeAnswers", "intakeDetails", "intakeStandardVersion", "intakeMessages", "intakeDraftCompleted", "requestedDate", "g2Approval", "gateVote", "uatConfirm", "fastTrackAction"]);
     if(canCompleteOwnFea(actor,project,previousState,changes))generalUserKeys.add('feaCompleted');
+    if(resumedFeaWrite){generalUserKeys.add('feaDraft');generalUserKeys.add('feaCompleted');}
     if (actor.app_role === "general_user" && changedKeys.some((key) => !generalUserKeys.has(key))) {
       return { status: 403, body: { error: "General users can only update their own intake content." } };
     }
@@ -1189,6 +1193,11 @@ async function updateOperationalProject(projectCode, body, identity) {
     }
     if(changedDocuments.some(k=>[2,4,6,8].includes(Number(k))&&Number(k)>=portalJourneyStep(project.current_stage_code))&&!(previousState.historicalImport&&!previousState.historicalImportFinalizedAt))return {status:403,body:{error:"게이트 문서 저장으로 승인할 수 없습니다. 승인자별 승인 버튼을 사용해 주세요."}};
     const merged = assertPortalProjectState({ ...applyImportLifecycle(previousState,changes,portalJourneyStep(project.current_stage_code)), no: projectCode, source: "database" });
+    if(resumedFeaWrite&&project.current_stage_code==='G1')merged.feaCompleted=changes.feaCompleted===true;
+    // Agent completion sends only feaCompleted, including when an assigned developer
+    // assists a resumed historical project. The server owns the G1 transition.
+    if(changes.feaCompleted===true&&(resumedFeaWrite||(previousState.historicalImport&&previousState.historicalImportFinalizedAt&&project.current_stage_code==='FEA'&&canWriteImport))){merged.journeyStep=2;merged.status='G1 착수 승인 진행 중';}
+    if(resumedIntakeWrite&&changes.intakeDraftCompleted===true&&project.current_stage_code==='INT'){merged.journeyStep=1;merged.status='타당성 평가 진행 중';}
     if(changes.intakeDetails || changes.intakeAnswers)merged.intakeStandardVersion='3.0';
     if(merged.feaDraft?.standardVersion==='3.0')merged.feaDraft=withAutomaticFeaTrack(merged.feaDraft);
     reconcileManualAgentFields(merged,changes,actor);
@@ -1203,7 +1212,7 @@ async function updateOperationalProject(projectCode, body, identity) {
       const required = changes.feaCompleted ? missingFields(merged) : changes.intakeDraftCompleted ? missingFields(merged,"int.") : [];
       if (required.length) return {status:400,body:{error:`미확보 항목은 완료 처리할 수 없습니다: ${required.map(f=>f.label).join(", ")}`}};
     }
-    if (actor.app_role === "general_user") merged.category = "개별 접수";
+    if (actor.app_role === "general_user"&&!previousState.historicalImport) merged.category = "개별 접수";
     if(changes.securityReviewerId){
       const valid=(await client.query("select id from agent_portal.users where id=$1 and is_active=true and app_role<>'general_user'",[changes.securityReviewerId])).rows[0];
       if(!valid)return {status:400,body:{error:"등록된 활성 정보보호 승인자를 선택해 주세요."}};

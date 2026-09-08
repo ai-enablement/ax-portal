@@ -1,7 +1,11 @@
 export const GALLERY_CATEGORIES = ['자료검색', '데이터분석', '업무자동화', '교육/가이드', '기타'];
-export const GALLERY_PLATFORMS = ['Vibe Coding', 'Copilot Studio', 'Power Automate', 'Power Apps', '기타'];
+export const GALLERY_PLATFORMS = ['Vibe Coding', 'Copilot Studio', 'Power Platform', '기타'];
 export const GALLERY_DATA_CLASSES = ['공개', '사내', '기밀', '개인정보 포함'];
-const platformCodes = ['vibe_coding', 'copilot_studio', 'power_automate', 'power_apps', 'other'];
+const platformCodes = ['vibe_coding', 'copilot_studio', 'power_platform', 'other'];
+const legacyPlatforms = ['Power Automate','Power Apps','power_automate','power_apps'];
+export function galleryPlatformSelections(value) {
+  return gallerySelections(value).map(v=>legacyPlatforms.includes(v)?'Power Platform':GALLERY_PLATFORMS[platformCodes.indexOf(v)]||v).filter((v,i,a)=>a.indexOf(v)===i);
+}
 const dataCodes = ['public', 'internal', 'confidential', 'personal_data'];
 export function gallerySelections(value) {
   return [...new Set((Array.isArray(value) ? value : String(value || '').split(' · ')).map(v => String(v).trim()).filter(Boolean))];
@@ -12,11 +16,12 @@ export function toggleGallerySelection(values, value) {
 export function galleryCodes(value, kind) {
   const labels = kind === 'platform' ? GALLERY_PLATFORMS : GALLERY_DATA_CLASSES;
   const codes = kind === 'platform' ? platformCodes : dataCodes;
-  const values = gallerySelections(value);
+  const values = kind==='platform'?galleryPlatformSelections(value):gallerySelections(value);
   if (!values.length || values.some(v => !labels.includes(v) && !codes.includes(v))) throw new Error('갤러리 선택 항목을 확인해 주세요.');
   return values.map(v => codes.includes(v) ? v : codes[labels.indexOf(v)]);
 }
 export function displayGallerySelections(codes, kind) {
+  if(kind==='platform')return galleryPlatformSelections(codes).join(' · ');
   const labels = kind === 'platform' ? GALLERY_PLATFORMS : GALLERY_DATA_CLASSES;
   const keys = kind === 'platform' ? platformCodes : dataCodes;
   return gallerySelections(codes).map(v => labels[keys.indexOf(v)] || v).join(' · ');

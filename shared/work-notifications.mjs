@@ -6,7 +6,9 @@ import {
   releaseEvdComplete,
   requiredApprovers,
 } from "./workflow-v31.mjs";
-import { ardLiteGaps } from "./fast-track.mjs";
+import { ardLiteGaps,ardLiteDocumentComplete } from "./fast-track.mjs";
+import {intakeRequired} from './intake-standard.mjs';
+import {isProjectParty} from './project-actors.mjs';
 
 const same = (left, right) =>
   left !== undefined &&
@@ -14,9 +16,6 @@ const same = (left, right) =>
   right !== undefined &&
   right !== null &&
   String(left) === String(right);
-
-const sameEmail = (left, right) =>
-  Boolean(left && right && String(left).trim().toLowerCase() === String(right).trim().toLowerCase());
 
 export function isAssignedDeveloper(project, actorId) {
   return Boolean(actorId !== '' && (project.developerIds || []).some((id) => same(id, actorId)));
@@ -30,17 +29,22 @@ export function filterProjectList(projects, filter, actorId) {
 
 function actorRelations(project, actor) {
   const developer = isAssignedDeveloper(project, actor.id);
+  const requester = isProjectParty(project,actor,'requester');
+  const owner = isProjectParty(project,actor,'owner');
+  // Administrative edit permission is not an assignment. Resumed FEA belongs
+  // to the linked requester, not the admin who imported or last saved the draft.
+  const feaAuthor = project.historicalImport ? (project.historicalImportFinalizedAt&&(project.requesterId||project.requesterEmail)?requester:developer)
+    : project.feaAuthor?.id ? same(project.feaAuthor.id, actor.id)
+    : project.requesterId || project.requesterEmail ? requester : owner;
   return {
     developer,
-    author: actor.appRole === "admin" || developer,
-    requester:
-      same(project.requesterId, actor.id) || sameEmail(project.requesterEmail, actor.email),
-    owner:
-      same(project.ownerId, actor.id) || sameEmail(project.projectOwnerEmail, actor.email),
+    author: developer,
+    feaAuthor,
+    requester,
+    owner,
     securityReviewer: same(project.securityReviewerId, actor.id),
     teamLeader: actor.appRole === "team_leader",
     admin: actor.appRole === "admin",
-    aiTeam: ["team_member", "team_leader", "admin"].includes(actor.appRole),
   };
 }
 
@@ -74,7 +78,7 @@ function currentGateNotification(project, actor, relations, gate) {
   const approvals = project.workflowApprovals?.[gate] || {};
   const rework = Object.values(approvals).find((vote) => vote?.decision === "REWORK");
 
-  if (rework && relations.author) {
+  if (rework && (gate === 'G1' ? relations.feaAuthor : relations.author)) {
     const editStep = { G1: 1, G2: 3, G3: 5, G4: 7 }[gate];
     return item(
       project,
@@ -85,6 +89,9 @@ function currentGateNotification(project, actor, relations, gate) {
       editStep === 5 ? project.deliveryPhase || "development" : undefined,
     );
   }
+
+  // Wait for the author to resubmit rather than prompting other approvers.
+  if (rework) return null;
 
   const role = gateRoleForActor(project, actor, relations, gate);
   if (!role || approvals[role]?.decision) return null;
@@ -104,6 +111,7 @@ function projectNotification(project, actor) {
   const step = Number(project.journeyStep || 0);
   const relations = actorRelations(project, actor);
   const fast = project.fastTrack;
+  const fastIntakeReady=Boolean(project.intakeReview?.at&&project.intakeDraftCompleted&&!intakeRequired(project).length);
 
   if (project.historicalImport && !project.historicalImportFinalizedAt) {
     if (relations.developer) {
@@ -112,6 +120,9 @@ function projectNotification(project, actor) {
     return null;
   }
 
+  if (['REQUESTED','QUALIFIED'].includes(fast?.status)&&!fastIntakeReady&&(relations.requester||relations.owner)) {
+    return item(project,'INT AI 인터뷰·검토','부족한 접수 정보를 보완하고 INT 확인을 완료해 주세요.',0,'danger');
+  }
   if (fast?.status === "REQUESTED" && relations.teamLeader) {
     return item(project, "Fast Track 자격 판정", "외부 요인과 기한을 확인하고 자격을 판정해 주세요.", 0, "danger");
   }
@@ -119,10 +130,10 @@ function projectNotification(project, actor) {
     if (relations.admin && !(project.developerIds || []).length) {
       return item(project, "Fast Track 개발 담당자 배정", "GF 승인 전에 개발 담당자를 배정해 주세요.", 0, "danger");
     }
-    if (relations.developer && ardLiteGaps(project.ardLite).length) {
-      return item(project, "ARD-Lite 작성", "Fast Track 필수 6개 항목을 작성해 주세요.", 0, "danger");
+    if (fastIntakeReady&&(relations.developer||relations.requester||relations.owner)&&!ardLiteDocumentComplete(project)) {
+      return item(project, "ARD-Lite 작성", "최소 요구정의 .md를 첨부하고 최종 버전을 완료해 주세요.", 0, "danger");
     }
-    if (relations.teamLeader && !ardLiteGaps(project.ardLite).length) {
+    if (relations.teamLeader && fastIntakeReady && ardLiteDocumentComplete(project) && project.developerIds?.length) {
       return item(project, "GF 긴급 착수 승인", "ARD-Lite와 담당자 배정을 확인하고 GF를 승인해 주세요.", 0, "danger");
     }
   }
@@ -138,19 +149,25 @@ function projectNotification(project, actor) {
   }
 
   if (step === 1) {
-    if ((relations.aiTeam || relations.requester || relations.owner) && !project.feaCompleted) {
+    if (relations.feaAuthor && !project.feaCompleted) {
       return item(project, "타당성 평가서 작성", "AI 초안을 확인·보완하고 FEA 작성을 완료해 주세요.", 1, "danger");
     }
     return null;
   }
 
   if (step === 2) {
+    if(project.g1Resolution?.decision==='DROP')return relations.feaAuthor?item(project,'G1 보완 요청 반영',project.g1Resolution.reason||'Drop 사유를 확인하고 FEA를 보완해 주세요.',1,'danger'):null;
+    if(project.historicalImport&&project.feaCompleted===false&&!project.g1Resolution)return relations.feaAuthor?item(project,'타당성 평가서 작성','FEA 보완 내용을 저장하고 작성 완료해 주세요.',1,'danger'):null;
+    if (Object.values(project.workflowApprovals?.G1 || {}).some(vote=>vote?.decision==='REWORK')) {
+      return currentGateNotification(project, actor, relations, 'G1');
+    }
     if (relations.teamLeader && !project.g1Resolution) {
       return item(project, "G1 착수 판정", "완료된 FEA를 확인하고 Go·Conditional Go·Drop을 판정해 주세요.", 2, "danger");
     }
     if (relations.admin && ["GO", "CONDITIONAL"].includes(project.g1Resolution?.decision) && !(project.developerIds || []).length) {
       return item(project, "개발 담당자 배정", "G1 판정이 완료되었습니다. 개발 담당자를 배정해 주세요.", 2, "danger");
     }
+    if (["GO", "CONDITIONAL"].includes(project.g1Resolution?.decision)) return null;
     return currentGateNotification(project, actor, relations, "G1");
   }
 

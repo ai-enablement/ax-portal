@@ -40,7 +40,7 @@ export async function documentAccess(client, identity, code, write = false, docu
   const order = ['INT','FEA','G1','ARD','G2','DES','G3','PILOT','G4','OPS'];
   const target = { ARD:3, DES:5, EVD:5, EVP:5, EVR:5, DEP:7, UG:7, OPS:9, CHG:9 }[documentType];
   if (!canRead || (write && (!canWrite || target === undefined || order.indexOf(project.current_stage_code) < target))) return null;
-  return {actor,project};
+  return {actor,project,canWrite,related:same(project.requester_id)||same(project.owner_id)};
 }
 export async function uploadDocumentFile(identity, projectCode, documentType, fieldKey, name, bytes) {
   const type = validateUpload(name, bytes);

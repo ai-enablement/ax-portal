@@ -35,11 +35,60 @@ const base = {
   developerIds: ["21"],
   journeyStep: 3,
 };
-test('FEA requester and Owner receive work alerts but unrelated users do not',()=>{
+test('INT belongs to requester for new projects and finalized historical imports',()=>{
+ for(const historicalImport of [false,true]){
+  const p={...base,journeyStep:0,historicalImport,historicalImportFinalizedAt:'2026-09-08'};
+  const actors=[{id:'11',appRole:'general_user'},{id:'21',appRole:'team_member'},{id:'1',appRole:'admin'}];
+  assert.deepEqual(actors.filter(a=>buildWorkNotifications([p],a).length).map(a=>a.id),['11']);
+ }
+});
+
+test('G1 through G4 notify pending configured approval roles, never an unrelated admin',()=>{
+ const actors=[{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'21',appRole:'team_member'},{id:'31',appRole:'team_leader'},{id:'41',appRole:'team_member'},{id:'1',appRole:'admin'}];
+ for(const [gate,journeyStep,expected] of [['G1',2,['31']],['G2',4,['11','12','31']],['G3',6,['31','41']],['G4',8,['12','31']]]){
+  const p={...base,journeyStep,workflowTrack:'HIGH',securityReviewerId:'41',uatRecord:{completed:true}};
+  assert.deepEqual(actors.filter(a=>buildWorkNotifications([p],a).length).map(a=>a.id),expected);
+  p.g1Resolution={decision:'GO'};
+  p.workflowApprovals={[gate]:Object.fromEntries(['requester','owner','team_leader','security_reviewer'].map(r=>[r,{decision:'APPROVED'}]))};
+  assert.deepEqual(actors.filter(a=>buildWorkNotifications([p],a).length),[]);
+ }
+});
+test('new FEA without a recorded author notifies requester, not every permitted editor',()=>{
  const project={...base,journeyStep:1};
- for(const id of ['11','12'])assert.equal(buildWorkNotifications([project],{id,appRole:'general_user'})[0].journeyStep,1);
+ assert.equal(buildWorkNotifications([project],{id:'11',appRole:'general_user'})[0].journeyStep,1);
+ assert.equal(buildWorkNotifications([project],{id:'12',appRole:'general_user'}).length,0);
  assert.equal(buildWorkNotifications([project],{id:'99',appRole:'general_user'}).length,0);
  assert.equal(buildWorkNotifications([{...project,feaCompleted:true}],{id:'11',appRole:'general_user'}).length,0);
+});
+
+test('new FEA targets recorded author; finalized historical FEA targets requester instead of importing admin',()=>{
+ const actors=[{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'21',appRole:'team_member'},{id:'22',appRole:'team_member'},{id:'1',appRole:'admin'},{id:'2',appRole:'team_leader'}];
+ const recipients=p=>actors.filter(a=>buildWorkNotifications([p],a).length).map(a=>a.id);
+ const p={...base,journeyStep:1,feaAuthor:{id:'22'}};
+ assert.deepEqual(recipients(p),['22']);
+ assert.deepEqual(recipients({...p,historicalImport:true,historicalImportFinalizedAt:'2026-09-08',feaAuthor:{id:'1'}}),['11']);
+ assert.deepEqual(recipients({...p,feaAuthor:{id:'1'}}),['1']);
+ assert.deepEqual(recipients({...p,historicalImport:true,historicalImportFinalizedAt:'2026-09-08',developerIds:[]}),['11']);
+});
+
+test('document work in new and historical projects targets assigned developers, including explicitly assigned admins',()=>{
+ for(const historicalImport of [false,true])for(const [journeyStep,deliveryPhase] of [[3,undefined],[5,'design'],[5,'development'],[7,undefined]]){
+  const p={...base,historicalImport,historicalImportFinalizedAt:'2026-09-08',journeyStep,deliveryPhase};
+  assert.equal(buildWorkNotifications([p],{id:'1',appRole:'admin'}).length,0);
+  assert.equal(buildWorkNotifications([p],{id:'22',appRole:'team_member'}).length,0);
+  assert.equal(buildWorkNotifications([p],{id:'21',appRole:'team_member'}).length,1);
+  assert.equal(buildWorkNotifications([p],{id:'21',appRole:'admin'}).length,1);
+ }
+});
+
+test('all gate rework targets the document author and suspends pending approval notices',()=>{
+ for(const [gate,journeyStep] of [['G1',2],['G2',4],['G3',6],['G4',8]]){
+  const p={...base,journeyStep,feaAuthor:{id:'11'},uatRecord:{completed:true},workflowApprovals:{[gate]:{owner:{decision:'REWORK',reason:'보완 사유'}}}};
+  const id=gate==='G1'?'11':'21';
+  assert.equal(buildWorkNotifications([p],{id,appRole:'general_user'})[0].title,`${gate} 보완 요청 반영`);
+  assert.equal(buildWorkNotifications([p],{id:'1',appRole:'admin'}).length,0);
+  assert.equal(buildWorkNotifications([p],{id:'2',appRole:'team_leader'}).length,0);
+ }
 });
 test('G3 still notifies requester until UAT is recorded',()=>{
  const project={...base,journeyStep:6,workflowTrack:'MEDIUM'};

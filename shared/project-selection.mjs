@@ -7,3 +7,11 @@ export function currentWorkflowTarget(project,target) {
   if(target.deliveryPhase && target.deliveryPhase!==(project.deliveryPhase||'design'))return null;
   return target;
 }
+
+// PATCH returns the full workflow state, but not every read-model projection.
+// Preserve display/identity projections only; removed approvals/UAT must stay removed.
+export function savedProjectView(previous,saved) {
+  if(saved.no&&saved.no!==previous.no)throw new Error('다른 과제의 저장 응답입니다.');
+  const projectionKeys=['name','category','description','stage','progress','nextAction','requestedDate','receivedDate','owner','requester','projectOwner','requesterId','ownerId','projectOwnerEmail','requesterEmail','developerIds','developerNames','handler','updated','feaAuthor','journeyStep'];
+  return {...Object.fromEntries(projectionKeys.filter(k=>previous[k]!==undefined).map(k=>[k,previous[k]])),...saved,no:previous.no,source:previous.source};
+}

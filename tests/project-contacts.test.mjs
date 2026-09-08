@@ -69,7 +69,8 @@ test('contact resolution parameterizes email and does not reactivate or rename e
 test('wizard persists contact fields in both modes and project list returns owner email', async () => {
   const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');
   const server=await readFile(new URL('../server/database-api.mjs',import.meta.url),'utf8');
-  assert.equal((page.match(/email=\{resolvedOwnerEmail\}/g)||[]).length,2);
+  assert.equal((page.match(/email=\{ownerEmailInput\}/g)||[]).length,2);
+  assert.ok(page.includes('const resolvedOwnerEmail = normalizeContactEmail(ownerEmailInput)'));
   assert.equal((page.match(/selfEmailEditable=\{isAiTeam\}/g)||[]).length,2);
   assert.equal((page.match(/ownerMode === "SELF" && isAiTeam \? setRequesterEmail\(email\) : setProjectOwnerEmail\(email\)/g)||[]).length,2);
   assert.ok(page.includes('readOnly={mode === "SELF" && !selfEmailEditable}'));

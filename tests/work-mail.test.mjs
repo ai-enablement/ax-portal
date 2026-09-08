@@ -1,6 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mailKey,mailPayload,managedIdentityToken,deliveryOutcome,deliverMail,WORK_MAIL_INTERVAL_MS} from '../server/work-mail.mjs';
+import {mailKey,mailPayload,managedIdentityToken,deliveryOutcome,deliverMail,WORK_MAIL_INTERVAL_MS,scanWorkMail} from '../server/work-mail.mjs';
+
+test('live scan queues the actual FEA assignee and cancels obsolete admin work without sending mail',async()=>{
+ const actors=[{id:'1',email:'admin@example.com',app_role:'admin'},{id:'21',email:'dev@example.com',app_role:'team_member'},{id:'11',email:'requester@example.com',app_role:'general_user'}];
+ for(const historicalImport of [false,true]){
+  const queued=[],cancelled=[];
+  const client={query:async(sql,args)=>{
+   if(sql.startsWith('select id from agent_portal.work_mail_control'))return {rowCount:1};
+   if(sql.startsWith('select id,email'))return {rows:actors};
+   if(sql.startsWith('select active_keys'))return {rows:[{active_keys:[]}]};
+   if(sql.startsWith('insert into agent_portal.work_mail_outbox'))queued.push(JSON.parse(args[3]));
+   if(sql.includes("status='cancelled'")&&sql.includes('notification_key=any'))cancelled.push(args);
+   return {rows:[],rowCount:0};
+  }};
+  const project={no:'2026-033',name:'Test',source:'database',journeyStep:1,requesterId:'11',developerIds:['21'],historicalImport,historicalImportFinalizedAt:'2026-09-08',feaAuthor:{id:historicalImport?'1':'11'}};
+  await scanWorkMail(client,{PORTAL_MAIL_MODE:'live',PORTAL_APP_URL:'https://portal.example.com'},async()=>({body:{projects:[project]}}));
+  assert.deepEqual(queued.map(p=>p.recipient),['requester@example.com']);
+  assert.deepEqual(cancelled.find(([id])=>id==='1'),['1',[]]);
+ }
+});
 test('automatic work mail checks run hourly',()=>{
  assert.equal(WORK_MAIL_INTERVAL_MS,3600000);
 });

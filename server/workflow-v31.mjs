@@ -1,6 +1,6 @@
 import {allApproved,requiredApprovers,eligibleRole,gateGaps,gateBasis,projectTrack,documentComplete,designDocumentComplete,developmentEvdComplete,releaseEvdComplete,isLowRoute,GATE_STEPS,displayStage} from '../shared/workflow-v31.mjs';
 import {isImportInProgress,needsImportCompletionRepair} from '../shared/historical-import-policy.mjs';
-import {ardLiteGaps,fastTrackRequestGaps,FAST_TRACK_STATUSES} from '../shared/fast-track.mjs';
+import {ardLiteGaps,ardLiteDocumentComplete,fastTrackRequestGaps,FAST_TRACK_STATUSES} from '../shared/fast-track.mjs';
 import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
@@ -60,6 +60,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     if(!currentPhase&&!importedPhase)deny('현재 진행 중인 문서 단계만 완료할 수 있습니다.');
     const document=previous.markdownDocuments?.[documentType],entry=document?.phases?.[phase];
     if(!entry||Number(entry.version)<=0)deny(`${phase==='design'?'설계 DES':phase==='development_evaluation'?'개발·평가 EVD':'배포·확산 EVD'} 최종 버전을 먼저 첨부해 주세요.`);
+    if(changes.markdownCompleteAction.version!==undefined&&Number(changes.markdownCompleteAction.version)!==Number(entry.version))deny('새 문서 버전이 등록되었습니다. 최신 버전을 확인한 뒤 완료해 주세요.');
     const completedEntry={...entry,status:'complete',completedVersion:Number(entry.version),completedAt:now,completedById:String(actor.id),completedByName:actor.display_name};
     merged.markdownDocuments={...(previous.markdownDocuments||{}),[documentType]:{...document,phases:{...(document.phases||{}),[phase]:completedEntry}}};
     markdownPhaseChanged=true;
@@ -82,6 +83,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     const action=changes.fastTrackAction;
     const fast=previous.fastTrack;
     if(!fast?.requested||previous.historicalImport)deny('Fast Track 신청 과제에서만 처리할 수 있습니다.');
+    const requirementsAuthor=author||actor.app_role==='team_leader'||[project.requester_id,project.owner_id].some(id=>id!=null&&String(id)===String(actor.id));
     merged.fastTrack=structuredClone(fast);
     if(action.type==='qualify'||action.type==='reject'){
       if(actor.app_role!=='team_leader'||fast.status!==FAST_TRACK_STATUSES.REQUESTED)deny('팀장이 자격 판정 대기 중인 Fast Track만 판정할 수 있습니다.',403);
@@ -96,13 +98,23 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
         merged.nextAction='ARD-Lite 6개 항목 작성';
       }
     }else if(action.type==='save_ard_lite'){
+      if(!requirementsAuthor)deny('최소 요구정의 작성 권한이 없습니다.',403);
       if(![FAST_TRACK_STATUSES.QUALIFIED].includes(fast.status))deny('Fast Track 자격 판정 후 ARD-Lite를 작성할 수 있습니다.');
       merged.ardLite={...(previous.ardLite||{}),...(action.ardLite||{})};
+      if(previous.markdownDocuments?.ARD_LITE)deny('첨부 문서를 새 버전으로 수정해 주세요.');
       merged.nextAction=ardLiteGaps(merged.ardLite).length?'ARD-Lite 필수 항목 보완':'AI 활성화팀장 GF 긴급 착수 승인';
+    }else if(action.type==='complete_ard_lite'){
+      if(!requirementsAuthor)deny('최소 요구정의 작성 권한이 없습니다.',403);
+      if(fast.status!==FAST_TRACK_STATUSES.QUALIFIED||!previous.intakeReview?.at||intakeRequired(previous).length)deny('INT 검토와 Fast Track 자격 판정을 먼저 완료해 주세요.');
+      const doc=previous.markdownDocuments?.ARD_LITE,entry=doc?.phases?.fast_track_requirements;
+      if(!entry?.id||Number(entry.version)!==Number(action.version)||ardLiteGaps(previous.ardLite).length)deny('최신 ARD-Lite .md 버전을 확인한 뒤 완료해 주세요.');
+      merged.markdownDocuments={...previous.markdownDocuments,ARD_LITE:{...doc,phases:{...doc.phases,fast_track_requirements:{...entry,status:'complete',completedAt:now,completedById:String(actor.id),completedByName:actor.display_name}}}};
     }else if(action.type==='approve_gf'){
       if(actor.app_role!=='team_leader'||fast.status!==FAST_TRACK_STATUSES.QUALIFIED)deny('팀장이 자격을 인정한 Fast Track만 GF 승인할 수 있습니다.',403);
+      if(!previous.intakeReview?.at||!previous.intakeDraftCompleted||intakeRequired(merged).length)deny('INT AI 인터뷰·검토를 먼저 완료해 주세요.');
       const gaps=ardLiteGaps(merged.ardLite);
       if(gaps.length)deny(`ARD-Lite 필수 항목을 확인해 주세요: ${gaps.join(', ')}`);
+      if(!ardLiteDocumentComplete(previous))deny('ARD-Lite .md 최종 버전을 첨부하고 작성 완료해 주세요.');
       if(!(merged.developerIds||[]).length)deny('Admin이 개발 담당자를 먼저 배정해 주세요.');
       const due=new Date(Date.parse(now)+24*60*60*1000).toISOString();
       merged.fastTrack={...fast,status:FAST_TRACK_STATUSES.GF_APPROVED,gfApprovedByName:actor.display_name,gfApprovedAt:now,ownerNotificationDueAt:due};
@@ -235,7 +247,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   }
   if(isLowRoute(merged)){merged.status=merged.lowRoute.phase==='operating'?'운영 중':merged.lowRoute.registeredAt?'하 트랙 · 배포 대기':'하 트랙 · 운영대장 등록';merged.progress=merged.lowRoute.phase==='operating'?100:90;}
   if(merged.fastTrack?.status===FAST_TRACK_STATUSES.REQUESTED){merged.status='Fast Track 자격 판정 대기';merged.nextAction='AI 활성화팀장 Fast Track 자격 판정';}
-  if(merged.fastTrack?.status===FAST_TRACK_STATUSES.QUALIFIED){merged.status='ARD-Lite 작성 및 GF 승인 대기';merged.nextAction=ardLiteGaps(merged.ardLite).length?'ARD-Lite 필수 항목 작성':'AI 활성화팀장 GF 긴급 착수 승인';}
+  if(merged.fastTrack?.status===FAST_TRACK_STATUSES.QUALIFIED){merged.status='ARD-Lite 작성 및 GF 승인 대기';merged.nextAction=!merged.intakeReview?.at?'INT AI 인터뷰·검토':!ardLiteDocumentComplete(merged)?'ARD-Lite .md 작성·완료':'AI 활성화팀장 GF 긴급 착수 승인';}
   return merged;
 }
 

@@ -6,7 +6,8 @@ type Proposal={key:string;value:string;evidence:string;kind:string; baseValue:st
 type MissingField={key:string;label:string;held:boolean};
 type Snapshot={configured:boolean;fields:{key:string;label:string}[];messages:{role:string;text:string}[];session:{revision?:number;proposals?:Proposal[];request?:{id:string;message:string;status:string}};progress:{total:number;ready:boolean;collectionComplete?:boolean;canComplete?:boolean;missing:MissingField[];interviewMissing?:MissingField[]};computed:{classification:{label:string;signals:string[]}|null;roi:{monthlyHours:number}|null};conflicts?:string[]};
 const choiceLabels:Record<string,string>={true:'해당',false:'비해당',PERSONAL:'개인',TEAM:'팀',DEPT:'부서',MULTI_DEPT:'여러 부서',COMPANY:'전사',L0:'L0 · 정보 제공',L1:'L1 · 초안 생성 후 사람이 검토·처리',L2:'L2 · 사람이 승인한 뒤 Agent 실행',L3:'L3 · 자동 실행 후 사람이 검토',L4:'L4 · 완전 자율 실행'};
-export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
+export default function IntakeAgentPanel({projectNo,fastTrack=false,resumedHistorical=false}:{projectNo:string;fastTrack?:boolean;resumedHistorical?:boolean}) {
+  const reviewLabel=fastTrack?'INT 확인 완료 → 요구정의 작성':'INT 확인 완료 → FEA 작성';
   const [data,setData]=useState<Snapshot|null>(null);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
@@ -45,7 +46,7 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
       if(!mounted.current) return;
       setData(payload);setSelected([]);
       if(action==='message'){setInput('');setRetry(null);}
-      setNotice(payload.conflicts?.length?`다른 사람이 수정한 항목은 덮어쓰지 않았습니다: ${payload.conflicts.join(', ')}`:action==='review_intake'?'INT 확인을 완료했습니다. FEA 작성 단계로 이동합니다.':action==='confirm'?'확인한 내용을 INT·FEA 초안에 저장했습니다. 승인이나 단계 완료는 변경하지 않았습니다.':action==='resume'?'보류를 해제했습니다. 아래에 답변을 이어서 입력해 주세요.':'대화와 AI 초안을 DB에 저장했습니다.');
+      setNotice(payload.conflicts?.length?`다른 사람이 수정한 항목은 덮어쓰지 않았습니다: ${payload.conflicts.join(', ')}`:action==='review_intake'?(fastTrack?'INT 확인을 완료했습니다. Fast Track 최소 요구정의(ARD-Lite)를 작성해 주세요.':'INT 확인을 완료했습니다. FEA 작성 단계로 이동합니다.'):action==='confirm'?'확인한 내용을 INT·FEA 초안에 저장했습니다. 승인이나 단계 완료는 변경하지 않았습니다.':action==='resume'?'보류를 해제했습니다. 아래에 답변을 이어서 입력해 주세요.':'대화와 AI 초안을 DB에 저장했습니다.');
     } catch(e) {if(mounted.current){await refresh();setError(e instanceof Error?e.message:'연결을 확인해 주세요.');}}
     finally {inFlight.current=false;if(mounted.current)setBusy(false);}
   }
@@ -53,14 +54,15 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
   const phase=(data?.progress as Snapshot['progress'] & {phase?:string})?.phase||'INT';
   const interviewMissing=data?.progress.interviewMissing||data?.progress.missing||[];
   if(data&&phase==='INT'&&data.progress.ready&&!interviewMissing.length) return <section className="portal-intake-review-ready" aria-label="요구 접수 완료 확인">
-    <div>{error&&<p className="agent-error" role="alert">{error}</p>}{notice&&<p className="agent-notice" role="status">{notice}</p>}<small>INT · 필수 정보 확인 완료</small><strong>추가 인터뷰 없이 타당성 평가로 넘어갈 수 있습니다.</strong><p>입력된 INT를 확인한 뒤 FEA 작성 단계를 시작합니다.</p></div>
-    <button type="button" disabled={busy||serverRunning} onClick={()=>void send('review_intake')}>INT 확인 완료 → FEA 작성</button>
+    <div>{error&&<p className="agent-error" role="alert">{error}</p>}{notice&&<p className="agent-notice" role="status">{notice}</p>}<small>INT · 필수 정보 확인 완료</small><strong>{fastTrack?'입력된 INT 확인 후 최소 요구정의(ARD-Lite)를 작성합니다.':'추가 인터뷰 없이 타당성 평가로 넘어갈 수 있습니다.'}</strong><p>{fastTrack?'INT 검토와 ARD-Lite 작성 없이 GF 승인을 진행할 수 없습니다.':'입력된 INT를 확인한 뒤 FEA 작성 단계를 시작합니다.'}</p></div>
+    <button type="button" disabled={busy||serverRunning} onClick={()=>void send('review_intake')}>{reviewLabel}</button>
   </section>;
-  return <section className="portal-intake-agent" aria-label="신규 과제 INT FEA 자동 인터뷰">
-    <header><div><small>{phase} · 신규 과제 전용</small><h3>{phase==='INT'?'① 요구 접수 Agent 검토':'② 타당성 평가 Agent 작성'}</h3><p>요구 접수 검토를 완료한 후 FEA를 작성합니다. 확인한 내용만 문서에 반영하며 AI 요약은 담당자가 검토합니다.</p></div><button type="button" onClick={()=>void refresh()} disabled={busy}>대화 새로고침</button></header>
+  return <section className="portal-intake-agent" aria-label="INT FEA 자동 인터뷰">
+    <header><div><small>{phase} · {resumedHistorical?'이관 완료 후 작성':'신규 과제'}</small><h3>{phase==='INT'?'① 요구 접수 Agent 검토':'② 타당성 평가 Agent 작성'}</h3><p>{resumedHistorical?'이관 완료된 INT를 바탕으로 FEA의 부족한 정보를 질문합니다. 확인한 내용을 우측에서 문서에 반영한 뒤 FEA 작성을 완료해 주세요.':fastTrack?'요구 접수 AI 인터뷰·검토 후 최소 요구정의(ARD-Lite)를 작성합니다. GF 승인 전까지 개발 단계로 넘어가지 않습니다.':'요구 접수 검토를 완료한 후 FEA를 작성합니다. 확인한 내용만 문서에 반영하며 AI 요약은 담당자가 검토합니다.'}</p></div><button type="button" onClick={()=>void refresh()} disabled={busy}>대화 새로고침</button></header>
     {error && <p className="agent-error" role="alert">{error}</p>}
     {notice && <p className="agent-notice" role="status">{notice}</p>}
     {data && <>
+      {resumedHistorical&&phase==='FEA'&&!data.progress.collectionComplete&&<button type="button" disabled={busy||serverRunning||!data.configured} onClick={()=>void send('message',[],{id:crypto.randomUUID(),message:'저장된 INT를 바탕으로 요구 요약을 제안하고 FEA에서 아직 부족한 정보를 하나씩 질문해 주세요. 이관 완료된 INT나 승인 상태는 변경하지 마세요.'})}>저장된 INT로 FEA 인터뷰 시작·계속</button>}
       {!data.configured && <p className="agent-notice">AI 연결 미설정 · 서버 환경 변수 등록 후 이용할 수 있습니다. 기존 문서 직접 입력은 계속 사용할 수 있습니다.</p>}
       <div className={`agent-interview-grid ${phase==='INT'?'int-simple':''}`}>
         <div className="agent-conversation">
@@ -81,7 +83,7 @@ export default function IntakeAgentPanel({projectNo}:{projectNo:string}) {
           <div><b>INT 자동 작성 중</b><p>답변에서 확인된 내용은 바로 접수서에 저장하고, Agent가 다음 미확보 항목을 이어서 질문합니다.</p></div>
           <strong>{data.progress.ready?'필수 정보 확인 완료':`필수 정보 ${data.progress.missing.length}개 남음`}</strong>
           {interviewMissing.length>0&&<details><summary>앞으로 확인할 항목 {interviewMissing.length}개</summary><ol>{interviewMissing.map(field=><li key={field.key}>{field.label}</li>)}</ol></details>}
-          {data.progress.ready&&<button type="button" disabled={busy||serverRunning} onClick={()=>void send('review_intake')}>INT 확인 완료 → FEA 작성</button>}
+          {data.progress.ready&&<button type="button" disabled={busy||serverRunning} onClick={()=>void send('review_intake')}>{reviewLabel}</button>}
         </div>:<div className="agent-review">
           <h4>문서 반영 전 확인 <span>{proposals.length}개</span></h4>
           <p>‘답변에서 추출’도 정확한지 확인해 주세요. ‘AI 제안’은 검토 전까지 사실로 확정되지 않습니다. 직접 작성 중인 문서는 먼저 저장한 뒤 반영해 주세요.</p>

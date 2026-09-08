@@ -15101,6 +15101,7 @@ body {
 }
 .wizard-form-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -15109,9 +15110,10 @@ body {
   border-top: 1px solid #e1e6ed;
   background: #fff;
 }
-.wizard-form-actions span {
-  color: #68758a;
-  font-size: 12px;
+.chat-wizard .wizard-form-actions > span {
+  color: #294f7d;
+  font-size: 15px !important;
+  line-height: 1.6;
   font-weight: 750;
 }
 .wizard-form-actions button {

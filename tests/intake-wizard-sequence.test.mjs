@@ -20,3 +20,16 @@ test("chat registration renders only the current INT section before advancing", 
   assert.match(page,/step === 5 && !canSubmit/);
   assert.match(editor,/INT_SECTIONS\.filter\(section=>section\.number===sectionNumber\)/);
 });
+
+test('registration explains blockers, retains raw email while typing, and labels the Agent name',()=>{
+ const page=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+ assert.match(page,/등록 전 확인:.*registrationGaps/);
+ assert.match(page,/finally \{setSubmitted\(false\);\}/);
+ assert.match(page,/isHistorical \|\| !fastTrackRequested/);
+ assert.equal((page.match(/email=\{ownerEmailInput\}/g)||[]).length,2);
+ assert.match(page,/aria-label="Agent 과제명"/);
+ assert.doesNotMatch(page,/희망 완료일|희망 시점|희망 요청일/);
+ assert.match(css,/\.chat-wizard \.wizard-form-actions > span \{[\s\S]*?font-size: 15px !important/);
+ assert.equal((page.match(/onClick=\{startPersonalSubmission\}/g)||[]).length,1);
+});

@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {selectedProjectNumber,currentWorkflowTarget} from '../shared/project-selection.mjs';
+import {selectedProjectNumber,currentWorkflowTarget,savedProjectView} from '../shared/project-selection.mjs';
 const regular={no:'2026-033',journeyStep:5,deliveryPhase:'design'};
 const fast={no:'FAST',journeyStep:5,fastTrack:{requested:true}};
+
+test('partial INT save preserves stage projections but cannot revive removed approval state',()=>{
+ const old={...regular,source:'database',requesterId:'12',uatRecord:{completed:true},intakeAnswers:['업무']};
+ const next=savedProjectView(old,{no:regular.no,intakeAnswers:['보완'],intakeDetails:{}});
+ assert.equal(next.journeyStep,5);assert.equal(next.source,'database');assert.equal(next.requesterId,'12');
+ assert.equal(next.uatRecord,undefined);
+ assert.throws(()=>savedProjectView(old,{no:fast.no}),/다른 과제/);
+});
 test('upload, completion, approval and interview refreshes cannot switch to a Fast Track project',()=>{
   let list=[fast,regular];let selected=regular.no;
   for(const step of [5,6,7,8]) {
@@ -32,4 +40,5 @@ test('home detail uses project keys and does not reset selection when list size 
   assert.doesNotMatch(source,/\[isAiTeam, role, projectNo, projectItems\.length\]/);
   assert.match(source,/const requestedAction = currentWorkflowTarget\(current,workflowActionTarget\)/);
   assert.match(source,/onClick=\{\(\) => selectProject\(project\)\}/);
+  assert.match(source,/onSelectProject\(project.no\)/);
 });

@@ -1,4 +1,22 @@
 import {AGENT_FIELDS,fieldValue} from '../shared/intake-agent.mjs';
+import {canWriteResumedFea,canWriteResumedIntake} from '../shared/fea-assignment.mjs';
+
+export function canSaveResumedIntake(actor,project,state,changes){
+  const keys=Object.keys(changes);
+  return actor.is_active===true&&['INT','FEA'].includes(project.current_stage_code)&&
+    canWriteResumedIntake({...state,requester_id:project.requester_id},actor)&&keys.length>0&&
+    keys.every(key=>['intakeAnswers','intakeDetails','intakeStandardVersion','intakeDraftCompleted','requestedDate'].includes(key))&&
+    (!('intakeDraftCompleted' in changes)||changes.intakeDraftCompleted===true);
+}
+
+export function canSaveResumedFea(actor,project,state,changes){
+  const keys=Object.keys(changes);
+  return actor.is_active===true&&['FEA','G1'].includes(project.current_stage_code)&&
+    (project.current_stage_code==='G1')===(Number(state.journeyStep)===2)&&
+    canWriteResumedFea({...state,requester_id:project.requester_id},actor)&&keys.length>0&&
+    keys.every(key=>['feaDraft','feaCompleted'].includes(key))&&
+    (!('feaCompleted' in changes)||changes.feaCompleted===true);
+}
 
 export function canCompleteOwnFea(actor,project,state,changes){
   return actor.is_active===true && [project.requester_id,project.owner_id].some(id=>id!=null&&String(id)===String(actor.id)) &&

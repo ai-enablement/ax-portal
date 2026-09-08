@@ -34,9 +34,28 @@ export function ardLiteGaps(ardLite) {
     ["prohibitedActions", "금칙 목록"],
     ["emergencyReasonAndDeadline", "긴급 사유와 기한"],
   ];
-  return fields.filter(([key]) => !String(ardLite?.[key] || "").trim()).map(([, label]) => label);
+  return fields.filter(([key]) => !String(ardLite?.[key] || "").trim() || /^(미정|미입력|TBD|확인 필요|추후 작성)[.\s]*$/i.test(String(ardLite?.[key]||''))).map(([, label]) => label);
 }
 
 export function isFastTrack(state) {
   return state?.fastTrack?.requested === true;
+}
+
+export const ARD_LITE_SECTIONS = [
+  ['definition','한 줄 정의'],['outOfScope','Out of Scope'],['autonomy','자율성 수준'],
+  ['successCriteria','성공 기준'],['prohibitedActions','금칙 목록'],['emergencyReasonAndDeadline','긴급 사유와 기한'],
+];
+export const ARD_LITE_TEMPLATE = '# 최소 요구정의서 [ARD-Lite]\n\n'+ARD_LITE_SECTIONS.map(([,label],i)=>`## ${i+1}. ${label}\n\n`).join('\n');
+export function parseArdLiteMarkdown(markdown) {
+  const result={};let key=null;
+  for(const line of markdown.replace(/\r\n/g,'\n').split('\n')) {
+    const heading=line.match(/^#{1,2}\s+(.+)$/);
+    if(heading){key=ARD_LITE_SECTIONS.find(([,label])=>heading[1].toLowerCase().includes(label.toLowerCase()))?.[0]||null;continue;}
+    if(key)result[key]=[result[key]||'',line].join('\n').trim();
+  }
+  return result;
+}
+export function ardLiteDocumentComplete(project) {
+  const record=project.markdownDocuments?.ARD_LITE?.phases?.fast_track_requirements;
+  return Boolean(record?.id&&record.version>0&&record.status==='complete'&&!ardLiteGaps(project.ardLite).length);
 }

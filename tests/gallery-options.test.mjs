@@ -9,11 +9,12 @@ test('Gallery uses the requested business categories',()=>{
 });
 
 test('creation platforms and data classes support multiple unique selections',()=>{
-  assert.equal(GALLERY_PLATFORMS.length,5);
+  assert.equal(GALLERY_PLATFORMS.length,4);
   assert.equal(GALLERY_DATA_CLASSES.length,4);
   const selected=toggleGallerySelection(toggleGallerySelection([], 'Copilot Studio'),'Power Automate');
-  assert.deepEqual(galleryCodes(selected,'platform'),['copilot_studio','power_automate']);
-  assert.equal(displayGallerySelections(['copilot_studio','power_automate'],'platform'),'Copilot Studio · Power Automate');
+  assert.deepEqual(galleryCodes(selected,'platform'),['copilot_studio','power_platform']);
+  assert.equal(displayGallerySelections(['copilot_studio','power_automate','power_apps'],'platform'),'Copilot Studio · Power Platform');
+  assert.deepEqual(galleryCodes(['Power Apps','Power Automate','Power Platform'],'platform'),['power_platform']);
   assert.equal(primaryGalleryDataClass(['사내','개인정보 포함']),'personal_data');
   assert.throws(()=>galleryCodes([], 'platform'),/선택/);
 });
