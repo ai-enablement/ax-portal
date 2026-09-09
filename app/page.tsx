@@ -19,6 +19,7 @@ import FastTrackPanel from './fast-track-panel';
 import {isLowRoute} from '../shared/workflow-v31.mjs';
 import {FAST_TRACK_EXTERNAL_FACTORS} from '../shared/fast-track.mjs';
 import {buildWorkNotifications, filterProjectList} from '../shared/work-notifications.mjs';
+import {homeProjectList,PROJECT_LIST_FILTERS,PROJECT_LIST_SORTS,projectNumberBadge} from '../shared/project-list.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import {canWriteResumedFea,canWriteResumedIntake,canUseResumedFeaAgent} from '../shared/fea-assignment.mjs';
 import {isProjectDeveloper} from '../shared/project-actors.mjs';
@@ -7032,7 +7033,8 @@ function UserDashboard({
   const isAiTeam = isLeader || isAiTeamMember;
   const isProjectContributor = isAiTeam || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.bpSolution;
   const [selectedProjectNo, setSelectedProjectNo] = useState(projectNo || projectItems[0]?.no || "");
-  const [filter, setFilter] = useState("전체");
+  const [filter, setFilter] = useState("내 진행 중 과제");
+  const [projectSort,setProjectSort]=useState('최신 과제순');
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [selectedDeliveryPhase, setSelectedDeliveryPhase] = useState<"design" | "development">("design");
   const [chatInput, setChatInput] = useState("");
@@ -7047,7 +7049,7 @@ function UserDashboard({
     // Only explicit external navigation resets a user's locally selected project.
     if(projectNo)setSelectedProjectNo(projectNo);
   }, [isAiTeam, role, projectNo]);
-  useEffect(()=>setFilter('전체'),[isAiTeam,role]);
+  useEffect(()=>setFilter('내 진행 중 과제'),[isAiTeam,role,identity?.userId]);
 
   useEffect(()=>{
     // Keep the key during an empty/loading list. Settle a fallback only when
@@ -7179,10 +7181,11 @@ function UserDashboard({
           : "진행 중"
         : "생성 전";
   const developerActorId = identity?.userId || signedInTeamAccount?.id;
-  const visible: UserProject[] = filterProjectList(projectItems, filter, developerActorId);
+  const listActor={...identity,id:developerActorId};
+  const visible: UserProject[] = homeProjectList(projectItems, filter, listActor,projectSort);
   const applyFilter = (next: string) => {
     setFilter(next);
-    const matches: UserProject[] = filterProjectList(projectItems, next, developerActorId);
+    const matches: UserProject[] = homeProjectList(projectItems, next, listActor,projectSort);
     if (matches.length === 0) return;
     if (next !== "전체") {
       const project = matches.find(item => item.no === current.no) || matches[0];
@@ -7298,7 +7301,7 @@ function UserDashboard({
               </p>
             </div>
             <div className="compact-filters">
-              {["전체", "내 할 일", "진행 중"].map((item) => (
+              {PROJECT_LIST_FILTERS.map((item) => (
                 <button
                   key={item}
                   className={filter === item ? "active" : ""}
@@ -7308,6 +7311,7 @@ function UserDashboard({
                 </button>
               ))}
             </div>
+            <label className="project-list-sort">정렬<select aria-label="과제 목록 정렬" value={projectSort} onChange={event=>setProjectSort(event.target.value)}>{PROJECT_LIST_SORTS.map(option=><option key={option} value={option}>{option}</option>)}</select><span>{visible.length}건</span></label>
           </header>
           <div className="project-stack">
             {hasProjects && visible.length === 0 && <div className="project-stack-empty"><b>{filter === "내 할 일" ? "개발 담당자로 배정된 과제가 없습니다." : "조건에 맞는 과제가 없습니다."}</b></div>}
@@ -7323,9 +7327,6 @@ function UserDashboard({
               </div>
             )}
             {visible.map((project) => {
-              const index = projectItems.findIndex(
-                (item) => item.no === project.no,
-              );
               return (
                 <button
                   key={project.no}
@@ -7333,8 +7334,8 @@ function UserDashboard({
                   data-project-select
                   onClick={() => selectProject(project)}
                 >
-                  <span className={`project-stage-number ${project.tone}`}>
-                    {index + 1}
+                  <span className={`project-stage-number ${project.tone}`} aria-label={`과제번호 ${project.no}`}>
+                    {projectNumberBadge(project.no)}
                   </span>
                   <div>
                     <p>
