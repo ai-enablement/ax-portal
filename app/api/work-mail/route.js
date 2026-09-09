@@ -5,6 +5,7 @@ import {getPool} from '../../../server/db/pool.mjs';
 import {deliverMail,mailPayload} from '../../../server/work-mail.mjs';
 import {mailAppOrigin} from '../../../server/mail-config.mjs';
 import {safeMailDiagnostic} from '../../../server/mail-diagnostics.mjs';
+import {workerHealth} from '../../../server/work-mail-health.mjs';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 async function admin(request) {
@@ -16,7 +17,9 @@ async function admin(request) {
 export async function GET(request) {
   if(!await admin(request))return Response.json({error:'Admin required'},{status:403});
   const result=await getPool().query('select status,count(*)::integer as count from agent_portal.work_mail_outbox group by status');
-  return Response.json({mode:process.env.PORTAL_MAIL_MODE||'off',configured:Boolean(process.env.POWER_AUTOMATE_MAIL_URL),managedIdentity:Boolean(process.env.IDENTITY_ENDPOINT),counts:result.rows},{headers:{'cache-control':'no-store'}});
+  const scans=await getPool().query('select min(updated_at) as oldest_actor_scan_at,max(updated_at) as latest_actor_scan_at from agent_portal.work_mail_state');
+  const latest=scans.rows[0]?.latest_actor_scan_at;
+  return Response.json({mode:process.env.PORTAL_MAIL_MODE||'off',configured:Boolean(process.env.POWER_AUTOMATE_MAIL_URL),managedIdentity:Boolean(process.env.IDENTITY_ENDPOINT),counts:result.rows,worker:{...workerHealth(),...scans.rows[0],stale:!latest||Date.now()-new Date(latest).getTime()>90*60*1000}},{headers:{'cache-control':'no-store'}});
 }
 export async function POST(request) {
   const actor=await admin(request);

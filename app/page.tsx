@@ -19,7 +19,7 @@ import FastTrackPanel from './fast-track-panel';
 import {isLowRoute} from '../shared/workflow-v31.mjs';
 import {FAST_TRACK_EXTERNAL_FACTORS} from '../shared/fast-track.mjs';
 import {buildWorkNotifications, filterProjectList} from '../shared/work-notifications.mjs';
-import {homeProjectList,PROJECT_LIST_FILTERS,PROJECT_LIST_SORTS,projectNumberBadge} from '../shared/project-list.mjs';
+import {homeProjectList,projectListFilters,PROJECT_LIST_SORTS,projectNumberBadge} from '../shared/project-list.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
 import {canWriteResumedFea,canWriteResumedIntake,canUseResumedFeaAgent} from '../shared/fea-assignment.mjs';
 import {isProjectDeveloper} from '../shared/project-actors.mjs';
@@ -7033,7 +7033,8 @@ function UserDashboard({
   const isAiTeam = isLeader || isAiTeamMember;
   const isProjectContributor = isAiTeam || role === ACCOUNT_ROLES.bts || role === ACCOUNT_ROLES.bpSolution;
   const [selectedProjectNo, setSelectedProjectNo] = useState(projectNo || projectItems[0]?.no || "");
-  const [filter, setFilter] = useState("내 진행 중 과제");
+  const availableProjectFilters=projectListFilters(isAiTeam);
+  const [filter, setFilter] = useState(()=>projectListFilters(isAiTeam)[0]);
   const [projectSort,setProjectSort]=useState('최신 과제순');
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [selectedDeliveryPhase, setSelectedDeliveryPhase] = useState<"design" | "development">("design");
@@ -7049,7 +7050,7 @@ function UserDashboard({
     // Only explicit external navigation resets a user's locally selected project.
     if(projectNo)setSelectedProjectNo(projectNo);
   }, [isAiTeam, role, projectNo]);
-  useEffect(()=>setFilter('내 진행 중 과제'),[isAiTeam,role,identity?.userId]);
+  useEffect(()=>setFilter(projectListFilters(isAiTeam)[0]),[isAiTeam,role,identity?.userId]);
 
   useEffect(()=>{
     // Keep the key during an empty/loading list. Settle a fallback only when
@@ -7182,7 +7183,8 @@ function UserDashboard({
         : "생성 전";
   const developerActorId = identity?.userId || signedInTeamAccount?.id;
   const listActor={...identity,id:developerActorId};
-  const visible: UserProject[] = homeProjectList(projectItems, filter, listActor,projectSort);
+  const activeProjectFilter=availableProjectFilters.includes(filter)?filter:availableProjectFilters[0];
+  const visible: UserProject[] = homeProjectList(projectItems, activeProjectFilter, listActor,projectSort);
   const applyFilter = (next: string) => {
     setFilter(next);
     const matches: UserProject[] = homeProjectList(projectItems, next, listActor,projectSort);
@@ -7301,10 +7303,10 @@ function UserDashboard({
               </p>
             </div>
             <div className="compact-filters">
-              {PROJECT_LIST_FILTERS.map((item) => (
+              {availableProjectFilters.map((item) => (
                 <button
                   key={item}
-                  className={filter === item ? "active" : ""}
+                  className={activeProjectFilter === item ? "active" : ""}
                   onClick={() => applyFilter(item)}
                 >
                   {item}
@@ -7314,7 +7316,7 @@ function UserDashboard({
             <label className="project-list-sort">정렬<select aria-label="과제 목록 정렬" value={projectSort} onChange={event=>setProjectSort(event.target.value)}>{PROJECT_LIST_SORTS.map(option=><option key={option} value={option}>{option}</option>)}</select><span>{visible.length}건</span></label>
           </header>
           <div className="project-stack">
-            {hasProjects && visible.length === 0 && <div className="project-stack-empty"><b>{filter === "내 할 일" ? "개발 담당자로 배정된 과제가 없습니다." : "조건에 맞는 과제가 없습니다."}</b></div>}
+            {hasProjects && visible.length === 0 && <div className="project-stack-empty"><b>{filter === "내 과제(전체)" ? "개발 담당자로 배정된 과제가 없습니다." : filter === "내 진행 중 과제" ? "개발 담당자로 배정된 미완료 과제가 없습니다." : "조건에 맞는 과제가 없습니다."}</b></div>}
             {!hasProjects && (
               <div className="project-stack-empty">
                 <ClipboardText size={30} weight="duotone" />

@@ -24,6 +24,26 @@ test('my work filters solely by developer assignment, not owner, admin or status
  assert.equal(filterProjectList(projects,'전체','21').length,4);
 });
 
+test('open historical imports suppress every external role at every stage, even assigned developers',()=>{
+ for(let journeyStep=0;journeyStep<=9;journeyStep++){
+  const project={...base,historicalImport:true,journeyStep,developerIds:['11','12','21','31','41'],securityReviewerId:'41',fastTrack:{status:'REQUESTED'}};
+  for(const actor of [{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'21',appRole:'bts'},{id:'31',appRole:'bp_solution'},{id:'41',appRole:'general_user'}]){
+   assert.deepEqual(buildWorkNotifications([project],actor),[],`${journeyStep}/${actor.appRole}`);
+  }
+  for(const appRole of ['team_member','team_leader','admin']){
+   assert.equal(buildWorkNotifications([project],{id:'21',appRole})[0].title,'과거 과제 이관 보완');
+  }
+ }
+});
+
+test('finalized historical imports resume actual external document and approval assignments',()=>{
+ const imported={...base,historicalImport:true,historicalImportFinalizedAt:'2026-09-09'};
+ for(const appRole of ['bts','bp_solution'])assert.equal(buildWorkNotifications([imported],{id:'21',appRole})[0].title,'ARD 요구 정의 작성');
+ const g2={...imported,journeyStep:4};
+ for(const actor of [{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'31',appRole:'team_leader'}])assert.equal(buildWorkNotifications([g2],actor)[0].title,'G2 승인 요청');
+ assert.deepEqual(buildWorkNotifications([g2],{id:'99',appRole:'general_user'}),[]);
+});
+
 const base = {
   no: "2026-101",
   name: "회의 지원 Agent",

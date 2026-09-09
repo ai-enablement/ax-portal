@@ -3,6 +3,7 @@ export type WorkNotification = {
   projectName: string;
   title: string;
   body: string;
+  recipientRole?: string;
   journeyStep: number;
   deliveryPhase?: "design" | "development";
   view: "intake" | "definition" | "delivery";

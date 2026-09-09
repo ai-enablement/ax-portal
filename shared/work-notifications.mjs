@@ -96,15 +96,15 @@ function currentGateNotification(project, actor, relations, gate) {
   const role = gateRoleForActor(project, actor, relations, gate);
   if (!role || approvals[role]?.decision) return null;
   const gaps = gateGaps(gate, project);
-  return item(
+  return { ...item(
     project,
     `${gate} 승인 요청`,
     gaps.length
-      ? `승인 전 확인: ${gaps.slice(0, 2).join(" · ")}`
+      ? `${gate} 근거를 확인하고 승인 또는 보완 요청을 처리해 주세요. 승인 전 확인: ${gaps.slice(0, 2).join(" · ")}`
       : "근거를 확인하고 승인 또는 보완 요청을 처리해 주세요.",
     gateStep,
     gaps.length ? "warning" : "danger",
-  );
+  ), recipientRole: {team_leader:'AI 활성화팀장',requester:'요구자',owner:'Project Owner',security_reviewer:'보안 검토 담당자'}[role] };
 }
 
 function projectNotification(project, actor) {
@@ -114,7 +114,9 @@ function projectNotification(project, actor) {
   const fastIntakeReady=Boolean(project.intakeReview?.at&&project.intakeDraftCompleted&&!intakeRequired(project).length);
 
   if (project.historicalImport && !project.historicalImportFinalizedAt) {
-    if (relations.developer) {
+    // Import preparation is internal work, even if an external contributor
+    // is already assigned. Normal role notifications begin after finalization.
+    if (relations.developer && ['team_member','team_leader','admin'].includes(actor.appRole)) {
       return item(project, "과거 과제 이관 보완", "현재 단계까지의 누락 내용을 보완하거나 이관을 완료해 주세요.", step, "warning", project.deliveryPhase);
     }
     return null;
@@ -173,7 +175,7 @@ function projectNotification(project, actor) {
 
   if (step === 3) {
     if (relations.author && !documentComplete(project, 3, "ARD")) {
-      return item(project, "ARD 요구 정의 작성", "필수 요구사항을 작성하고 G2 승인을 요청해 주세요.", 3, "danger");
+      return item(project, "ARD 요구 정의 작성", "AI Agent와 함께 요구 정의서를 작성하고, 내용을 확인한 후 G2 승인을 요청해 주세요.", 3, "danger");
     }
     return null;
   }
@@ -252,7 +254,18 @@ export function buildWorkNotifications(projects, actor) {
     .filter((project) => project?.source === "database")
     .flatMap((project) => {
       const notification = projectNotification(project, actor);
-      return notification ? [notification] : [];
+      if (!notification) return [];
+      const role = notification.recipientRole || (
+        /G1 착수 판정|Fast Track 자격 판정|GF 긴급 착수 승인/.test(notification.title) ? 'AI 활성화팀장' :
+        /개발 담당자 배정/.test(notification.title) ? 'Admin' :
+        /UAT|요구 접수서 작성/.test(notification.title) ? '요구자' :
+        /타당성 평가서 작성|G1 보완 요청/.test(notification.title) ? 'FEA 작성 담당자' :
+        isAssignedDeveloper(project, actor.id) ? '개발 담당자' :
+        isProjectParty(project,actor,'requester') ? '요구자' :
+        isProjectParty(project,actor,'owner') ? 'Project Owner' :
+        actor.appRole === 'team_leader' ? 'AI 활성화팀장' : 'Admin'
+      );
+      return [{...notification,recipientRole:role}];
     })
     .sort((left, right) => {
       const toneOrder = { danger: 0, warning: 1, info: 2 };
