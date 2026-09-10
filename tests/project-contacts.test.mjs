@@ -66,15 +66,15 @@ test('contact resolution parameterizes email and does not reactivate or rename e
   await assert.rejects(resolveContactUser({query:async()=>({rows:[]})},'오너','inactive@example.com',1), error=>error.status===409);
 });
 
-test('wizard persists contact fields in both modes and project list returns owner email', async () => {
+test('historical wizard persists contact fields and project list returns owner email', async () => {
   const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');
   const server=await readFile(new URL('../server/database-api.mjs',import.meta.url),'utf8');
-  assert.equal((page.match(/email=\{ownerEmailInput\}/g)||[]).length,2);
+  assert.equal((page.match(/email=\{ownerEmailInput\}/g)||[]).length,1);
   assert.ok(page.includes('const resolvedOwnerEmail = normalizeContactEmail(ownerEmailInput)'));
-  assert.equal((page.match(/selfEmailEditable=\{isAiTeam\}/g)||[]).length,2);
-  assert.equal((page.match(/ownerMode === "SELF" && isAiTeam \? setRequesterEmail\(email\) : setProjectOwnerEmail\(email\)/g)||[]).length,2);
+  assert.equal((page.match(/selfEmailEditable=\{isAiTeam\}/g)||[]).length,1);
+  assert.equal((page.match(/ownerMode === "SELF" && isAiTeam \? setRequesterEmail\(email\) : setProjectOwnerEmail\(email\)/g)||[]).length,1);
   assert.ok(page.includes('readOnly={mode === "SELF" && !selfEmailEditable}'));
-  assert.equal((page.match(/aria-label="요구자 MS 계정 이메일" aria-invalid=/g)||[]).length,2);
+  assert.equal((page.match(/aria-label="요구자 MS 계정 이메일" aria-invalid=/g)||[]).length,1);
   assert.ok(page.includes('projectOwnerEmail: registration?.projectOwnerEmail'));
   assert.ok(page.includes('contactsValid &&'));
   assert.ok(server.includes('Object.assign(submittedState, contacts)'));

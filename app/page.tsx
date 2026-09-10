@@ -1,6 +1,7 @@
 "use client";
 
 import "./release-documents.css";
+import "./new-request-entry.css";
 import "./operations-documents.css";
 import "./team-dashboard-compact.css";
 import "./team-dashboard-readability.css";
@@ -207,6 +208,7 @@ const projects: ProjectSummary[] = [];
 
 type UserProject = {
   no: string;
+  registrationEntry?: "INT_AGENT";
   clientRequestId?: string;
   createdByUserId?: string;
   requesterId?: string;
@@ -1429,6 +1431,7 @@ export default function Home() {
     requester: string,
     registration?: {
       historical: boolean;
+      registrationEntry?: "INT_AGENT";
       intakeDetails?: UserProject["intakeDetails"];
       feaDraft?: UserProject["feaDraft"];
       intakeDraftCompleted?: boolean;
@@ -1548,6 +1551,7 @@ export default function Home() {
               : "operations";
       const project: UserProject = {
         no: "pending",
+        registrationEntry: registration?.registrationEntry,
         clientRequestId: registration?.clientRequestId || crypto.randomUUID(),
         name: title,
         category,
@@ -1634,7 +1638,7 @@ export default function Home() {
         ? "과거 Agent 과제를 최소 정보로 등록했습니다. 현재 단계 이전 문서는 미등록 상태로 남겨 담당자가 추후 작성할 수 있습니다."
         : registration?.intakeDraftCompleted
         ? "요구 접수서[INT]가 완료되었습니다. AI 인터뷰로 타당성 평가 정보를 보완할 수 있습니다."
-        : "신규 과제가 등록되었습니다. AI 인터뷰 또는 직접 작성으로 INT·FEA 정보를 보완해 주세요.",
+        : "신규 과제가 등록되었습니다. INT Agent와 함께 요구 접수를 작성해 주세요.",
     );
     return true;
   };
@@ -15291,6 +15295,7 @@ function RequestWizard({
     requester: string,
     registration?: {
       historical: boolean;
+      registrationEntry?: "INT_AGENT";
       intakeDetails?: UserProject["intakeDetails"];
       feaDraft?: UserProject["feaDraft"];
       intakeDraftCompleted?: boolean;
@@ -15315,32 +15320,11 @@ function RequestWizard({
   ) => Promise<boolean>;
 }) {
   const isAiTeam = role !== ACCOUNT_ROLES.user;
-  const labels = [
-    "업무 문제",
-    "업무량",
-    "자료 · 데이터",
-    "실패 시 피해",
-    "완료 요청일",
-  ];
-  const prompts = [
-    "먼저 어떤 업무가 가장 힘들거나 실수가 잦은지 알려주세요.",
-    "좋습니다. 이 업무가 얼마나 자주 발생하고 시간이 얼마나 드는지 확인할게요.",
-    "현재 업무에 사용하는 시스템과 참고 자료를 알려주세요.",
-    "잘못 처리되면 어떤 피해가 생기나요? 영향을 구체적으로 알려주세요.",
-    "마지막으로 언제까지 개발되었으면 좋겠는지 완료 요청일을 알려주세요. G2에서 실현 가능한 프로젝트 마감일로 확정합니다.",
-  ];
-  const examples = [
-    "예: 개발 BOM 변경 시 관련 부품과 품질 문서를 수작업으로 확인합니다.",
-    "예: 월 20건, 건당 45분, 담당자 2명이 처리합니다.",
-    "예: SAP BOM, Excel 변경 목록, QMS 품질 문서를 사용합니다.",
-    "예: 검토 누락 시 재작업 비용과 납기 지연이 발생합니다.",
-    "2026-10-30",
-  ];
   const [answers, setAnswers] = useState(["", "", "", "", ""]);
   const [intakeDetails,setIntakeDetails]=useState<NonNullable<UserProject["intakeDetails"]>>({});
   const [historicalFea,setHistoricalFea]=useState<UserProject["feaDraft"]>();
   const [submitted, setSubmitted] = useState(false);
-  const [writingMode, setWritingMode] = useState<"CHAT" | "FORM">("CHAT");
+
   const [registrationMode, setRegistrationMode] = useState<"NEW" | "HISTORICAL">("NEW");
   const [projectCategory, setProjectCategory] = useState<ProjectCategory>("개별 접수");
   const [receivedDate, setReceivedDate] = useState("");
@@ -15371,7 +15355,7 @@ function RequestWizard({
         : [...current, accountId],
     );
   };
-  const resolvedRequester = isAiTeam
+  const resolvedRequester = !isHistorical ? [identity?.displayName, identity?.email].filter(Boolean).join(" · ") : isAiTeam
     ? requesterName.trim() && requesterDepartment.trim() && (isHistorical || requesterEmail.trim())
       ? [requesterName.trim(), requesterDepartment.trim(), requesterEmail.trim()]
           .filter(Boolean)
@@ -15385,23 +15369,14 @@ function RequestWizard({
     : `${identity?.displayName || "요구자"} · ${requesterDepartment.trim() || "부서 미입력"}`;
   const resolvedProjectOwner =
     ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
-  const resolvedRequesterEmail = normalizeContactEmail(isAiTeam ? requesterEmail : identity?.email);
+  const resolvedRequesterEmail = normalizeContactEmail(isHistorical ? requesterEmail : identity?.email);
   const ownerEmailInput = ownerMode === "SELF" ? (isAiTeam ? requesterEmail : identity?.email || "") : projectOwnerEmail;
   const resolvedOwnerEmail = normalizeContactEmail(ownerEmailInput);
   const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
-  const requestTitle = manualTitle.trim() || suggestedRequestTitle;
-  const intakeState = { intakeAnswers: answers, intakeDetails };
-  const stepRequired = step === 1
-    ? answers[0].trim() ? [] : [{ key: "int.0" }]
-    : intakeSectionRequired(intakeState, step);
-  const updateAnswer = (value: string) => { if(step===4)setIntakeDetails(d=>({...d,failureImpact:value}));else setAnswers(items=>items.map((item,index)=>index===step-1?value:item)); };
-  const updateAnswerAt = (targetIndex: number, value: string) =>
-    setAnswers((items) =>
-      items.map((item, index) => (index === targetIndex ? value : item)),
-    );
-  const canSubmit = Boolean(
-    (isHistorical ? manualTitle.trim() && receivedDate : answers[0].trim()) &&
+  const requestTitle = manualTitle.trim();
+  const canSubmit = !isHistorical ? Boolean(manualTitle.trim() && identity?.displayName && isContactEmail(resolvedRequesterEmail) && !submitted && (!fastTrackRequested || (fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()))) : Boolean(
+    manualTitle.trim() && receivedDate &&
       (!requiresHistoricalG1Record ||
         (historicalDeveloperIds.length > 0 &&
           (historicalG1Decision === "GO" || historicalG1Reason.trim()))) &&
@@ -15413,7 +15388,11 @@ function RequestWizard({
       (isHistorical || !fastTrackRequested || Boolean(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim())) &&
       !submitted,
   );
-  const registrationGaps = [
+  const registrationGaps = !isHistorical ? [
+    ...(!manualTitle.trim() ? ["Agent 과제명"] : []),
+    ...(!identity?.displayName || !isContactEmail(resolvedRequesterEmail) ? ["로그인한 MS 계정 이름·이메일"] : []),
+    ...(fastTrackRequested && !(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()) ? ["Fast Track 외부 기한 유형·날짜·사유"] : []),
+  ] : [
     ...(!(isHistorical ? manualTitle.trim() : answers[0].trim()) ? [isHistorical ? 'Agent 과제명' : '업무 문제'] : []),
     ...(isHistorical && !receivedDate ? ['접수 날짜'] : []),
     ...(!resolvedRequester ? ['요구자 이름·소속·MS 계정'] : []),
@@ -15430,17 +15409,18 @@ function RequestWizard({
     setSubmitted(true);setRegistrationError('');
     try {
     const saved = await onSubmit(
-      [...answers],
+      isHistorical ? [...answers] : [],
       requestTitle,
-      resolvedProjectOwner,
+      isHistorical ? resolvedProjectOwner : "",
       resolvedRequester,
       {
         historical: isHistorical,
+        registrationEntry: isHistorical ? undefined : "INT_AGENT",
         intakeDetails: {...intakeDetails,department:requesterDepartment.trim()},
         feaDraft: isHistorical ? historicalFea : undefined,
-        intakeDraftCompleted: !isHistorical && writingMode==="FORM" && intakeRequired({intakeAnswers:answers,intakeDetails}).length===0,
+        intakeDraftCompleted: false,
         ownerMode,
-        projectOwnerEmail: resolvedOwnerEmail,
+        projectOwnerEmail: isHistorical ? resolvedOwnerEmail : "",
         requesterEmail: resolvedRequesterEmail,
         category: role === ACCOUNT_ROLES.user ? "개별 접수" : projectCategory,
         receivedDate,
@@ -15463,43 +15443,21 @@ function RequestWizard({
     } catch {setRegistrationError('등록 요청에 실패했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');}
     finally {setSubmitted(false);}
   };
-  const advance = () => {
-    if (stepRequired.length || submitted || (step === 5 && !canSubmit)) return;
-    if (step < 5) setStep(step + 1);
-    else void submitRequest();
-  };
-  const openChatMode = () => {
-    setRegistrationMode("NEW");
-    const nextStep = !answers[0].trim()
-      ? 1
-      : intakeSectionRequired({ intakeAnswers: answers, intakeDetails }, 2).length
-        ? 2
-        : !intakeDetails.currentProcess?.trim() && !answers[2].trim()
-          ? 3
-          : intakeSectionRequired({ intakeAnswers: answers, intakeDetails }, 4).length
-            ? 4
-            : 5;
-    setStep(nextStep);
-    setWritingMode("CHAT");
-  };
-  const openHistoricalMode = () => {
-    setRegistrationMode("HISTORICAL");
-    setWritingMode("FORM");
-  };
+  const openHistoricalMode = () => setRegistrationMode("HISTORICAL");
   return (
     <div className="modal-wrap">
       <button className="modal-scrim" aria-label="닫기" onClick={close} />
       <section
-        className="wizard chat-wizard"
+        className={"wizard chat-wizard" + (!isHistorical ? " new-request-entry" : "")}
         role="dialog"
         aria-modal="true"
         aria-labelledby="request-wizard-title"
       >
         <header>
           <div>
-            <Pill tone="blue">{isHistorical ? "과거 과제 이관" : writingMode === "CHAT" ? "요구 접수 Agent" : "요구 접수서 직접 작성"}</Pill>
+            <Pill tone="blue">{isHistorical ? "과거 과제 이관" : "요구 접수 · INT"}</Pill>
             <h2 id="request-wizard-title">{isAiTeam ? "새 Agent 과제 등록" : "새 Agent 과제 요청"}</h2>
-            <p>{isAiTeam ? "회의 내용을 바탕으로 요청자를 대신해 등록하거나, Agent와 대화하며 접수할 수 있습니다." : "Agent와 대화하거나 문서 양식에 직접 입력해 요구 접수서를 작성할 수 있습니다."}</p>
+            <p>{isHistorical ? "최소 정보와 현재 진행 단계로 기존 과제를 이관합니다." : "과제 이름만 입력하세요. 등록 후 INT Agent와 함께 요구 접수를 작성합니다."}</p>
           </div>
           <button aria-label="요청 창 닫기" onClick={close}>
             <X size={17} />
@@ -15540,7 +15498,7 @@ function RequestWizard({
               onClick={() => setRegistrationMode("NEW")}
             >
               <Plus size={20} weight="duotone" />
-              <span><b>새 과제 접수</b><small>접수서를 작성하고 타당성 평가부터 시작합니다.</small></span>
+              <span><b>새 과제 접수</b><small>과제명 등록 후 INT Agent에서 시작합니다.</small></span>
             </button>
             <button
               type="button"
@@ -15589,121 +15547,23 @@ function RequestWizard({
             )}
           </section>
         )}
-        {!isHistorical && <div className="request-writing-modes" role="tablist" aria-label="요구 접수서 작성 방식">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={writingMode === "CHAT"}
-            className={writingMode === "CHAT" ? "active" : ""}
-            onClick={openChatMode}
-          >
-            <ChatsCircle size={21} weight="duotone" />
-            <span><b>기본정보 입력 후 AI 인터뷰</b><small>과제를 등록한 뒤 Agent가 INT·FEA의 부족한 내용을 질문합니다.</small></span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={writingMode === "FORM"}
-            className={writingMode === "FORM" ? "active" : ""}
-            onClick={() => setWritingMode("FORM")}
-          >
-            <FileText size={21} weight="duotone" />
-            <span><b>문서 양식 직접 작성</b><small>전체 항목을 한 번에 확인하고 입력합니다.</small></span>
-          </button>
-        </div>}
-        {!isHistorical && writingMode === "CHAT" && (
-          <div className="wizard-steps">
-            {labels.map((label, index) => (
-              <div className={step >= index + 1 ? "active" : ""} key={label}>
-                <span>
-                  {step > index + 1 ? (
-                    <Check size={13} weight="bold" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <small>{label}</small>
-              </div>
-            ))}
-          </div>
+        {!isHistorical && (
+          <form className="new-request-form" onSubmit={event => { event.preventDefault(); void submitRequest(); }}>
+            <label className="new-request-name" htmlFor="new-agent-name">
+              <span>Agent 과제명 <small>필수</small></span>
+              <input id="new-agent-name" value={manualTitle} onChange={event => setManualTitle(event.target.value)} placeholder="예: 회의 일정 관리 Agent" maxLength={200} required autoFocus />
+            </label>
+            <section className="new-request-identity" aria-label="로그인 계정 · 요구자">
+              <strong>요구자 <small>MS 로그인 계정 자동 연결</small></strong>
+              <dl><div><dt>이름</dt><dd>{identity?.displayName || "로그인 정보를 확인해 주세요"}</dd></div><div><dt>이메일</dt><dd>{identity?.email || "로그인이 필요합니다"}</dd></div></dl>
+            </section>
+            <p className="new-request-hint"><ChatsCircle size={20} /><span>업무 내용은 등록 후 작성합니다.<small>생성된 과제의 요구 접수 화면으로 이동해 INT 양식과 AI 인터뷰를 이어갑니다.</small></span></p>
+            {registrationError && <p role="alert" className="new-request-error">{registrationError}</p>}
+            {registrationGaps.length > 0 && <p role="status" className="new-request-validation">등록 전 확인: {registrationGaps.join(" · ")}</p>}
+            <footer className="new-request-actions"><button type="button" className="ghost" onClick={close} disabled={submitted}>취소</button><button type="submit" className="primary" disabled={!canSubmit}>{submitted ? "과제 등록 중…" : "과제 등록 · INT 작성 시작"}<ArrowRight size={17} /></button></footer>
+          </form>
         )}
-        <div className="chat-wizard-grid">
-          {writingMode === "CHAT" ? (
-          <section className="wizard-chat-panel">
-            <header>
-              <span className="brand-mark">AX</span>
-              <div>
-                <strong>접수 기본정보</strong>
-                <small>기본 질문 {step}/5 · 등록 후 AI가 INT·FEA 인터뷰를 이어갑니다</small>
-              </div>
-            </header>
-            <div className="wizard-chat-history">
-              {[
-                answers[0],
-                [intakeDetails.performer, intakeDetails.countPerMonth&&`월 ${intakeDetails.countPerMonth}건`, intakeDetails.asIsMinutes&&`건당 ${intakeDetails.asIsMinutes}분`, intakeDetails.people&&`${intakeDetails.people}명`, intakeDetails.quantityBasis].filter(Boolean).join(" · "),
-                [intakeDetails.currentProcess, answers[2]].filter(Boolean).join("\n"),
-                intakeDetails.failureImpact||"",
-                [answers[4], intakeDetails.timingReason].filter(Boolean).join(" · "),
-              ].slice(0, step - 1).map((answer, index) => (
-                <div className="wizard-answer-pair" key={`${answer}-${index}`}>
-                  <div className="chat-message agent">
-                    <small>요구 접수 Agent</small>
-                    <p>{prompts[index]}</p>
-                  </div>
-                  <div className="chat-message user">
-                    <small>나</small>
-                    <p>{answer || "입력 생략 · 등록 후 AI 인터뷰에서 보완"}</p>
-                  </div>
-                </div>
-              ))}
-              <div className="chat-message agent current">
-                <small>요구 접수 Agent</small>
-                <p>{prompts[step - 1]}</p>
-              </div>
-            </div>
-            <div className="wizard-chat-input">
-              {step >= 2 ? <>
-                <IntakeV3Fields sectionNumber={step} answers={answers} details={intakeDetails} onChange={(a:string[],d:NonNullable<UserProject["intakeDetails"]>)=>{setAnswers(a);setIntakeDetails(d);}} />
-                {step === 5 && (
-                <div className="wizard-final-fields">
-                  {isAiTeam && (
-                    <fieldset className="wizard-owner-field wizard-requester-field">
-                      <legend>요구자 정보</legend>
-                      <p>회의를 요청했거나 업무 문제를 제기한 실제 요구자를 입력합니다.</p>
-                      <input value={requesterName} onChange={(event) => setRequesterName(event.target.value)} placeholder="요구자 이름" aria-label="요구자 이름" />
-                      <input value={requesterDepartment} onChange={(event) => setRequesterDepartment(event.target.value)} placeholder="소속 부서" aria-label="요구자 소속 부서" />
-                      <input type="email" value={requesterEmail} onChange={(event) => setRequesterEmail(event.target.value)} placeholder="MS 계정 이메일" aria-label="요구자 MS 계정 이메일" aria-invalid={Boolean(requesterEmail && !isContactEmail(normalizeContactEmail(requesterEmail)))} />
-                      {requesterEmail && !isContactEmail(normalizeContactEmail(requesterEmail)) && <small>이메일 형식을 확인해 주세요.</small>}
-                    </fieldset>
-                  )}
-                  {!isAiTeam&&<label className="wizard-form-field"><span>요구자 소속 부서 · 필수</span><input value={requesterDepartment} onChange={e=>setRequesterDepartment(e.target.value)}/></label>}
-                  <label className="wizard-form-field wide"><span>Agent 과제명</span><input value={manualTitle} onChange={event=>setManualTitle(event.target.value)} placeholder={suggestedRequestTitle}/><small>비워두면 업무 문제를 바탕으로 이름이 자동 생성됩니다.</small></label>
-                  <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={ownerEmailInput} onEmailChange={(email) => ownerMode === "SELF" && isAiTeam ? setRequesterEmail(email) : setProjectOwnerEmail(email)} optionalEmail={isHistorical} selfEmailEditable={isAiTeam} name="project-owner-mode" />
-                </div>
-                )}
-              </> : (
-                <textarea
-                  value={answers[0]}
-                  onChange={(event) => updateAnswer(event.target.value)}
-                  placeholder={examples[0]}
-                />
-              )}
-              <button
-                disabled={
-                  stepRequired.length > 0 ||
-                  (step === 5 && !canSubmit) ||
-                  submitted
-                }
-                onClick={advance}
-              >
-                {step === 5 ? "등록 후 AI 인터뷰 시작" : "다음"}
-                <ArrowRight size={15} weight="bold" />
-              </button>
-              {step===5&&registrationGaps.length>0&&<p role="status">등록 전 확인: {registrationGaps.join(' · ')}</p>}
-              {registrationError&&<p role="alert">{registrationError}</p>}
-            </div>
-          </section>
-          ) : (
+        {isHistorical && <div className="chat-wizard-grid">
             <section className="wizard-form-panel" aria-label="에이전트 요구 접수서 직접 작성">
               <header>
                 {isHistorical ? <ArrowsClockwise size={24} weight="duotone" /> : <FileText size={24} weight="duotone" />}
@@ -15853,27 +15713,8 @@ function RequestWizard({
                 </button>
               </footer>
             </section>
-          )}
-        </div>
-        <footer>
-          <button
-            className="ghost"
-            onClick={writingMode === "FORM" || step === 1 ? close : () => setStep(step - 1)}
-          >
-            {writingMode === "FORM" || step === 1 ? "나중에 이어서 하기" : "← 이전 질문"}
-          </button>
-          <div>
-            <span>
-              {writingMode === "FORM"
-                ? isHistorical
-                  ? "문서 없이 진행 이력만 먼저 등록할 수 있습니다"
-                  : "두 방식에서 입력한 내용은 서로 유지됩니다"
-                : step === 5
-                ? "완료 요청일을 확인한 뒤 접수서를 제출하세요"
-                : "등록 전 입력은 이 창에서만 유지됩니다"}
-            </span>
-          </div>
-        </footer>
+        </div>}
+        {isHistorical && <footer><button className="ghost" onClick={close}>취소</button><span>문서 없이 진행 이력만 먼저 등록할 수 있습니다</span></footer>}
       </section>
     </div>
   );

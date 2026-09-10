@@ -1053,7 +1053,7 @@ async function syncIntakeConversation(client, projectId, messages, actorId) {
   );
 }
 
-async function createOperationalProject(body, identity) {
+export async function createOperationalProject(body, identity, transact = withTransaction) {
   const submittedState = assertPortalProjectState(body.project || body);
   sanitizeNewWorkflow(submittedState);
   delete submittedState.historicalImportFinalizedAt;
@@ -1061,7 +1061,7 @@ async function createOperationalProject(body, identity) {
   delete submittedState.historicalCompletedThrough;
   delete submittedState.finalizeHistoricalImport;
   delete submittedState.agentSession;
-  return withTransaction(async (client) => {
+  return transact(async (client) => {
     const actor = await findUser(client, identity);
     if (!actor || !actor.is_active) return { status: 403, body: { error: "Project creation permission is required." } };
     if (submittedState.historicalImport && actor.app_role === "general_user") {
@@ -1084,9 +1084,22 @@ async function createOperationalProject(body, identity) {
       }
     }
     const contacts = registrationContacts(submittedState, actor);
+    if (submittedState.registrationEntry === 'INT_AGENT' && !submittedState.historicalImport) {
+      Object.assign(submittedState, {
+        requester: [actor.display_name, actor.email].filter(Boolean).join(' · '),
+        requesterName: actor.display_name, requesterDepartment: '',
+        projectOwner: '', owner: '', ownerMode: 'OTHER',
+        intakeAnswers: [], intakeDetails: {}, intakeDraftCompleted: false,
+        feaDraft: undefined, feaCompleted: false, progress: 0,
+      });
+    }
     submittedState.intakeStandardVersion='3.0';
     if(!submittedState.historicalImport && submittedState.intakeDraftCompleted && intakeRequired(submittedState).length)return {status:400,body:{error:'INT 필수 항목을 입력한 뒤 작성 완료해 주세요.'}};
     if(!submittedState.historicalImport){submittedState.journeyStep=0;submittedState.status='요구 접수 AI 검토 대기';submittedState.nextAction='요구 접수 내용을 확인하고 AI 검토를 완료해 주세요.';}
+    if (!submittedState.historicalImport && submittedState.registrationEntry === 'INT_AGENT') {
+      submittedState.status = '요구 접수 작성 중';
+      submittedState.nextAction = 'INT Agent와 함께 요구 접수를 작성해 주세요.';
+    }
     if (actor.app_role === "general_user") submittedState.requester = [actor.display_name,submittedState.intakeDetails?.department,actor.email].filter(Boolean).join(' · ');
     Object.assign(submittedState, contacts);
     const catalog = await ensurePortalCatalog(client);
@@ -1134,7 +1147,7 @@ async function createOperationalProject(body, identity) {
       `insert into agent_portal.intake_requests
          (project_id,business_problem,input_sources,desired_outcome,raw_answers,completion_percent,intake_status,submitted_at,created_at)
        values ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$8)`,
-      [project.id, answers[0] || `과거 과제 이관: ${state.name}`, answers[2] || null, answers[3] || null, JSON.stringify({ answers, portalState: state }), Math.min(100, answers.filter((answer) => String(answer || "").trim()).length * 20), state.historicalImport || answers.length ? "submitted" : "draft", receivedDate],
+      [project.id, answers[0] || (state.historicalImport ? `과거 과제 이관: ${state.name}` : ''), answers[2] || null, answers[3] || null, JSON.stringify({ answers, portalState: state }), Math.min(100, answers.filter((answer) => String(answer || "").trim()).length * 20), state.historicalImport || answers.some(answer => String(answer || '').trim()) ? "submitted" : "draft", receivedDate],
     );
     await syncProjectArtifacts(client, { id: project.id, project_code: projectCode, project_name: state.name }, state, actor.id);
     await persistHistoricalGateApprovals(client, project.id, state);

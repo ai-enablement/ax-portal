@@ -36,6 +36,11 @@ export async function linkHistoricalContacts(client, project, state, contacts, a
 }
 
 export function registrationContacts(state, actor) {
+  if (state.registrationEntry === 'INT_AGENT' && !state.historicalImport) {
+    const requesterEmail = normalizeContactEmail(actor.email);
+    if (!isContactEmail(requesterEmail)) throw new ProjectContactError('로그인한 MS 계정 이메일을 확인해 주세요.');
+    return {requesterEmail, projectOwnerEmail: ''};
+  }
   const requesterEmail = actor.app_role === 'general_user'
     ? normalizeContactEmail(actor.email)
     : normalizeContactEmail(state.requesterEmail) || emailFromPartyLabel(state.requester);
