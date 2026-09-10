@@ -29,7 +29,8 @@ jobs:
           python-version: '3.11'
 
       - name: Package Linux Python dependencies
-        run: python -m pip install --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.11 --implementation cp --abi cp311 --no-compile --target server/vendor/intake-agent/python-packages -r server/vendor/intake-agent/requirements.txt
+        run: |
+          python -m pip install --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.11 --implementation cp --abi cp311 --no-compile --target server/vendor/intake-agent/python-packages -r server/vendor/intake-agent/requirements.txt
 
       - name: Install, build, and test
         env:
