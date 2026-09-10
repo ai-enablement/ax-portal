@@ -113,14 +113,48 @@ function appendApprovals(lines,state,allowedGates){
   lines.push('');
 }
 
-export function buildCumulativeMarkdown(project, state, phase, versions=[]) {
+export function completedNativeReferences(state) {
+  return ['INT','FEA','ARD'].flatMap(code=>{
+    const record=state.nativeAgentArtifacts?.[code];
+    // Rework preserves the last completed id/version/at, not the newly saved draft.
+    return record && (record.status==='complete'||(record.status==='draft'&&record.at)) && /^\d+$/.test(String(record.id)) && Number(record.version)>0
+      ? [{document_type:code,id:String(record.id),version_number:Number(record.version)}] : [];
+  });
+}
+
+export async function loadCompletedNativeDocuments(client,projectId,state) {
+  const refs=completedNativeReferences(state);
+  if(!refs.length)return [];
+  const rows=(await client.query(`select d.id::text,d.document_type,d.version_number,d.original_name,
+      d.markdown,d.content_sha256,d.created_at,u.display_name as author_name
+    from agent_portal.native_agent_documents d
+    join jsonb_to_recordset($2::jsonb) as r(id text,document_type text,version_number integer)
+      on d.id=r.id::bigint and d.document_type=r.document_type and d.version_number=r.version_number
+    left join agent_portal.users u on u.id=d.created_by
+    where d.project_id=$1`,[projectId,JSON.stringify(refs)])).rows;
+  if(rows.length!==refs.length)throw new Error('작성 완료된 원본 문서를 찾지 못했습니다. 문서 참조를 확인해 주세요.');
+  return rows;
+}
+
+export function buildCumulativeMarkdown(project, state, phase, versions=[], nativeDocuments=[]) {
   const phaseTitle={design:'설계',development_evaluation:'개발·평가',deployment_rollout:'배포·확산'}[phase];
   if(!phaseTitle)throw new Error('유효한 누적 문서 단계가 아닙니다.');
-  const lines=[`# ${project.project_name} · ${phaseTitle} 단계 누적 이력`,'',`- 과제 번호: ${project.project_code}`,`- 생성 시각: ${new Date().toISOString()}`,`- 현재 단계: ${project.current_stage_code||'미확인'}`,'','## 요구 접수서[INT]',''];
-  for(const field of INT_FIELDS)lines.push(`### ${field.label}`,'',markdownValue(standardValue(state,field.key),field),'');
-  lines.push('## 타당성 평가서[FEA]','');
-  for(const field of FEA_FIELDS)lines.push(`### ${field.label}`,'',markdownValue(standardValue(state,field.key),field),'');
-  appendStandardDocument(lines,state,'ARD',3);
+  const lines=[`# ${project.project_name} · ${phaseTitle} 단계 누적 이력`,'',`- 과제 번호: ${project.project_code}`,`- 생성 시각: ${new Date().toISOString()}`,`- 현재 단계: ${project.current_stage_code||'미확인'}`,''];
+  const refs=completedNativeReferences(state);
+  for(const code of ['INT','FEA','ARD']){
+    const ref=refs.find(r=>r.document_type===code);
+    if(ref){
+      const doc=nativeDocuments.find(d=>d.document_type===code&&String(d.id)===ref.id&&Number(d.version_number)===ref.version_number);
+      if(!doc)throw new Error(`${code} 작성 완료 원본이 없습니다.`);
+      lines.push(`## ${code} 작성 완료 원문 · v${doc.version_number}`,'',`- 파일명: ${doc.original_name}`,`- 작성자: ${doc.author_name||'미확인'}`,`- 완료 시각: ${state.nativeAgentArtifacts[code].at||'미확인'}`,`- SHA-256: ${doc.content_sha256}`,'',doc.markdown,'');
+    }else if(state.nativeAgentArtifacts?.[code]){
+      lines.push(`## ${code}`,'','작성 완료된 원본이 없습니다. 작성 중인 초안은 포함하지 않습니다.','');
+    }else if(code==='ARD')appendStandardDocument(lines,state,'ARD',3);
+    else{
+      lines.push(`## ${code==='INT'?'요구 접수서':'타당성 평가서'}[${code}]`,'','기존 양식 데이터 기준','');
+      for(const field of code==='INT'?INT_FIELDS:FEA_FIELDS)lines.push(`### ${field.label}`,'',markdownValue(standardValue(state,field.key),field),'');
+    }
+  }
   appendApprovals(lines,state,phase==='deployment_rollout'?['G1','G2','G3']:['G1','G2']);
   if(versions.length){lines.push('## 첨부 Markdown 문서 원본 이력','');for(const version of versions){lines.push(`### ${version.document_type} v${version.version_number} · ${version.lifecycle_phase}`,'',`- 파일명: ${version.original_name}`,`- 작성자: ${version.author_name}`,`- 첨부일: ${new Date(version.created_at).toISOString()}`,`- SHA-256: ${version.checksum_sha256}`,'',version.content_markdown,'');}}
   return `${lines.join('\n').trim()}\n`;
@@ -136,7 +170,8 @@ export async function exportCumulativeMarkdown(identity, projectCode, phase) {
     from agent_portal.markdown_document_versions v join agent_portal.users u on u.id=v.created_by
     where v.project_id=$1 and (($2='development_evaluation' and v.document_type='DES') or ($2='deployment_rollout' and (v.document_type='DES' or (v.document_type='EVD' and v.lifecycle_phase='development_evaluation'))))
     order by case v.document_type when 'DES' then 1 else 2 end,v.version_number`,[access.project.id,phase])).rows;
-  const markdown=buildCumulativeMarkdown(row,row.state||{},phase,versions);
+  const nativeDocuments=await loadCompletedNativeDocuments(pool,access.project.id,row.state||{});
+  const markdown=buildCumulativeMarkdown(row,row.state||{},phase,versions,nativeDocuments);
   return {status:200,body:{markdown,name:`${row.project_code}-${phase}-history.md`}};
 }
 

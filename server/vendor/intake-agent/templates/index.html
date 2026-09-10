@@ -1,0 +1,2303 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>요구 수집 및 타당성 평가 Agent — AI Enablement</title>
+<!--
+  규칙(MD/): no-CDN / 인라인 전용 / 오프라인 동작. 외부 <script src>·<link href=cdn> 금지.
+  자율성 L1 — 이 화면은 초안만 만든다. Go/Drop 확정·게이트 승인·외부 등록 UI 를 두지 않는다.
+-->
+<style>
+  /* @font-face {
+    font-family:"Pretendard"; font-weight:45 920; font-display:swap;
+    src:url("/static/fonts/PretendardVariable.woff2") format("woff2");
+  } */
+
+  :root {
+    --navy:#13006a; --accent:#5b8def; --accent-soft:#eaf0ff; --pink:#ff6b9d;
+    --green:#14b87a; --orange:#f78c3c; --red:#c0392b;
+    --ink:#1a1f2c; --ink-2:#4a5165; --muted:#8a93a8;
+    --line:#e6eaf2; --line-2:#f0f3f9; --paper:#ffffff; --bg:#f5f7fc;
+    --shadow:0 1px 2px rgba(20,30,60,.04), 0 8px 24px rgba(20,30,60,.06);
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink);
+    font-family:"Pretendard",-apple-system,"Segoe UI","Malgun Gothic",sans-serif;
+    -webkit-font-smoothing:antialiased; font-size:13px; line-height:1.5; }
+
+  /* ===== Hero ===== */
+  .hero { position:relative; overflow:hidden; color:#fff; padding:18px 32px;
+    background:linear-gradient(135deg,#13006a 0%,#3617c6 60%,#5b8def 130%); }
+  .hero::before { content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(circle at 85% 0%,rgba(255,107,157,.35),transparent 40%),
+               radial-gradient(circle at 10% 100%,rgba(91,141,239,.4),transparent 50%); }
+  .hero-inner { position:relative; z-index:1; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+  .hero-eyebrow { display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em;
+    background:rgba(255,255,255,.14); padding:4px 10px; border-radius:999px; }
+  .hero h1 { margin:9px 0 4px; font-size:22px; font-weight:800; }
+  .hero p { margin:0; color:rgba(255,255,255,.85); font-size:12.5px; }
+  .hero-badges { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .hero-actions { display:flex; gap:8px; flex-shrink:0; align-items:center; }
+  .hero-meta { margin-top:8px; display:flex; gap:14px; flex-wrap:wrap;
+    font-size:11px; color:rgba(255,255,255,.78); }
+  .hero-meta b { color:#fff; font-weight:700; }
+
+  .live-badge { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:800;
+    background:rgba(20,184,122,.18); color:#c4ffe0; padding:4px 10px; border-radius:999px; }
+  .live-badge .dot { width:7px; height:7px; border-radius:50%; background:#4ade80; animation:live-pulse 1.6s ease-out infinite; }
+  .live-badge.disconnected { background:rgba(255,99,99,.2); color:#ffd7d7; }
+  .live-badge.disconnected .dot { background:#ff6b6b; animation:none; }
+  @keyframes live-pulse { 0%{box-shadow:0 0 0 0 rgba(74,222,128,.6);} 100%{box-shadow:0 0 0 7px rgba(74,222,128,0);} }
+  .badge-l1 { display:inline-block; font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px;
+    background:rgba(247,140,60,.22); color:#ffe0c4; }
+
+  /* ===== Buttons ===== */
+  .btn { display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:inherit;
+    font-size:12.5px; font-weight:700; padding:8px 14px; border-radius:8px; transition:all .15s;
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.3); color:#fff; }
+  .btn:hover { background:rgba(255,255,255,.24); }
+  .btn.primary { background:#fff; color:var(--navy); border-color:#fff; }
+  .btn.primary:hover { background:#f0f3ff; }
+  .btn-light { cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:700;
+    height:32px; padding:0 12px; border-radius:8px; background:#fff; color:var(--ink);
+    border:1px solid var(--line); transition:all .15s; }
+  .btn-light:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-light:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-primary { cursor:pointer; font-family:inherit; font-size:13px; font-weight:800; padding:9px 16px;
+    border-radius:8px; background:var(--navy); color:#fff; border:0; }
+  .btn-primary:hover { background:#1c0a86; }
+  .btn-primary:disabled { opacity:.45; cursor:not-allowed; }
+
+  /* ===== Tabs ===== */
+  .tabs { display:flex; gap:4px; padding:0 32px; background:var(--paper); border-bottom:1px solid var(--line);
+    overflow-x:auto; }
+  .tab { padding:13px 15px; cursor:pointer; font-size:13.5px; font-weight:700; color:var(--muted);
+    border-bottom:2px solid transparent; user-select:none; white-space:nowrap; }
+  .tab:hover { color:var(--ink-2); }
+  .tab.active { color:var(--navy); border-bottom-color:var(--navy); }
+
+  /* ===== Layout / Card ===== */
+  .main { padding:20px 32px 40px; }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+  .card { background:var(--paper); border:1px solid var(--line); border-radius:14px;
+    box-shadow:var(--shadow); padding:16px 18px; margin-bottom:14px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+  .card-head h2 { margin:0; font-size:15px; font-weight:800; }
+  .card-head .meta { font-size:11.5px; color:var(--muted); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .grid2 { display:grid; grid-template-columns:1fr 320px; gap:14px; align-items:start; }
+  @media (max-width:1000px){ .grid2 { grid-template-columns:1fr; } }
+  .muted { color:var(--muted); font-size:11.5px; }
+
+  /* ===== Pill ===== */
+  .pill { display:inline-block; border-radius:999px; font-size:11px; font-weight:700; padding:3px 9px; }
+  .pill-active { background:rgba(20,184,122,.13); color:#0e8c5b; }
+  .pill-complete { background:rgba(91,141,239,.13); color:#2c5fcc; }
+  .pill-cancelled { background:rgba(247,140,60,.15); color:#b65a13; }
+  .pill-other { background:rgba(138,147,168,.15); color:#555f72; }
+  .pill-danger { background:rgba(192,57,43,.13); color:#a5281a; }
+  .pill-track-하 { background:rgba(20,184,122,.13); color:#0e8c5b; }
+  .pill-track-중 { background:rgba(91,141,239,.15); color:#2c5fcc; }
+  .pill-track-상 { background:rgba(192,57,43,.13); color:#a5281a; }
+
+  /* ===== Inputs ===== */
+  .input, textarea.input, select.input { border:1px solid var(--line); border-radius:8px; padding:9px 12px;
+    font-family:inherit; font-size:13px; color:var(--ink); background:#fafbff; width:100%; }
+  .input:focus { outline:0; border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px rgba(91,141,239,.2); }
+  textarea.input { resize:vertical; min-height:60px; line-height:1.6; }
+  label.fld { display:block; margin-bottom:10px; }
+  label.fld > span { display:block; font-size:11.5px; font-weight:700; color:var(--ink-2); margin-bottom:4px; }
+  .chk { display:flex; align-items:flex-start; gap:8px; padding:9px 11px; border:1px solid var(--line);
+    border-radius:9px; background:#fafbff; margin-bottom:7px; cursor:pointer; }
+  .chk input { margin-top:2px; }
+  .chk b { font-weight:700; font-size:12.5px; }
+  .chk small { display:block; color:var(--muted); font-size:11px; margin-top:1px; }
+
+  /* ===== Tables ===== */
+  table.tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.tbl th, table.tbl td { border-bottom:1px solid var(--line); padding:8px 9px; text-align:left; vertical-align:top; }
+  table.tbl th { background:var(--line-2); font-weight:700; font-size:11.5px; color:var(--ink-2); }
+  table.tbl tbody tr:hover { background:#fafbff; }
+  .tbl-wrap { overflow-x:auto; }
+
+  /* ===== Chat (FR-01/02/03) ===== */
+  .chat { flex:1; max-height:56vh; min-height:280px; overflow-y:auto; padding:14px; background:#fafbff;
+    border:1px solid var(--line); border-radius:12px; }
+  .msg { display:flex; margin-bottom:11px; }
+  .msg.user { justify-content:flex-end; }
+  .bubble { max-width:76%; padding:10px 13px; border-radius:12px; font-size:13px; line-height:1.65; white-space:pre-wrap; word-break:break-word; }
+  .msg.agent .bubble { background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .msg.user .bubble { background:var(--navy); color:#fff; border-bottom-right-radius:4px; }
+  .msg.system .bubble { background:rgba(247,140,60,.12); border:1px solid rgba(247,140,60,.35);
+    color:#8a4a10; font-size:12.5px; max-width:100%; }
+  .msg.danger .bubble { background:rgba(192,57,43,.09); border:1px solid rgba(192,57,43,.35); color:#a5281a; max-width:100%; }
+  .typing span { display:inline-block; animation:dot-bounce 1s infinite; }
+  .typing span:nth-child(2){ animation-delay:.15s; } .typing span:nth-child(3){ animation-delay:.3s; }
+  .chat-input { display:flex; gap:8px; margin-top:10px; }
+  .chat-input textarea { flex:1; min-height:44px; max-height:120px; }
+
+  /* ===== 좌우 분할 (좌 접수 양식 · 우 AI 인터뷰) ===== */
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:stretch; }
+  @media (max-width:1180px){ .split { grid-template-columns:1fr; } }
+  .split-col { margin:0; display:flex; flex-direction:column; }
+  .form-scroll { flex:1; overflow-y:auto; max-height:56vh; min-height:280px;
+    padding:4px 10px 4px 2px; margin-top:4px; }
+  .form-foot { border-top:1px solid var(--line); padding-top:12px; margin-top:12px; }
+
+  .bar { height:6px; border-radius:999px; background:var(--line-2); overflow:hidden; margin:6px 0 4px; }
+  .bar > i { display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--green)); transition:width .3s; }
+
+  /* ===== 접수 양식 ===== */
+  .fsec { margin-bottom:16px; }
+  .fsec > h4 { margin:0 0 3px; font-size:12.5px; font-weight:800; color:var(--navy);
+    display:flex; align-items:center; gap:6px; }
+  /* 숫자 1글자는 18px 원, "별첨" 처럼 길어지면 알약 모양으로 늘어난다 */
+  .fsec > h4 .n { display:inline-flex; align-items:center; justify-content:center;
+    min-width:18px; height:18px; padding:0 5px; border-radius:9px;
+    background:var(--navy); color:#fff;
+    font-size:10.5px; font-weight:800; flex-shrink:0; white-space:nowrap; }
+  .fsec > .fhint { font-size:11px; color:var(--muted); margin:0 0 8px 24px; }
+  .fld-row { margin-bottom:9px; }
+  .fld-row > label { display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700;
+    color:var(--ink-2); margin-bottom:3px; }
+  .fld-row .why { font-size:11px; line-height:1.5; margin:4px 0 0; padding:5px 8px; border-radius:6px; }
+  .fld-row .why.weak { background:rgba(247,140,60,.1); color:#8a4a10; }
+  .fld-row .why.held { background:rgba(138,147,168,.14); color:#555f72; }
+  /* 상태별 테두리 — 어디를 고쳐야 하는지 한눈에 */
+  .fld-row.g-ok input, .fld-row.g-ok textarea { border-color:rgba(20,184,122,.5); background:#f7fffb; }
+  .fld-row.g-weak input, .fld-row.g-weak textarea { border-color:var(--orange); background:#fffaf5; }
+  .fld-row.g-missing input, .fld-row.g-missing textarea { border-color:var(--line); }
+  .fld-row.focus-ask input, .fld-row.focus-ask textarea {
+    box-shadow:0 0 0 3px rgba(91,141,239,.25); border-color:var(--accent); }
+  .gmark { font-size:11px; font-weight:800; padding:1px 7px; border-radius:999px; }
+  .gmark.ok { background:rgba(20,184,122,.14); color:#0e8c5b; }
+  .gmark.weak { background:rgba(247,140,60,.18); color:#b65a13; }
+  .gmark.missing { background:rgba(138,147,168,.15); color:#6b7488; }
+  .gmark.held { background:rgba(192,57,43,.12); color:#a5281a; }
+  .fld-row .opt { font-size:10.5px; font-weight:600; color:var(--muted); }
+  /* 챗이 채운 칸을 잠깐 밝힌다 */
+  @keyframes fill-flash { 0%{ background:rgba(91,141,239,.28); } 100%{ background:inherit; } }
+  .just-filled input, .just-filled textarea, .just-filled .grade-pick { animation:fill-flash 1.4s ease-out; }
+
+  /* ===== FEA 양식 전용 ===== */
+  /* 상/중/하 등급 — 모든 축에서 상=유리, 하=불리 */
+  .grade-pick { display:flex; gap:6px; }
+  .gbtn { flex:1; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:700;
+    padding:7px 0; border-radius:8px; background:#fafbff; color:var(--muted);
+    border:1px solid var(--line); transition:all .12s; }
+  .gbtn:hover { border-color:var(--accent); color:var(--accent); }
+  .gbtn.on { color:#fff; border-color:transparent; }
+  .gbtn[data-g="상"].on { background:var(--green); }
+  .gbtn[data-g="중"].on { background:var(--accent); }
+  .gbtn[data-g="하"].on { background:var(--orange); }
+
+  /* 규칙이 계산한 값 — 손댈 수 없다 */
+  .fld-row.ro .ro-box { white-space:pre-wrap; font-size:12px; line-height:1.7; color:var(--ink-2);
+    background:var(--accent-soft); border:1px solid rgba(91,141,239,.3); border-radius:8px; padding:9px 11px; }
+  .fld-row.ro > label::after { content:"자동"; margin-left:6px; font-size:10.5px; font-weight:800;
+    color:#2c5fcc; background:rgba(91,141,239,.15); padding:1px 6px; border-radius:999px; }
+
+  /* 사람만 채우는 칸 (Go/Drop 등) — 에이전트가 건드리지 않는다 */
+  .fld-row.human select, .fld-row.human input { border-color:rgba(192,57,43,.4); background:#fffafa; }
+  .human-tag { color:#a5281a !important; background:rgba(192,57,43,.1); padding:1px 6px; border-radius:999px; }
+
+  .chk-inline { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; border:1px solid var(--line);
+    border-radius:9px; background:#fafbff; cursor:pointer; }
+  .chk-inline input { margin-top:2px; flex-shrink:0; }
+  .chk-inline b { font-weight:700; font-size:12.5px; }
+  .chk-inline small { display:block; color:var(--muted); font-size:11px; margin-top:1px; }
+
+  /* ===== 판정 권고 배너 (참고용) ===== */
+  .advice { border-radius:12px; padding:14px 16px; margin-bottom:12px; border:1px solid; }
+  .advice.go   { background:rgba(20,184,122,.08);  border-color:rgba(20,184,122,.45); }
+  .advice.cond { background:rgba(247,140,60,.09);  border-color:rgba(247,140,60,.5); }
+  .advice.drop { background:rgba(192,57,43,.07);   border-color:rgba(192,57,43,.4); }
+  /* 확신도 낮음 = 잠정. 단정적으로 읽히지 않게 채도를 낮추고 점선으로 */
+  .advice.tentative { border-style:dashed; background:var(--line-2); }
+  .advice.tentative .advice-badge { opacity:.72; }
+  .advice-badge small { font-size:10.5px; font-weight:700; opacity:.85; margin-left:3px; }
+  .advice-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .advice-badge { font-size:17px; font-weight:800; letter-spacing:-.01em; padding:5px 14px; border-radius:9px; color:#fff; }
+  .advice.go   .advice-badge { background:var(--green); }
+  .advice.cond .advice-badge { background:var(--orange); }
+  .advice.drop .advice-badge { background:var(--red); }
+  .advice-conf { font-size:12px; font-weight:700; color:var(--ink-2);
+    background:rgba(255,255,255,.75); padding:3px 10px; border-radius:999px; }
+  .advice-note { font-size:11.5px; font-weight:700; color:var(--muted); margin-left:auto; }
+  .advice-head-line { margin:10px 0 0; font-size:13px; line-height:1.7; color:var(--ink); }
+
+  /* ===== 설정 — 원본 파일 선택 ===== */
+  .src-pick { margin-top:14px; padding:13px 15px; border:1px solid var(--line);
+    border-radius:11px; background:#fafbff; }
+  .src-pick > h4 { margin:0 0 3px; font-size:12.5px; font-weight:800; color:var(--navy); }
+  .src-pick > p.muted { margin:0; line-height:1.65; }
+  .cands { margin-top:10px; }
+  .cands-title { font-size:11px; font-weight:700; color:var(--muted); margin-bottom:5px; }
+  .cand { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:7px;
+    font-size:11.5px; cursor:pointer; transition:background .12s; }
+  .cand:hover { background:var(--accent-soft); }
+  .cand .mk { flex-shrink:0; font-weight:800; width:14px; text-align:center; }
+  .cand.on .mk { color:var(--green); }
+  .cand.off .mk { color:var(--line); }
+  .cand .lb { flex-shrink:0; width:96px; color:var(--ink-2); font-weight:700; }
+  .cand .pt { color:var(--muted); word-break:break-all; }
+  .cand.cur { background:rgba(91,141,239,.1); }
+  .cand.cur .pt { color:var(--ink); font-weight:600; }
+
+  /* ===== 설정 모달 세그먼트 ===== */
+  .seg { display:flex; gap:4px; padding:3px; background:var(--line-2); border-radius:10px; margin-bottom:16px; }
+  .seg-btn { flex:1; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:700;
+    padding:8px 0; border:0; border-radius:8px; background:transparent; color:var(--muted); transition:all .15s; }
+  .seg-btn:hover { color:var(--ink-2); }
+  .seg-btn.active { background:#fff; color:var(--navy); box-shadow:0 1px 3px rgba(20,30,60,.1); }
+  .set-panel { display:none; }
+  .set-panel.active { display:block; }
+
+  /* ===== 문서함 액션 ===== */
+  .doc-actions { display:flex; gap:5px; flex-wrap:wrap; }
+  .btn-mini { cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:700; height:26px;
+    padding:0 9px; border-radius:7px; background:#fff; color:var(--ink-2);
+    border:1px solid var(--line); transition:all .13s; white-space:nowrap; }
+  .btn-mini:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-mini.go { border-color:var(--navy); color:var(--navy); font-weight:800; }
+  .btn-mini.go:hover { background:var(--navy); color:#fff; }
+  .btn-mini.danger:hover { border-color:var(--red); color:var(--red); background:#fff5f4; }
+  tr.is-current { background:rgba(91,141,239,.08) !important; }
+  tr.is-current td:first-child::before { content:"▸ "; color:var(--accent); font-weight:800; }
+
+  /* ===== 문서 미리보기 ===== */
+  .doc { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 22px;
+    max-height:66vh; overflow-y:auto; font-size:12.8px; line-height:1.75; }
+  .doc h1 { font-size:17px; margin:0 0 12px; }
+  .doc h2 { font-size:14px; margin:20px 0 8px; padding-bottom:5px; border-bottom:1px solid var(--line); }
+  .doc h3 { font-size:13px; margin:14px 0 6px; }
+  .doc p { margin:5px 0; }
+  .doc ul { margin:5px 0; padding-left:18px; }
+  .doc li { margin:3px 0; }
+  .doc blockquote { margin:10px 0; padding:8px 12px; border-left:3px solid var(--accent);
+    background:var(--accent-soft); color:var(--ink-2); border-radius:0 8px 8px 0; }
+  .doc table { border-collapse:collapse; width:100%; margin:8px 0; font-size:12px; }
+  .doc th, .doc td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  .doc th { background:var(--line-2); }
+  .doc hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
+  .doc code { background:var(--line-2); padding:1px 5px; border-radius:4px; font-size:11.5px; }
+  .doc .missing { color:var(--orange); font-weight:700; }
+
+  /* ===== 알림 박스 ===== */
+  .note { padding:11px 14px; border-radius:10px; font-size:12.5px; line-height:1.65; margin-bottom:12px; }
+  .note.info { background:var(--accent-soft); border:1px solid rgba(91,141,239,.35); color:#23408c; }
+  .note.warn { background:rgba(247,140,60,.1); border:1px solid rgba(247,140,60,.4); color:#8a4a10; }
+  .note.err { background:rgba(192,57,43,.08); border:1px solid rgba(192,57,43,.35); color:#a5281a; }
+  .note.ok { background:rgba(20,184,122,.09); border:1px solid rgba(20,184,122,.35); color:#0b6b46; }
+  .note b { font-weight:800; }
+  .note ul { margin:6px 0 0; padding-left:18px; }
+
+  /* ===== Toast ===== */
+  .toast { position:fixed; right:20px; bottom:20px; z-index:9500; max-width:340px;
+    background:var(--ink); color:#fff; font-size:13px; font-weight:600; padding:11px 16px;
+    border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.2); opacity:0; transform:translateY(8px);
+    pointer-events:none; transition:opacity .2s, transform .2s; }
+  .toast.show { opacity:1; transform:translateY(0); }
+  .toast.ok { background:#0e8c5b; } .toast.err { background:#c0392b; }
+
+  /* ===== Modal ===== */
+  .modal-overlay { position:fixed; inset:0; z-index:9000; display:none;
+    background:rgba(20,30,60,.45); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal-card { background:#fff; border-radius:14px; width:560px; max-width:92vw; max-height:86vh;
+    display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.3); animation:modal-in .16s ease; }
+  .modal-card.wide { width:820px; }
+  @keyframes modal-in { from{opacity:0; transform:translateY(8px) scale(.98);} to{opacity:1; transform:none;} }
+  .modal-head { padding:15px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+  .modal-head h3 { margin:0; font-size:15px; font-weight:800; }
+  .modal-close { background:none; border:0; font-size:18px; color:var(--muted); cursor:pointer; line-height:1; }
+  .modal-body { padding:18px 20px; overflow-y:auto; color:var(--ink-2); }
+  .modal-foot { padding:14px 20px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px; }
+
+  /* ===== Loading overlay ===== */
+  .loading-overlay { position:fixed; inset:0; z-index:9800; display:flex; align-items:center; justify-content:center;
+    background:rgba(20,30,60,.42); backdrop-filter:blur(12px) saturate(140%); }
+  .loading-overlay[hidden] { display:none; }
+  .loading-card { background:linear-gradient(180deg,#fff,#f4f7ff); border-radius:22px; padding:30px 40px;
+    text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.25); animation:load-in .28s ease; }
+  @keyframes load-in { from{opacity:0; transform:scale(.85);} to{opacity:1; transform:scale(1);} }
+  .loading-brand { font-size:20px; font-weight:800; letter-spacing:.02em;
+    background:linear-gradient(90deg,#5b8def,#a020f0,#ff6b9d,#14b87a); background-size:300% 100%;
+    -webkit-background-clip:text; background-clip:text; color:transparent; animation:brand-flow 4s linear infinite; }
+  @keyframes brand-flow { 0%{background-position:0% 50%;} 100%{background-position:300% 50%;} }
+  .loading-msg { margin-top:8px; font-size:13.5px; font-weight:700; color:var(--ink-2); }
+  .loading-msg .dot { display:inline-block; animation:dot-bounce 1s infinite; }
+  .loading-msg .dot2 { animation-delay:.15s; } .loading-msg .dot3 { animation-delay:.3s; }
+  @keyframes dot-bounce { 0%,60%,100%{transform:translateY(0);} 30%{transform:translateY(-6px);} }
+  .loading-sub { margin-top:6px; font-size:11.5px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-badges">
+          <span class="hero-eyebrow">Made by AI Enablement</span>
+          <span class="live-badge" id="liveBadge"><span class="dot"></span><span class="live-text">LIVE</span></span>
+          <span class="badge-l1" title="초안 생성 — 사람이 전부 검토 후 사용">자율성 L1 · 초안 생성</span>
+        </div>
+        <h1>요구 수집 및 타당성 평가 Agent</h1>
+        <p>표준체계 기준으로 INT(요구 접수서)·FEA(타당성 평가서) <b>초안</b>과 판정 근거를 만듭니다.</p>
+        <div class="hero-meta">
+          <span>표준체계 기준일 <b id="mStdDate">—</b></span>
+          <span>지식 해시 <b id="mStdSha">—</b></span>
+          <span>LLM <b id="mLlm">—</b></span>
+          <span id="mProj">프로젝트 <b>—</b></span>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn" id="btnNotice">ⓘ 고지</button>
+        <button class="btn" id="btnSettings">⚙️ 설정</button>
+        <button class="btn primary" id="btnNew">＋ 새 요구 접수</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <div class="tab active" data-tab="intake">💬 요구 접수 (INT)</div>
+    <div class="tab" data-tab="fea">⚖️ 타당성 평가 (FEA)</div>
+    <div class="tab" data-tab="ard">📐 요구 정의 (ARD)</div>
+    <div class="tab" data-tab="docs">🗂 문서함</div>
+    <div class="tab" data-tab="audit">🧾 감사 로그</div>
+  </nav>
+
+  <main class="main">
+
+    <!-- ══════════ ① 요구 접수 (FR-01/02/03/04/11/12) ══════════ -->
+    <section class="tab-panel active" id="panel-intake">
+      <div id="intakeEmpty" class="card">
+        <div class="card-head"><h2>요구 접수를 시작하세요</h2><span class="meta">표준체계 문서① INT</span></div>
+        <p class="muted" style="line-height:1.8">
+          왼쪽 <b>접수 양식</b>에 아는 만큼 적고 <b>[작성 완료 및 검증]</b> 을 누르면,
+          오른쪽 <b>AI 인터뷰</b>가 내용을 검토하고 부족한 것을 물어봅니다.<br />
+          양식을 다 채울 필요는 없습니다 — <b>빈칸인 채로 눌러도</b> 인터뷰가 처음부터 진행합니다.
+          오른쪽에서 바로 대화만 하셔도 됩니다.<br />
+          두루뭉술하거나 앞뒤가 맞지 않는 답은 <b>접수서를 쓸 수 있는 수준이 될 때까지 계속 되묻습니다.</b>
+          궁금한 게 있으면 인터뷰 중에 <b>되물으셔도 됩니다.</b>
+        </p>
+        <div class="row" style="margin-top:12px">
+          <button class="btn-primary" id="btnNew2">＋ 새 요구 접수 시작</button>
+        </div>
+      </div>
+
+      <div id="intakeWork" style="display:none">
+        <div class="split">
+          <!-- ── 좌: 표준 접수 양식 ── -->
+          <div class="card split-col">
+            <div class="card-head">
+              <h2>접수 양식 <span class="pill pill-other" id="pProjNo">—</span></h2>
+              <span class="meta">표준체계 문서① 양식</span>
+            </div>
+            <div class="row" style="justify-content:space-between; margin-bottom:2px">
+              <span class="muted">필수 항목 <b id="slotCount">0 / 0</b></span>
+              <span class="muted" id="slotState">—</span>
+            </div>
+            <div class="bar"><i id="slotBar" style="width:0%"></i></div>
+
+            <div class="form-scroll" id="intForm"></div>
+
+            <div class="form-foot">
+              <div class="muted" id="formHint">아는 만큼만 적으셔도 됩니다. 나머지는 인터뷰에서 여쭤봅니다.</div>
+              <div class="row" style="margin-top:8px">
+                <button class="btn-primary" id="btnVerify" style="flex:1">✓ 작성 완료 및 검증</button>
+                <button class="btn-light" id="btnFinalizeInt" style="height:38px">📄 INT 초안 생성</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── 우: AI 인터뷰 ── -->
+          <div class="card split-col">
+            <div class="card-head">
+              <h2>AI 인터뷰</h2>
+              <span class="meta">담당자 인터뷰를 대신합니다 · 되물으셔도 됩니다</span>
+            </div>
+            <div class="chat" id="chat"></div>
+            <div class="chat-input">
+              <textarea class="input" id="chatInput" rows="1"
+                placeholder="답변하거나, 궁금한 것을 물어보세요.  (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
+              <button class="btn-primary" id="btnSend">전송</button>
+            </div>
+            <p class="muted" style="margin:8px 0 0">
+              ⚠️ 주민등록번호·계좌번호 등 개인정보는 입력하지 마세요. 감지되면 저장을 차단합니다.
+            </p>
+          </div>
+        </div>
+
+        <div class="card" id="intDocCard" style="display:none">
+          <div class="card-head">
+            <h2>INT 초안 <span class="pill pill-complete" id="intDocNo">—</span></h2>
+            <div class="row">
+              <span class="meta" id="intValid"></span>
+              <button class="btn-light" data-export="INT" data-fmt="md">⬇ Markdown</button>
+              <button class="btn-light" data-export="INT" data-fmt="doc">⬇ Word</button>
+            </div>
+          </div>
+          <div id="intMissing"></div>
+          <div class="doc" id="intDoc"></div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn-light" id="btnGoFea">⚖️ 타당성 평가로 →</button>
+          </div>
+          <p class="muted" style="margin:10px 0 0">
+            ★ 사람 개입 지점 ① — 담당자가 정량 수치의 타당성과 문제 서술이 해결책으로 오염되지 않았는지 확인한 뒤 확정합니다.
+            SharePoint 등록은 사람이 직접 합니다(Out of Scope).
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ ② 타당성 평가 (FR-05~10) ══════════ -->
+    <section class="tab-panel" id="panel-fea">
+      <div id="feaEmpty" class="card">
+        <div class="card-head"><h2>타당성 평가를 시작하세요</h2><span class="meta">표준체계 문서② FEA</span></div>
+        <p class="muted" style="line-height:1.8">
+          접수서(INT)를 읽고 <b>평가서 초안을 채워 드립니다</b> — 대안 검토 4항목, 적합성 진단 5축, 요구 요약.<br />
+          트랙·유형·ROI 는 <b>규칙이 계산</b>합니다. LLM 도 대화도 이 값을 바꾸지 못합니다.<br />
+          오른쪽 챗봇이 <b>G1 에서 반려당할 곳</b>을 미리 짚어 드립니다.
+        </p>
+        <div class="row" style="margin-top:12px">
+          <select class="input" id="feaPick" style="width:280px"></select>
+          <button class="btn-primary" id="btnFeaStart">📥 INT 에서 초안 만들기</button>
+        </div>
+        <p class="muted" style="margin-top:10px">
+          ※ 접수서 내용이 있는 프로젝트만 선택할 수 있습니다.
+        </p>
+      </div>
+
+      <div id="feaWork" style="display:none">
+        <div class="split">
+          <!-- ── 좌: 평가서 양식 ── -->
+          <div class="card split-col">
+            <div class="card-head">
+              <h2>평가서 양식 <span class="pill pill-other" id="feaProjNo">—</span></h2>
+              <span class="meta">표준체계 문서② 양식</span>
+            </div>
+            <div class="row" style="justify-content:space-between; margin-bottom:2px">
+              <span class="muted">필수 항목 <b id="feaCount">0 / 0</b></span>
+              <span class="muted" id="feaState">—</span>
+            </div>
+            <div class="bar"><i id="feaBar" style="width:0%"></i></div>
+
+            <div class="form-scroll" id="feaForm"></div>
+
+            <div class="form-foot">
+              <div class="muted" id="feaHint">초안을 확인하고 고치신 뒤 검증을 눌러 주세요.</div>
+              <div class="row" style="margin-top:8px">
+                <button class="btn-primary" id="btnFeaVerify" style="flex:1">✓ 작성 완료 및 검증</button>
+                <button class="btn-light" id="btnFeaRedraft" style="height:38px" title="빈 칸만 다시 채웁니다">↻ 초안 보강</button>
+                <button class="btn-light" id="btnGenFea" style="height:38px">📄 FEA 초안 생성</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── 우: AI 검토 ── -->
+          <div class="card split-col">
+            <div class="card-head">
+              <h2>AI 검토</h2>
+              <span class="meta">G1 관점 검토 · 되물으셔도 됩니다</span>
+            </div>
+            <div class="chat" id="feaChat"></div>
+            <div class="chat-input">
+              <textarea class="input" id="feaChatInput" rows="1"
+                placeholder="답변하거나, 궁금한 것을 물어보세요.  (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
+              <button class="btn-primary" id="btnFeaSend">전송</button>
+            </div>
+            <p class="muted" style="margin:8px 0 0">
+              트랙·유형·ROI 는 규칙이 결정합니다 — 대화로는 바뀌지 않습니다. 4번 응답을 고치면 즉시 다시 계산됩니다.
+            </p>
+          </div>
+        </div>
+
+        <div class="card" id="adviceCard" style="display:none">
+          <div class="card-head">
+            <h2>에이전트 판정 권고 <span class="meta">— 참고용 · 확정은 담당자·팀장(G1)</span></h2>
+            <span class="meta">규칙 모듈이 계산 · 대화로 바뀌지 않음</span>
+          </div>
+          <div id="adviceBox"></div>
+        </div>
+
+        <div class="card" id="verdictCard" style="display:none">
+          <div class="card-head"><h2>트랙·유형 판정 <span class="meta">— 근거 조항 포함</span></h2></div>
+          <div id="verdictBox"></div>
+        </div>
+
+        <div class="card" id="feaDocCard" style="display:none">
+          <div class="card-head">
+            <h2>FEA 초안 <span class="pill pill-complete" id="feaDocNo">—</span></h2>
+            <div class="row">
+              <span class="meta" id="feaValid"></span>
+              <button class="btn-light" data-export="FEA" data-fmt="md">⬇ Markdown</button>
+              <button class="btn-light" data-export="FEA" data-fmt="doc">⬇ Word</button>
+            </div>
+          </div>
+          <div id="feaMissing"></div>
+          <div class="doc" id="feaDoc"></div>
+          <p class="muted" style="margin:10px 0 0">
+            ★ 사람 개입 지점 ② — 담당자가 트랙·유형 판정의 적정성, 대안 검토 논리, ROI 계산 근거를 검토하고
+            <b>Go/Drop을 확정</b>합니다. 5번 판정란은 에이전트가 비워 둡니다.
+            SharePoint 등록은 사람이 직접 합니다(Out of Scope).
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ ③ 문서함 (FR-14/15) ══════════ -->
+    <section class="tab-panel" id="panel-ard">
+      <div id="ardEmpty" class="card">
+        <div class="card-head"><h2>요구 정의를 시작하세요</h2><span class="meta">표준체계 문서③ ARD · A4 3장</span></div>
+        <p class="muted" style="line-height:1.8">
+          INT·FEA 를 읽고 <b>ARD 초안을 채워 드립니다</b> — 한 줄 정의, 범위 선언, 자율성 수준.<br />
+          그다음 <b>요구자께 몇 가지만 여쭤</b> 미팅에 들고 갈 <b>1차 문서</b>를 만듭니다.<br />
+          기능 요구사항·보안 항목은 <b>미팅에서 함께 채웁니다</b> — 여기서 다 채우지 않습니다.
+        </p>
+        <div class="row" style="margin-top:12px">
+          <select class="input" id="ardPick" style="width:280px"></select>
+          <button class="btn-primary" id="btnArdStart">📥 INT·FEA 에서 초안 만들기</button>
+        </div>
+        <p class="muted" style="margin-top:10px">
+          ※ 타당성 평가(FEA)까지 진행된 프로젝트만 선택할 수 있습니다. ARD 는 <b>G1 통과 후</b>에 씁니다.
+        </p>
+      </div>
+
+      <div id="ardWork" style="display:none">
+        <div class="split">
+          <!-- ── 좌: ARD 양식 ── -->
+          <div class="card split-col">
+            <div class="card-head">
+              <h2>요구사항 정의서 <span class="pill pill-other" id="ardProjNo">—</span></h2>
+              <span class="meta">표준체계 문서③ 양식</span>
+            </div>
+            <div class="row" style="justify-content:space-between; margin-bottom:2px">
+              <span class="muted">G2 필수 3종 <b id="ardCount">0 / 0</b></span>
+              <span class="muted" id="ardState">—</span>
+            </div>
+            <div class="bar"><i id="ardBar" style="width:0%"></i></div>
+
+            <div class="form-scroll" id="ardForm"></div>
+
+            <div class="form-foot">
+              <div class="muted" id="ardHint">4~6번은 비워 두셔도 됩니다 — 미팅에서 함께 채웁니다.</div>
+              <div class="row" style="margin-top:8px">
+                <button class="btn-primary" id="btnArdVerify" style="flex:1">✓ 작성 완료 및 검증</button>
+                <button class="btn-light" id="btnArdRedraft" style="height:38px" title="빈 칸만 다시 채웁니다">↻ 초안 보강</button>
+                <button class="btn-light" id="btnGenArd" style="height:38px">📄 ARD 초안 생성</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── 우: AI 인터뷰 ── -->
+          <div class="card split-col">
+            <div class="card-head">
+              <h2>AI 인터뷰</h2>
+              <span class="meta">요구자 대상 · 되물으셔도 됩니다</span>
+            </div>
+            <div class="chat" id="ardChat"></div>
+            <div class="chat-input">
+              <textarea class="input" id="ardChatInput" rows="1"
+                placeholder="답변하거나, 궁금한 것을 물어보세요.  (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
+              <button class="btn-primary" id="btnArdSend">전송</button>
+            </div>
+            <p class="muted" style="margin:8px 0 0">
+              최소한만 여쭙습니다. 한 항목에 <b>최대 4번</b>까지만 묻고, 그래도 안 되면 <b>미팅에서 채웁니다</b>.
+            </p>
+          </div>
+        </div>
+
+        <div class="card" id="ardDocCard" style="display:none">
+          <div class="card-head">
+            <h2>ARD 초안 <span class="pill pill-other" id="ardDocNo">—</span></h2>
+            <span class="meta" id="ardValid">—</span>
+          </div>
+          <div id="ardMissing"></div>
+          <div class="doc" id="ardDoc"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn-light" id="btnArdMd">⬇ Markdown</button>
+            <button class="btn-light" id="btnArdDoc">⬇ Word</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="panel-docs">
+      <div class="card">
+        <div class="card-head">
+          <h2 id="docTitle">접수 문서함</h2>
+          <div class="row">
+            <input class="input" id="docSearch" placeholder="번호·요구자·부서 검색" style="width:200px; height:32px; padding:6px 10px" />
+            <button class="btn-light" id="btnArchToggle">🗄 보관함 보기</button>
+            <button class="btn-light" id="btnReloadDocs">↻ 새로고침</button>
+          </div>
+        </div>
+        <div id="docNote"></div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th style="width:92px">번호</th><th>에이전트(가칭)</th><th style="width:84px">요구자</th>
+              <th style="width:96px">부서</th><th style="width:82px">상태</th>
+              <th style="width:58px">트랙</th><th style="width:70px">유형</th>
+              <th style="width:225px">작업</th>
+            </tr></thead>
+            <tbody id="docRows"><tr><td colspan="8" class="muted" style="text-align:center; padding:24px">불러오는 중…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="muted" style="margin:12px 0 0; line-height:1.8">
+          <b>열기</b> 를 누르면 그 프로젝트를 이어서 작업합니다 — 양식·대화 내용이 그대로 복원됩니다.<br />
+          <b>삭제</b> 는 <b>보관함으로 옮기는 것</b>이며 파일을 지우지 않습니다. 보관함에서 언제든 되돌릴 수 있습니다.<br />
+          내보낸 파일의 <b>SharePoint(AX Project Hub Site) 등록은 사람이 직접</b> 합니다 — 이 에이전트는 외부 시스템에 쓰지 않습니다.
+        </p>
+      </div>
+    </section>
+
+    <!-- ══════════ ④ 감사 로그 (FR-13) ══════════ -->
+    <section class="tab-panel" id="panel-audit">
+      <div class="card">
+        <div class="card-head">
+          <h2>감사 로그</h2>
+          <div class="row">
+            <span class="meta">입력·출력·판단근거·사용자·시각·버전 — 보관 1년</span>
+            <button class="btn-light" id="btnReloadAudit">↻ 새로고침</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th style="width:150px">시각(UTC)</th><th style="width:150px">이벤트</th>
+              <th style="width:90px">프로젝트</th><th style="width:74px">지식</th><th>내용</th>
+            </tr></thead>
+            <tbody id="auditRows"><tr><td colspan="5" class="muted" style="text-align:center; padding:24px">불러오는 중…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 설정 모달 (FR-12 / ARD 6.3) — 히어로 [⚙️ 설정] 로 연다 -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-card wide">
+      <div class="modal-head">
+        <h3>설정 · 지식</h3>
+        <button class="modal-close" id="setX">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="seg" id="setSeg">
+          <button class="seg-btn active" data-set="knowledge">📚 지식 기준</button>
+          <button class="seg-btn" data-set="llm">🔌 LLM 연결</button>
+          <button class="seg-btn" data-set="scope">🛡 금칙 · 범위</button>
+        </div>
+
+        <!-- 지식 기준 -->
+        <section class="set-panel active" id="set-knowledge">
+          <div id="stdBox"></div>
+
+          <div class="src-pick" id="stdPick">
+            <h4>원본 파일</h4>
+            <p class="muted">표준체계가 개정되면 이 파일을 교체하거나 새 파일을 지정하세요.
+              공유폴더의 원본을 직접 가리켜도 됩니다.</p>
+            <div class="row" style="margin-top:8px">
+              <input class="input" id="stdPath" placeholder="표준체계 문서(.md) 경로" style="flex:1; min-width:220px" />
+              <button class="btn-light" id="btnStdBrowse">📂 찾아보기</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn-primary" id="btnStdApply">✓ 적용</button>
+              <button class="btn-light" id="btnStdCheck">🔍 검사만</button>
+              <button class="btn-light" id="btnStdDefault">↩ 기본 위치로</button>
+              <button class="btn-light" id="btnStdRefresh">↻ 다시 확인</button>
+            </div>
+            <div id="stdPathMsg"></div>
+            <div id="stdCands" class="cands"></div>
+          </div>
+        </section>
+
+        <!-- LLM 연결 -->
+        <section class="set-panel" id="set-llm">
+          <div id="llmBox"></div>
+
+          <div class="src-pick" id="envPick">
+            <h4>설정 파일 (env)</h4>
+            <p class="muted">API 키·엔드포인트·배포명이 든 파일입니다.
+              <b>키는 이 앱이 저장하지 않고</b> 지정한 파일에서 그때그때 읽습니다.</p>
+            <div class="row" style="margin-top:8px">
+              <input class="input" id="envPath" placeholder="env 파일 경로" style="flex:1; min-width:220px" />
+              <button class="btn-light" id="btnEnvBrowse">📂 찾아보기</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button class="btn-primary" id="btnEnvApply">✓ 적용</button>
+              <button class="btn-light" id="btnEnvCheck">🔍 검사만</button>
+              <button class="btn-light" id="btnEnvDefault">↩ 기본 위치로</button>
+            </div>
+            <div id="envPathMsg"></div>
+            <div id="envCands" class="cands"></div>
+          </div>
+
+          <div id="llmForm" style="display:none; margin-top:12px">
+            <div class="grid2" style="grid-template-columns:1fr 1fr">
+              <label class="fld"><span>Endpoint</span>
+                <input class="input" id="setEndpoint" placeholder="https://xxxx.openai.azure.com/" /></label>
+              <label class="fld"><span>Deployment</span>
+                <input class="input" id="setDeploy" placeholder="gpt-5.6-sol" /></label>
+            </div>
+            <label class="fld"><span>API Key</span>
+              <input class="input" id="setKey" type="password" placeholder="이 브라우저에만 저장됩니다" /></label>
+            <div class="row">
+              <button class="btn-primary" id="btnSaveKey">저장</button>
+              <button class="btn-light" id="btnClearKey">키 삭제</button>
+              <button class="btn-light" id="btnTestKey">연결 확인</button>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn-light" id="btnTestLlm">🔌 서버 LLM 연결 확인</button>
+          </div>
+          <p class="muted" style="line-height:1.8; margin-top:10px">
+            API 키는 코드·실행 파일·산출물에 넣지 않습니다. 서버 모드는 앱 폴더 또는 상위 폴더의
+            <code>env</code> 파일에서 읽고, 단독 HTML 은 이 브라우저에만 보관합니다.
+          </p>
+        </section>
+
+        <!-- 금칙 · 범위 -->
+        <section class="set-panel" id="set-scope">
+          <h4 style="margin:0 0 8px; font-size:13px">금칙 (Guardrail) <span class="muted">— ARD 8.3</span></h4>
+          <p class="muted" style="margin:0 0 8px">산출 직전에 검사합니다. <b>1건이라도 위반하면 G3(배포 승인) 불통과</b>입니다.</p>
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th style="width:56px">#</th><th>금칙</th></tr></thead>
+            <tbody id="guardRows"></tbody>
+          </table></div>
+
+          <h4 style="margin:18px 0 8px; font-size:13px">이 에이전트가 하지 않는 일 <span class="muted">— ARD 3.3 Out of Scope</span></h4>
+          <ul id="oosList" style="margin:0; padding-left:18px; line-height:1.9; font-size:12.5px; color:var(--ink-2)"></ul>
+        </section>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-primary" id="setClose">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 고지 모달 (FR-12) -->
+  <div class="modal-overlay" id="noticeModal">
+    <div class="modal-card">
+      <div class="modal-head"><h3 id="noticeTitle">사용 전 확인해 주세요</h3><button class="modal-close" id="noticeX">✕</button></div>
+      <div class="modal-body" id="noticeBody"></div>
+      <div class="modal-foot"><button class="btn-primary" id="noticeOk">확인했습니다</button></div>
+    </div>
+  </div>
+
+  <!-- 문서 보기 모달 -->
+  <div class="modal-overlay" id="docModal">
+    <div class="modal-card wide">
+      <div class="modal-head"><h3 id="docModalTitle">문서</h3><button class="modal-close" id="docX">✕</button></div>
+      <div class="modal-body"><div class="doc" id="docModalBody" style="max-height:none; border:0; padding:0"></div></div>
+      <div class="modal-foot">
+        <button class="btn-light" id="docDlMd">⬇ Markdown</button>
+        <button class="btn-light" id="docDlDoc">⬇ Word</button>
+        <button class="btn-primary" id="docClose">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="loading-overlay" id="loadingOverlay" hidden>
+    <div class="loading-card">
+      <div class="loading-brand">AI Enablement</div>
+      <div class="loading-msg"><span id="loadingMsgText">작업 중</span><span class="dot">.</span><span class="dot dot2">.</span><span class="dot dot3">.</span></div>
+      <div class="loading-sub" id="loadingSubText"></div>
+    </div>
+  </div>
+
+<script>
+  'use strict';
+  /* ═══════════════ 공통 ═══════════════ */
+  var $ = function(s){ return document.querySelector(s); };
+  var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  function toast(msg, type){
+    var t=$('#toast'); t.textContent=msg;
+    t.className='toast show'+(type==='err'?' err':(type==='ok'?' ok':''));
+    clearTimeout(window.__toastT);
+    window.__toastT=setTimeout(function(){ t.className='toast'; }, 3800);
+  }
+  window._showLoading=function(m,s){ $('#loadingMsgText').textContent=m||'작업 중';
+    $('#loadingSubText').textContent=s||''; $('#loadingOverlay').hidden=false; };
+  window._updateLoading=function(s){ $('#loadingSubText').textContent=s||''; };
+  window._hideLoading=function(){ $('#loadingOverlay').hidden=true; };
+
+  function api(url, opts){
+    return fetch(url, opts).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){
+        if(!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+        return j;
+      });
+    });
+  }
+  function post(url, body){ return api(url, {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body||{})}); }
+  function put(url, body){ return api(url, {method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body||{})}); }
+
+  /* ═══════════════ 아주 작은 Markdown 렌더러 ═══════════════
+     문서는 서버(rules.render_doc)가 만든 Markdown 이다. 표·제목·목록·인용만 그린다.
+     CDN 금지라 라이브러리를 쓰지 않는다. */
+  function mdToHtml(md){
+    var lines = String(md||'').split('\n'), out=[], i=0;
+    function inline(s){
+      s = esc(s);
+      s = s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+      s = s.replace(/⬜\s*미확보/g, '<span class="missing">⬜ 미확보</span>');
+      return s;
+    }
+    while(i < lines.length){
+      var ln = lines[i];
+      // 표
+      if(/^\|.*\|\s*$/.test(ln) && i+1 < lines.length && /^\|[\s:|-]+\|\s*$/.test(lines[i+1])){
+        var head = ln.trim().replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();});
+        i += 2;
+        var rows=[];
+        while(i < lines.length && /^\|.*\|\s*$/.test(lines[i])){
+          rows.push(lines[i].trim().replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();}));
+          i++;
+        }
+        var h = '<table><thead><tr>' + head.map(function(c){ return '<th>'+inline(c)+'</th>'; }).join('') + '</tr></thead><tbody>';
+        h += rows.map(function(r){ return '<tr>' + r.map(function(c){ return '<td>'+inline(c)+'</td>'; }).join('') + '</tr>'; }).join('');
+        out.push(h + '</tbody></table>');
+        continue;
+      }
+      var m = ln.match(/^(#{1,4})\s+(.*)$/);
+      if(m){ var lv=m[1].length; out.push('<h'+lv+'>'+inline(m[2])+'</h'+lv+'>'); i++; continue; }
+      if(/^>\s?/.test(ln)){
+        var buf=[];
+        while(i < lines.length && /^>\s?/.test(lines[i])){ buf.push(lines[i].replace(/^>\s?/,'')); i++; }
+        out.push('<blockquote>'+buf.map(inline).join('<br/>')+'</blockquote>');
+        continue;
+      }
+      if(/^[-*]\s+/.test(ln)){
+        var items=[];
+        while(i < lines.length && /^[-*]\s+/.test(lines[i])){ items.push(lines[i].replace(/^[-*]\s+/,'')); i++; }
+        out.push('<ul>'+items.map(function(t){ return '<li>'+inline(t)+'</li>'; }).join('')+'</ul>');
+        continue;
+      }
+      if(/^---+$/.test(ln.trim())){ out.push('<hr/>'); i++; continue; }
+      if(ln.trim()){ out.push('<p>'+inline(ln)+'</p>'); }
+      i++;
+    }
+    return out.join('\n');
+  }
+
+  /* ═══════════════ 상태 ═══════════════ */
+  var BOOT = null;        // /api/bootstrap 결과
+  var CUR = null;         // 현재 프로젝트 (서버가 준 객체)
+
+  function setProjBadge(){
+    var no = CUR ? CUR.project_no : '—';
+    $('#mProj').innerHTML = '프로젝트 <b>' + esc(no) + '</b>';
+    $('#pProjNo').textContent = no;
+    $('#feaProjNo').textContent = no;
+  }
+
+  /* ═══════════════ 탭 ═══════════════ */
+  $$('.tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var id = tab.dataset.tab;
+      $$('.tab').forEach(function(t){ t.classList.toggle('active', t===tab); });
+      $$('.tab-panel').forEach(function(p){ p.classList.toggle('active', p.id==='panel-'+id); });
+      if(id==='docs') loadDocs();
+      if(id==='fea' && $('#feaWork').style.display === 'none') refreshFeaPick();
+      if(id==='audit') loadAudit();
+    });
+  });
+  document.addEventListener('click', function(e){
+    var t = e.target.closest('.tab');
+    if(t && t.dataset.tab === 'ard' && typeof refreshArdPick === 'function') refreshArdPick();
+  });
+  function goTab(id){ var t=$$('.tab').filter(function(x){ return x.dataset.tab===id; })[0]; if(t) t.click(); }
+
+  /* ═══════════════ 부팅 (FR-12 고지) ═══════════════ */
+  function boot(){
+    return api('/api/bootstrap').then(function(b){
+      BOOT = b;
+      var s = b.standard || {};
+      $('#mStdDate').textContent = (s.version||'?') + ' · ' + (s.date||'?');
+      $('#mStdSha').textContent = (s.sha256||'').slice(0,12) || '—';
+      $('#mLlm').textContent = b.llm && b.llm.ready ? (b.llm.deployment||'연결됨') : '미설정';
+
+      renderNotice(b.notice, s);
+      renderStdBox(s);
+      renderLlmBox(b.llm);
+
+      $('#guardRows').innerHTML = Object.keys(b.guardrails||{}).map(function(k){
+        return '<tr><td><b>'+esc(k)+'</b></td><td>'+esc(b.guardrails[k])+'</td></tr>'; }).join('');
+      $('#oosList').innerHTML = (b.notice.limits||[]).map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('');
+
+      if(!sessionStorage.getItem('notice_ack')) openNotice();
+      return b;
+    }).catch(function(e){ toast('초기화 실패: '+e.message, 'err'); });
+  }
+
+  function renderNotice(n, s){
+    if(!n) return;
+    $('#noticeTitle').textContent = n.title || '사용 전 확인해 주세요';
+    var html = '';
+    html += '<div class="note warn"><b>자율성 L1</b><br/>' + esc(n.autonomy).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>') + '</div>';
+    html += '<div class="note err"><b>입력 금지 정보</b><br/>' + esc(n.forbidden) + '</div>';
+    html += '<div class="note info"><b>이 에이전트가 하지 않는 일</b><ul>'
+          + (n.limits||[]).map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('') + '</ul></div>';
+    html += '<div class="note ok"><b>지식 기준일</b><br/>표준체계 ' + esc(s.version||'?') + ' · ' + esc(s.date||'?')
+          + ' (해시 ' + esc((s.sha256||'').slice(0,12)) + ')';
+    if(s.regression_required) html += '<br/>⚠️ 지난 실행 이후 표준체계 파일이 변경되었습니다. 회귀 평가가 필요합니다.';
+    html += '</div>';
+    html += '<p class="muted">' + esc(n.contact||'') + '</p>';
+    $('#noticeBody').innerHTML = html;
+  }
+
+  function renderStdBox(s){
+    var cls = !s.found ? 'err' : (s.regression_required || !s.matches_engine ? 'warn' : 'ok');
+    var h = '<div class="note '+cls+'">';
+    if(!s.found){ h += '<b>표준체계 파일을 찾지 못했습니다.</b><br/>' + esc(s.path); }
+    else {
+      h += '<b>표준체계 ' + esc(s.version||'?') + ' · 최종 수정 ' + esc(s.date||'?') + '</b><br/>';
+      h += 'SHA-256 <code>' + esc((s.sha256||'').slice(0,32)) + '…</code><br/>';
+      h += '파일 ' + esc(s.path) + ' (' + Math.round((s.bytes||0)/1024) + ' KB)';
+      if(s.previous_seen_at) h += '<br/>마지막 확인 ' + esc(s.previous_seen_at);
+      if(s.note) h += '<br/>⚠️ ' + esc(s.note);
+    }
+    h += '</div>';
+    h += '<p class="muted" style="line-height:1.8">표준체계가 개정되면 <b>3영업일 이내</b>에 이 파일을 교체하고, '
+       + '<b>평가셋 전체를 재실행(회귀 평가)</b>한 뒤 위 기준일이 갱신되었는지 확인하세요. '
+       + '갱신 담당 공백이 1개월 이상 지속되면 Sunset(폐기) 검토 발제 사유가 됩니다.</p>';
+    $('#stdBox').innerHTML = h;
+  }
+
+  function renderLlmBox(l){
+    l = l || {};
+    if(STANDALONE){ renderLlmBoxStandalone(); return; }
+    var h = l.ready
+      ? '<div class="note ok"><b>연결됨</b> — 배포 <code>'+esc(l.deployment)+'</code> · 키 '+esc(l.key_masked)
+        +'<br/>출처: <code>'+esc(l.source)+'</code></div>'
+      : '<div class="note warn"><b>LLM 미설정</b> — 판단형 기능(대화형 접수, 대안 검토, 적합성 진단)이 동작하지 않습니다.<br/>'
+        +'앱 폴더 또는 상위 폴더에 <code>env</code> 파일을 두세요 '
+        +'(AZURE_OPENAI_API_KEY / AZURE_OPENAI_ENDPOINT / AZURE_OPENAI_DEPLOYMENT).<br/>'
+        +'규칙형 기능(ROI·트랙 판정·민감정보·문서 생성)은 LLM 없이도 동작합니다.</div>';
+    $('#llmBox').innerHTML = h;
+  }
+  /* 단독(standalone) HTML 훅 — build_html.py 가 주입한 shim 이 채운다.
+     함수 선언은 shim 보다 나중에 호이스팅되므로, 덮어쓰지 말고 shim 의 함수를 호출한다. */
+  function renderLlmBoxStandalone(){ if(window.__renderLlmBox) window.__renderLlmBox(); }
+  var STANDALONE = (window.__STANDALONE__ === true);
+
+  function openNotice(){ $('#noticeModal').classList.add('open'); }
+  function closeNotice(){ $('#noticeModal').classList.remove('open');
+    sessionStorage.setItem('notice_ack','1'); }
+  $('#btnNotice').addEventListener('click', openNotice);
+  $('#noticeX').addEventListener('click', closeNotice);
+  $('#noticeOk').addEventListener('click', closeNotice);
+  $('#noticeModal').addEventListener('click', function(e){ if(e.target.id==='noticeModal') closeNotice(); });
+
+  /* ═══════════════ 새 접수 ═══════════════ */
+  function newProject(){
+    window._showLoading('접수 시작', '프로젝트 번호를 채번합니다');
+    post('/api/projects', {}).then(function(p){
+      CUR = p; setProjBadge();
+      $('#intakeEmpty').style.display='none';
+      $('#intakeWork').style.display='';
+      $('#intDocCard').style.display='none';
+      $('#chat').innerHTML='';
+      window.__warned = {};
+      renderForm();
+      pushMsg('agent',
+        '안녕하세요. 요구 접수를 도와드리겠습니다. 프로젝트 번호는 ' + p.project_no + ' 입니다.\n\n'
+        + '왼쪽 양식에 아는 만큼 적고 [작성 완료 및 검증] 을 눌러 주세요. '
+        + '빈칸이어도 괜찮습니다 — 제가 처음부터 여쭤보겠습니다.\n'
+        + '여기서 바로 대화만 하셔도 되고, 진행 중에 궁금한 게 있으면 저에게 물어보셔도 됩니다.');
+      goTab('intake');
+      toast('접수 시작: ' + p.project_no, 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  }
+  $('#btnNew').addEventListener('click', newProject);
+  $('#btnNew2').addEventListener('click', newProject);
+
+  /* ═══════════════ 좌측 접수 양식 ═══════════════
+     BOOT.form 스펙으로 그린다. 표준체계 양식이 바뀌면 서버만 고치면 화면이 따라온다. */
+  var FORM_KEYS = [];
+
+  function renderForm(){
+    var spec = (BOOT && BOOT.form) || [];
+    var data = (CUR && CUR.int_data) || {};
+    FORM_KEYS = [];
+    var h = '';
+    spec.forEach(function(sec){
+      h += '<div class="fsec"><h4><span class="n">' + sec.n + '</span>' + esc(sec.title) + '</h4>';
+      if(sec.hint) h += '<p class="fhint">' + esc(sec.hint).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>') + '</p>';
+      sec.fields.forEach(function(f){
+        FORM_KEYS.push(f.k);
+        var v = data[f.k] || '';
+        var optional = ((BOOT.slot_rules||{})[f.k]||{}).optional;
+        h += '<div class="fld-row g-missing" data-slot="' + f.k + '">'
+           + '<label for="f_' + f.k + '">' + esc(f.label)
+           + (optional ? ' <span class="opt">선택</span>' : '')
+           + ' <span class="gmark missing" data-mark>미입력</span></label>';
+        h += (f.kind === 'area')
+          ? '<textarea class="input" id="f_' + f.k + '" rows="3" placeholder="' + esc(f.ph||'') + '">' + esc(v) + '</textarea>'
+          : '<input class="input" id="f_' + f.k + '" value="' + esc(v) + '" placeholder="' + esc(f.ph||'') + '" />';
+        h += '<div class="why" data-why hidden></div></div>';
+      });
+      h += '</div>';
+    });
+    $('#intForm').innerHTML = h;
+
+    // 사용자가 칸을 떠나면 저장한다 (챗과 같은 데이터를 본다)
+    FORM_KEYS.forEach(function(k){
+      var el = $('#f_' + k);
+      if(!el) return;
+      el.addEventListener('blur', saveFormField);
+    });
+    applyProgress(null);
+  }
+
+  function collectForm(){
+    var out = {};
+    FORM_KEYS.forEach(function(k){ var el = $('#f_' + k); if(el) out[k] = el.value.trim(); });
+    return out;
+  }
+
+  var _saveT = null;
+  function saveFormField(){
+    if(!CUR) return;
+    clearTimeout(_saveT);
+    _saveT = setTimeout(function(){
+      var form = collectForm();
+      put('/api/projects/' + encodeURIComponent(CUR.project_no), {int_data: form})
+        .then(function(d){ CUR = d; })
+        .catch(function(){ /* 저장 실패는 조용히 — 검증 시 어차피 다시 보낸다 */ });
+    }, 400);
+  }
+
+  /* 챗이 알아낸 값을 폼에 반영 */
+  function syncFormFromData(data, changedKeys){
+    if(!data) return;
+    FORM_KEYS.forEach(function(k){
+      var el = $('#f_' + k);
+      if(!el) return;
+      var v = data[k] || '';
+      if(el.value !== v && document.activeElement !== el){
+        el.value = v;
+        if(!changedKeys || changedKeys.indexOf(k) >= 0){
+          var row = el.closest('.fld-row');
+          if(row){ row.classList.remove('just-filled'); void row.offsetWidth; row.classList.add('just-filled'); }
+        }
+      }
+    });
+  }
+
+  /* 항목별 상태(ok/weak/missing/보류)를 폼에 칠한다 */
+  var GRADE_LABEL = {ok:'확인', weak:'보완 필요', missing:'미입력'};
+  function applyProgress(p){
+    if(p){
+      $('#slotCount').textContent = p.filled + ' / ' + p.total;
+      $('#slotBar').style.width = (p.percent || 0) + '%';
+      $('#slotState').textContent = p.ready ? '✅ 접수서 작성 가능' : ((p.weak||[]).length ? '보완 필요 ' + p.weak.length + '건' : '진행 중');
+      $('#slotState').style.color = p.ready ? 'var(--green)' : 'var(--muted)';
+    }
+    var slots = (p && p.slots) || [];
+    var bySlot = {};
+    slots.forEach(function(s){ bySlot[s.key] = s; });
+
+    $$('#intForm .fld-row').forEach(function(row){
+      var k = row.dataset.slot, s = bySlot[k];
+      var el = $('#f_' + k);
+      var grade = s ? s.grade : ((el && el.value.trim()) ? 'ok' : 'missing');
+      row.className = 'fld-row g-' + grade + (row.classList.contains('just-filled') ? ' just-filled' : '');
+      var mark = row.querySelector('[data-mark]');
+      var why = row.querySelector('[data-why]');
+      var held = s && s.held;
+      if(mark){
+        mark.className = 'gmark ' + (held ? 'held' : grade);
+        mark.textContent = held ? '보류' : (GRADE_LABEL[grade] || grade);
+      }
+      if(why){
+        if(held){
+          why.hidden = false; why.className = 'why held';
+          why.textContent = '되물었지만 확보하지 못했습니다. 문서에는 ⬜ 미확보로 남습니다.';
+        } else if(s && s.grade === 'weak' && s.reason){
+          why.hidden = false; why.className = 'why weak'; why.textContent = s.reason;
+        } else { why.hidden = true; why.textContent = ''; }
+      }
+    });
+    $('#btnFinalizeInt').disabled = !(CUR && CUR.project_no);
+  }
+
+  /* 인터뷰가 지금 묻고 있는 칸을 강조 */
+  function highlightAsk(slot){
+    $$('#intForm .fld-row').forEach(function(r){ r.classList.remove('focus-ask'); });
+    if(!slot) return;
+    var row = $$('#intForm .fld-row').filter(function(r){ return r.dataset.slot === slot; })[0];
+    if(row){
+      row.classList.add('focus-ask');
+      row.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }
+  }
+
+  /* ═══════════════ 검증 (좌 → 우) ═══════════════ */
+  $('#btnVerify').addEventListener('click', function(){
+    if(!CUR){ toast('먼저 새 요구 접수를 시작하세요','err'); return; }
+    window._showLoading('검증 중', '적어주신 내용을 검토하고 있습니다');
+    $('#btnVerify').disabled = true;
+    post('/api/intake/verify', {project_no: CUR.project_no, form: collectForm()}).then(function(r){
+      if(r.data) CUR.int_data = r.data;
+      syncFormFromData(r.data, r.changed);
+      applyProgress(r.progress);
+      if(r.blocked){ pushMsg('agent', r.reply, 'danger'); toast('민감정보가 감지되어 저장하지 않았습니다','err'); return; }
+      pushMsg('agent', r.reply);
+      (r.issues||[]).slice(0,1).forEach(function(i){ highlightAsk(i.slot); });
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) pushMsg('agent', 'LLM 오류: ' + r.llm_error, 'system');
+      toast(r.done ? '검증 완료 — 접수서 작성 가능' : ((r.issues||[]).length + '개 항목을 더 여쭤보겠습니다'), r.done ? 'ok' : '');
+      $('#chatInput').focus();
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); $('#btnVerify').disabled = false; });
+  });
+
+  /* ═══════════════ 인터뷰 (우) ═══════════════ */
+  function pushMsg(role, text, cls){
+    var d = document.createElement('div');
+    d.className = 'msg ' + (cls || role);
+    d.innerHTML = '<div class="bubble">' + (role==='agent' && /<span|<b/.test(text) ? text : esc(text)) + '</div>';
+    $('#chat').appendChild(d);
+    $('#chat').scrollTop = $('#chat').scrollHeight;
+    return d;
+  }
+
+  function send(){
+    var inp = $('#chatInput'), msg = inp.value.trim();
+    if(!msg) return;
+    if(!CUR){ toast('먼저 새 요구 접수를 시작하세요','err'); return; }
+    inp.value=''; inp.style.height='auto';
+    pushMsg('user', msg);
+    var wait = pushMsg('agent', '<span class="typing">생각 중<span>.</span><span>.</span><span>.</span></span>');
+    $('#btnSend').disabled = true;
+
+    post('/api/intake/message', {project_no: CUR.project_no, message: msg}).then(function(r){
+      wait.remove();
+      if(r.blocked){ pushMsg('agent', r.reply, 'danger'); return; }
+      pushMsg('agent', r.reply, r.refused ? 'system' : null);
+
+      if(r.solution_talk) pushMsg('agent',
+        '해결책이 아니라 문제를 여쭙고 있습니다. 표준체계 문서①: "여기서는 해결책이 아니라 고통을 묻는다."', 'system');
+      (r.rejected||[]).forEach(function(rj){
+        pushMsg('agent', '"' + rj.value + '" 은(는) 값으로 받지 않았습니다 — ' + rj.reason, 'system'); });
+      (r.unconfirmed||[]).forEach(function(k){
+        if(!window.__warned) window.__warned = {};
+        if(window.__warned[k]) return; window.__warned[k] = 1;
+        pushMsg('agent', '이 항목은 더 여쭤도 확보가 어려워 보여 보류합니다. 문서에는 ⬜ 미확보로 남고, 담당자가 확인합니다.', 'system'); });
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) pushMsg('agent', 'LLM 오류: ' + r.llm_error, 'system');
+
+      if(r.data && CUR){ CUR.int_data = r.data; syncFormFromData(r.data, Object.keys(r.accepted||{})); }
+      if(r.progress) applyProgress(r.progress);
+      var nextSlot = ((r.progress||{}).missing||[]).concat(((r.progress||{}).weak)||[])[0];
+      highlightAsk(nextSlot);
+    }).catch(function(e){ wait.remove(); pushMsg('agent', '오류: '+e.message, 'danger'); })
+      .finally(function(){ $('#btnSend').disabled=false; $('#chatInput').focus(); });
+  }
+  $('#btnSend').addEventListener('click', send);
+  $('#chatInput').addEventListener('keydown', function(e){
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+  });
+  $('#chatInput').addEventListener('input', function(){
+    this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,120)+'px';
+  });
+
+  /* ═══════════════ INT 생성 ═══════════════ */
+  $('#btnFinalizeInt').addEventListener('click', function(){
+    if(!CUR){ toast('먼저 접수를 시작하세요','err'); return; }
+    var go = function(){
+      window._showLoading('INT 초안 생성', '표준체계 문서① 양식으로 정리합니다');
+      post('/api/intake/finalize', {project_no: CUR.project_no}).then(function(r){
+        CUR = r.project;
+        $('#intDocCard').style.display='';
+        $('#intDocNo').textContent = CUR.project_no + '-INT';
+        $('#intDoc').innerHTML = mdToHtml(r.markdown);
+        renderMissing('#intMissing', r.validation, r.guardrails, r.assessment);
+        $('#intValid').textContent = '필수 ' + (r.validation.required_total - r.validation.required_missing)
+          + '/' + r.validation.required_total + ' 기재';
+        if(r.progress) applyProgress(r.progress);
+        $('#intDocCard').scrollIntoView({behavior:'smooth', block:'start'});
+        toast('INT 초안을 만들었습니다', 'ok');
+      }).catch(function(e){ toast(e.message,'err'); })
+        .finally(function(){ window._hideLoading(); });
+    };
+    // 아직 수준에 못 미치면 한 번 되묻는다 — 강제로 막지는 않는다 (담당자 판단 여지)
+    var el = $('#slotState').textContent || '';
+    if(el.indexOf('보완 필요') >= 0 || el === '진행 중'){
+      if(!confirm('아직 보완이 필요한 항목이 있습니다.\n\n지금 만들면 그 항목은 ⬜ 미확보로 남습니다. 계속할까요?')) return;
+    }
+    go();
+  });
+  /* INT 를 막 만든 프로젝트 그대로 타당성 평가로 넘어간다 */
+  $('#btnGoFea').addEventListener('click', function(){
+    goTab('fea');
+    if(CUR && $('#feaWork').style.display === 'none') startFea(CUR.project_no, true);
+  });
+
+  function renderMissing(sel, v, g, a){
+    var h = '';
+    if(a && (a.weak||[]).length){
+      h += '<div class="note warn"><b>보완이 필요한 항목 ' + a.weak.length + '개</b> — '
+        + a.weak.map(function(k){ return esc((a.slots[k]||{}).label || k); }).join(', ')
+        + '<br/>값은 들어 있지만 접수서로 쓰기엔 부족합니다. 인터뷰에서 이어서 여쭤보겠습니다.</div>';
+    }
+    if(v && v.missing && v.missing.length){
+      h += '<div class="note warn"><b>미확보 필수 항목 ' + v.missing.length + '개</b> — '
+        + v.missing.map(function(m){ return esc(m.section+'번 '+m.label); }).join(', ')
+        + '<br/>추정치로 채우지 않았습니다. 담당자가 확인해 주세요.</div>';
+    }
+    if(g && !g.passed){
+      h += '<div class="note err"><b>금칙 위반 ' + g.violations.length + '건</b><ul>'
+        + g.violations.map(function(x){ return '<li><b>'+esc(x.id)+'</b> '+esc(x.rule)+'<br/><small>'+esc(x.detail)+'</small></li>'; }).join('')
+        + '</ul>금칙은 1건이라도 발생하면 G3(배포 승인)를 통과할 수 없습니다.</div>';
+    } else if (g) {
+      h += '<div class="note ok">금칙 G-1~G-7 전건 통과</div>';
+    }
+    $(sel).innerHTML = h;
+  }
+
+  /* ═══════════════ FEA — 좌: 평가서 양식 / 우: AI 검토 ═══════════════ */
+  var FEA_KEYS = [];        // 좌측 폼이 다루는 모든 키 (품질 대상 + 판정 응답 + 사람 전용)
+  var FEA_CALC = [];        // 바뀌면 트랙·ROI 를 다시 계산해야 하는 키
+
+  /* 시작 화면: 접수서가 있는 프로젝트 고르기 */
+  function refreshFeaPick(){
+    var sel = $('#feaPick');
+    api('/api/projects').then(function(r){
+      var rows = (r.items||[]).filter(function(d){ return d.has_int; });
+      sel.innerHTML = rows.length
+        ? rows.map(function(d){
+            return '<option value="'+esc(d.project_no)+'">'+esc(d.project_no)+' · '
+                 + esc(d.agent_name||'(미정)')+'</option>'; }).join('')
+        : '<option value="">접수서가 있는 프로젝트가 없습니다</option>';
+      if(CUR && rows.some(function(d){ return d.project_no===CUR.project_no; })) sel.value = CUR.project_no;
+    }).catch(function(){});
+  }
+
+  $('#btnFeaStart').addEventListener('click', function(){
+    var no = $('#feaPick').value;
+    if(!no){ toast('먼저 요구 접수를 진행하세요','err'); return; }
+    startFea(no, true);
+  });
+  $('#btnFeaRedraft').addEventListener('click', function(){
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    startFea(CUR.project_no, false);
+  });
+
+  function startFea(no, fresh){
+    window._showLoading('평가서 초안 작성', '접수서를 읽고 대안 검토·적합성 진단을 만듭니다');
+    post('/api/fea/draft', {project_no: no}).then(function(r){
+      CUR = r.project;
+      setProjBadge();
+      $('#feaProjNo').textContent = no;
+      $('#feaEmpty').style.display = 'none';
+      $('#feaWork').style.display = '';
+      if(fresh){ $('#feaChat').innerHTML = ''; $('#feaDocCard').style.display='none'; }
+      renderFeaForm(r.form, r.readonly);
+      applyFeaProgress(r.progress);
+      feaPush('agent', r.reply);
+      if(r.judgement) { $('#verdictCard').style.display=''; renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
+        renderAdvice(r.verdict); }
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) feaPush('agent', 'LLM 오류: '+r.llm_error, 'system');
+      toast(fresh ? ('초안 작성 완료 — '+r.filled.length+'개 항목') : ('빈 칸 '+r.filled.length+'개를 채웠습니다'), 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  }
+
+  /* 좌측 평가서 양식 — BOOT.fea_form 스펙으로 그린다 */
+  function renderFeaForm(data, readonly){
+    var spec = (BOOT && BOOT.fea_form) || [];
+    data = data || {};
+    readonly = readonly || {};
+    FEA_KEYS = []; FEA_CALC = [];
+    var h = '';
+    spec.forEach(function(sec){
+      h += '<div class="fsec"><h4><span class="n">' + sec.n + '</span>' + esc(sec.title) + '</h4>';
+      if(sec.hint) h += '<p class="fhint">' + esc(sec.hint).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>') + '</p>';
+      sec.fields.forEach(function(f){
+        var v = data[f.k];
+        if(f.kind === 'readonly'){
+          h += '<div class="fld-row ro" data-slot="' + f.k + '">'
+             + '<label>' + esc(f.label) + '</label>'
+             + '<div class="ro-box" id="ro_' + f.k + '">' + esc(readonly[f.k] || '—') + '</div></div>';
+          return;
+        }
+        FEA_KEYS.push(f.k);
+        if(f.calc) FEA_CALC.push(f.k);
+        var optional = ((BOOT.fea_slot_rules||{})[f.k]||{}).optional;
+        var human = !!f.human;
+        h += '<div class="fld-row g-missing' + (human ? ' human' : '') + '" data-slot="' + f.k + '">';
+
+        if(f.kind === 'check'){
+          h += '<label class="chk-inline"><input type="checkbox" id="f_' + f.k + '"' + (v ? ' checked' : '') + ' />'
+             + '<span><b>' + esc(f.label) + '</b>'
+             + (f.hint ? '<small>' + esc(f.hint) + '</small>' : '') + '</span></label>';
+          h += '</div>';
+          return;
+        }
+
+        h += '<label for="f_' + f.k + '">' + esc(f.label)
+           + (optional ? ' <span class="opt">선택</span>' : '')
+           + (human ? ' <span class="opt human-tag">사람만</span>' : '')
+           + (f.kind === 'grade' || f.kind === 'select' || human ? '' : ' <span class="gmark missing" data-mark>미입력</span>')
+           + '</label>';
+        if(f.hint) h += '<p class="fhint" style="margin:0 0 4px 0">' + esc(f.hint) + '</p>';
+
+        if(f.kind === 'grade'){
+          h += '<div class="grade-pick" id="f_' + f.k + '" data-value="' + esc(v||'') + '">'
+             + ['상','중','하'].map(function(g){
+                 return '<button type="button" class="gbtn' + (v===g ? ' on' : '') + '" data-g="' + g + '">' + g + '</button>';
+               }).join('') + '</div>';
+        } else if(f.kind === 'select'){
+          h += '<select class="input" id="f_' + f.k + '">'
+             + (f.options||[]).map(function(o){
+                 return '<option value="'+esc(o)+'"'+((v||'')===o?' selected':'')+'>'+esc(o||'(미선택)')+'</option>'; }).join('')
+             + '</select>';
+        } else if(f.kind === 'area'){
+          h += '<textarea class="input" id="f_' + f.k + '" rows="' + (f.rows||2) + '" placeholder="' + esc(f.ph||'') + '">' + esc(v||'') + '</textarea>';
+        } else {
+          h += '<input class="input" id="f_' + f.k + '" value="' + esc(v||'') + '" placeholder="' + esc(f.ph||'') + '" />';
+        }
+        h += '<div class="why" data-why hidden></div></div>';
+      });
+      h += '</div>';
+    });
+    $('#feaForm').innerHTML = h;
+
+    FEA_KEYS.forEach(function(k){
+      var el = $('#f_' + k);
+      if(!el) return;
+      if(el.classList && el.classList.contains('grade-pick')){
+        el.addEventListener('click', function(e){
+          var b = e.target.closest('.gbtn'); if(!b) return;
+          el.dataset.value = b.dataset.g;
+          Array.prototype.forEach.call(el.querySelectorAll('.gbtn'), function(x){ x.classList.toggle('on', x===b); });
+          saveFeaField(k);
+        });
+      } else if(el.type === 'checkbox' || el.tagName === 'SELECT'){
+        el.addEventListener('change', function(){ saveFeaField(k); });
+      } else {
+        el.addEventListener('blur', function(){ saveFeaField(k); });
+      }
+    });
+  }
+
+  function collectFea(){
+    var out = {};
+    FEA_KEYS.forEach(function(k){
+      var el = $('#f_' + k);
+      if(!el) return;
+      if(el.classList && el.classList.contains('grade-pick')) out[k] = el.dataset.value || '';
+      else if(el.type === 'checkbox') out[k] = el.checked;
+      else out[k] = el.value.trim();
+    });
+    return out;
+  }
+
+  var _feaSaveT = null;
+  function saveFeaField(k){
+    if(!CUR) return;
+    // 판정에 쓰이는 응답이 바뀌면 트랙·ROI 를 즉시 다시 계산한다
+    if(FEA_CALC.indexOf(k) >= 0){
+      post('/api/fea/judge', {project_no: CUR.project_no, form: collectFea()}).then(function(r){
+        if(r.readonly){
+          Object.keys(r.readonly).forEach(function(rk){
+            var box = $('#ro_' + rk); if(box) box.textContent = r.readonly[rk];
+          });
+        }
+        $('#verdictCard').style.display='';
+        renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
+        renderAdvice(r.verdict);
+      }).catch(function(){});
+    }
+    clearTimeout(_feaSaveT);
+    _feaSaveT = setTimeout(function(){
+      post('/api/fea/judge', {project_no: CUR.project_no, form: collectFea()}).catch(function(){});
+    }, 600);
+  }
+
+  function syncFeaForm(data, changedKeys){
+    if(!data) return;
+    FEA_KEYS.forEach(function(k){
+      var el = $('#f_' + k);
+      if(!el || document.activeElement === el) return;
+      var v = data[k];
+      if(el.classList && el.classList.contains('grade-pick')){
+        if((el.dataset.value||'') !== (v||'')){
+          el.dataset.value = v||'';
+          Array.prototype.forEach.call(el.querySelectorAll('.gbtn'), function(x){ x.classList.toggle('on', x.dataset.g===v); });
+          flashRow(el, k, changedKeys);
+        }
+      } else if(el.type === 'checkbox'){
+        if(el.checked !== !!v) el.checked = !!v;
+      } else if(el.value !== (v==null?'':String(v))){
+        el.value = (v==null?'':String(v));
+        flashRow(el, k, changedKeys);
+      }
+    });
+  }
+  function flashRow(el, k, changedKeys){
+    if(changedKeys && changedKeys.indexOf(k) < 0) return;
+    var row = el.closest('.fld-row');
+    if(row){ row.classList.remove('just-filled'); void row.offsetWidth; row.classList.add('just-filled'); }
+  }
+
+  function applyFeaProgress(p){
+    if(p){
+      $('#feaCount').textContent = p.filled + ' / ' + p.total;
+      $('#feaBar').style.width = (p.percent || 0) + '%';
+      $('#feaState').textContent = p.ready ? '✅ G1 상정 가능' : ((p.weak||[]).length ? '보완 필요 ' + p.weak.length + '건' : '작성 중');
+      $('#feaState').style.color = p.ready ? 'var(--green)' : 'var(--muted)';
+    }
+    var bySlot = {};
+    ((p && p.slots) || []).forEach(function(s){ bySlot[s.key] = s; });
+    $$('#feaForm .fld-row').forEach(function(row){
+      if(row.classList.contains('ro') || row.classList.contains('human')) return;
+      var k = row.dataset.slot, s = bySlot[k];
+      if(!s) return;
+      var flash = row.classList.contains('just-filled') ? ' just-filled' : '';
+      row.className = 'fld-row g-' + s.grade + flash;
+      var mark = row.querySelector('[data-mark]');
+      var why = row.querySelector('[data-why]');
+      if(mark){
+        mark.className = 'gmark ' + (s.held ? 'held' : s.grade);
+        mark.textContent = s.held ? '보류' : (GRADE_LABEL[s.grade] || s.grade);
+      }
+      if(why){
+        if(s.held){ why.hidden=false; why.className='why held';
+          why.textContent = '더 물어도 진전이 없어 보류했습니다. 문서에는 ⬜ 미확보로 남습니다.'; }
+        else if(s.grade === 'weak' && s.reason){ why.hidden=false; why.className='why weak'; why.textContent = s.reason; }
+        else { why.hidden = true; why.textContent=''; }
+      }
+    });
+  }
+
+  function highlightFeaAsk(slot){
+    $$('#feaForm .fld-row').forEach(function(r){ r.classList.remove('focus-ask'); });
+    if(!slot) return;
+    var row = $$('#feaForm .fld-row').filter(function(r){ return r.dataset.slot === slot; })[0];
+    if(row){ row.classList.add('focus-ask'); row.scrollIntoView({behavior:'smooth', block:'nearest'}); }
+  }
+
+  /* 검증 (좌 → 우) */
+  $('#btnFeaVerify').addEventListener('click', function(){
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    window._showLoading('검증 중', 'G1 관점에서 평가서를 검토합니다');
+    $('#btnFeaVerify').disabled = true;
+    post('/api/fea/verify', {project_no: CUR.project_no, form: collectFea()}).then(function(r){
+      syncFeaForm(r.form, r.changed);
+      applyFeaProgress(r.progress);
+      if(r.readonly) Object.keys(r.readonly).forEach(function(rk){
+        var box = $('#ro_'+rk); if(box) box.textContent = r.readonly[rk]; });
+      if(r.judgement){ $('#verdictCard').style.display='';
+        renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
+        renderAdvice(r.verdict); }
+      if(r.blocked){ feaPush('agent', r.reply, 'danger'); toast('민감정보가 감지되어 저장하지 않았습니다','err'); return; }
+      feaPush('agent', r.reply);
+      (r.risk_flags||[]).forEach(function(f){
+        feaPush('agent', '⚠️ 4번 위험 응답 — ' + f.label + ': ' + f.reason, 'system'); });
+      (r.issues||[]).slice(0,1).forEach(function(i){ highlightFeaAsk(i.slot); });
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) feaPush('agent', 'LLM 오류: '+r.llm_error, 'system');
+      toast(r.done ? '검증 완료 — G1 상정 가능' : ((r.issues||[]).length + '개 항목을 더 여쭤보겠습니다'), r.done ? 'ok' : '');
+      $('#feaChatInput').focus();
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); $('#btnFeaVerify').disabled = false; });
+  });
+
+  /* 검토 대화 (우) */
+  function feaPush(role, text, cls){
+    var d = document.createElement('div');
+    d.className = 'msg ' + (cls || role);
+    d.innerHTML = '<div class="bubble">' + (role==='agent' && /<span|<b/.test(text) ? text : esc(text)) + '</div>';
+    $('#feaChat').appendChild(d);
+    $('#feaChat').scrollTop = $('#feaChat').scrollHeight;
+    return d;
+  }
+  function feaSend(){
+    var inp = $('#feaChatInput'), msg = inp.value.trim();
+    if(!msg) return;
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    inp.value=''; inp.style.height='auto';
+    feaPush('user', msg);
+    var wait = feaPush('agent', '<span class="typing">검토 중<span>.</span><span>.</span><span>.</span></span>');
+    $('#btnFeaSend').disabled = true;
+
+    post('/api/fea/message', {project_no: CUR.project_no, message: msg}).then(function(r){
+      wait.remove();
+      if(r.blocked){ feaPush('agent', r.reply, 'danger'); return; }
+      feaPush('agent', r.reply, r.refused ? 'system' : null);
+      (r.weak||[]).forEach(function(w){
+        feaPush('agent', '"' + w.label + '" 은(는) 아직 근거가 부족합니다 — ' + w.reason, 'system'); });
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) feaPush('agent', 'LLM 오류: '+r.llm_error, 'system');
+      syncFeaForm(r.form, Object.keys(r.accepted||{}));
+      applyFeaProgress(r.progress);
+      renderAdvice(r.verdict);
+      if(r.readonly) Object.keys(r.readonly).forEach(function(rk){
+        var box = $('#ro_'+rk); if(box) box.textContent = r.readonly[rk]; });
+      var next = ((r.progress||{}).missing||[]).concat(((r.progress||{}).weak)||[])[0];
+      highlightFeaAsk(next);
+    }).catch(function(e){ wait.remove(); feaPush('agent', '오류: '+e.message, 'danger'); })
+      .finally(function(){ $('#btnFeaSend').disabled=false; $('#feaChatInput').focus(); });
+  }
+  $('#btnFeaSend').addEventListener('click', feaSend);
+  $('#feaChatInput').addEventListener('keydown', function(e){
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); feaSend(); }
+  });
+  $('#feaChatInput').addEventListener('input', function(){
+    this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,120)+'px';
+  });
+
+  /* FEA 문서 생성 */
+  $('#btnGenFea').addEventListener('click', function(){
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    var st = $('#feaState').textContent || '';
+    if(st.indexOf('보완 필요') >= 0 || st === '작성 중'){
+      if(!confirm('아직 보완이 필요한 항목이 있습니다.\n\n지금 만들면 그 항목은 ⬜ 미확보로 남습니다. 계속할까요?')) return;
+    }
+    window._showLoading('FEA 초안 생성', '표준체계 문서② 양식으로 정리합니다');
+    post('/api/fea/generate', {project_no: CUR.project_no, form: collectFea()}).then(function(r){
+      CUR = r.project;
+      $('#verdictCard').style.display='';
+      renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
+        renderAdvice(r.verdict);
+      $('#feaDocCard').style.display='';
+      $('#feaDocNo').textContent = CUR.project_no + '-FEA';
+      $('#feaDoc').innerHTML = mdToHtml(r.markdown);
+      renderMissing('#feaMissing', r.validation, r.guardrails, r.assessment);
+      $('#feaValid').textContent = '필수 ' + (r.validation.required_total - r.validation.required_missing)
+        + '/' + r.validation.required_total + ' 기재';
+      if(r.progress) applyFeaProgress(r.progress);
+      $('#feaDocCard').scrollIntoView({behavior:'smooth', block:'start'});
+      toast('FEA 초안을 만들었습니다', 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  });
+
+  /* 에이전트 판정 권고 — 규칙이 계산한 Go / Conditional Go / Drop.
+     **참고용**임을 화면에서도 분명히 한다 (금칙 G-2: 에이전트는 단정하지 않는다). */
+  var ADV_CLS = {'Go':'go', 'Conditional Go':'cond', 'Drop':'drop'};
+  function renderAdvice(v){
+    if(!v || !v.verdict){ $('#adviceCard').style.display='none'; return; }
+    $('#adviceCard').style.display='';
+    // 확신도가 낮으면 잠정임을 배지와 색으로 드러낸다 — 단정적으로 읽히면 안 된다
+    var tentative = (v.confidence === '낮음');
+    var cls = (ADV_CLS[v.verdict] || 'cond') + (tentative ? ' tentative' : '');
+    var h = '<div class="advice ' + cls + '">';
+    h += '<div class="advice-head"><span class="advice-badge">' + esc(v.verdict)
+       + (tentative ? ' <small>잠정</small>' : '') + '</span>'
+       + '<span class="advice-conf">확신도 ' + esc(v.confidence) + '</span>'
+       + '<span class="advice-note">참고용 · 확정은 담당자·팀장이 G1 에서</span></div>';
+    var hl = esc(v.headline).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+                            .replace(/\n{2,}/g, '<br/><br/>').replace(/\n/g, '<br/>');
+    h += '<p class="advice-head-line">' + hl + '</p>';
+    h += '</div>';
+
+    if((v.good||[]).length){
+      h += '<div class="note ok"><b>긍정 근거</b><ul>'
+        + v.good.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('') + '</ul></div>';
+    }
+    if((v.conditions||[]).length){
+      h += '<div class="note warn"><b>해소해야 할 조건 ' + v.conditions.length + '건</b>'
+        + '<ol style="margin:6px 0 0; padding-left:20px">'
+        + v.conditions.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('') + '</ol></div>';
+    }
+    if(v.alternatives){
+      h += '<div class="note err"><b>대안 안내</b><br/>' + esc(v.alternatives) + '</div>';
+    }
+    if((v.reasons||[]).length){
+      h += '<div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr>'
+        + '<th style="width:96px">구분</th><th>확인 내용</th>'
+        + '<th style="width:74px">영향</th><th style="width:280px">근거 조항</th></tr></thead><tbody>';
+      h += v.reasons.map(function(r){
+        var eff = String(r.effect||'').replace(/\*\*/g,'');
+        var pill = eff==='Drop' ? 'pill-danger' : (eff==='조건부' ? 'pill-cancelled' : 'pill-other');
+        return '<tr><td><b>'+esc(r.area)+'</b></td><td>'+esc(r.finding)+'</td>'
+          + '<td><span class="pill '+pill+'">'+esc(eff)+'</span></td>'
+          + '<td class="muted">'+esc(r.cite)+'</td></tr>';
+      }).join('');
+      h += '</tbody></table></div>';
+    }
+    h += '<p class="muted" style="margin:10px 0 0; line-height:1.8">'
+       + '이 권고는 <b>규칙 모듈이 계산</b>한 것입니다 — 대안 검토·적합성 진단·ROI·트랙 판정에서 도출되며, '
+       + 'LLM 도 대화도 바꾸지 못합니다. 왼쪽 양식을 고치면 즉시 다시 계산됩니다.<br/>'
+       + '<b>최종 Go/Drop 판정은 담당자와 팀장이 G1 에서 확정</b>합니다 — 5번 판정란은 에이전트가 비워 둡니다.</p>';
+    $('#adviceBox').innerHTML = h;
+  }
+
+  function renderVerdict(tr, ty, au, roi){
+    var h = '';
+    h += '<div class="row" style="gap:10px; margin-bottom:12px">';
+    h += '<span class="pill pill-track-'+esc(tr.track)+'" style="font-size:13px; padding:6px 14px">트랙 '+esc(tr.track)+'</span>';
+    h += '<span class="pill pill-complete" style="font-size:13px; padding:6px 14px">'+esc(ty.type)+'</span>';
+    h += '<span class="pill pill-other" style="font-size:13px; padding:6px 14px">자율성 '+esc(au.level)+'</span>';
+    h += '</div>';
+
+    if(!au.consistent) h += '<div class="note err"><b>자율성·트랙 모순</b><br/>'+esc(au.message)+'</div>';
+
+    h += '<div class="tbl-wrap"><table class="tbl"><thead><tr>'
+      + '<th style="width:34px">#</th><th style="width:250px">기준</th><th style="width:110px">응답</th>'
+      + '<th style="width:74px">적용</th><th>근거 조항</th></tr></thead><tbody>';
+    h += (tr.checks||[]).map(function(c){
+      return '<tr'+(c.hit?' style="background:rgba(247,140,60,.07)"':'')+'>'
+        + '<td><b>'+esc(c.id)+'</b></td><td>'+esc(c.label)+'</td><td>'+esc(c.answer)+'</td>'
+        + '<td>'+(c.hit?'<b style="color:var(--orange)">'+esc(c.effect)+'</b>':'—')+'</td>'
+        + '<td class="muted">'+esc(c.cite)+'</td></tr>'; }).join('');
+    h += '</tbody></table></div>';
+
+    h += '<div class="note info" style="margin-top:12px"><b>판정 근거</b><br/>'+esc(tr.reason)+'</div>';
+    h += '<div class="note info"><b>유형</b><br/>'+esc(ty.reason)
+       + '<br/><b>품질 확인 방법</b> — '+esc(ty.quality_rule)+'</div>';
+    h += '<div class="note ok"><b>트랙 '+esc(tr.track)+' 적용</b><ul>'
+       + '<li>필수 문서: '+esc(tr.required_docs)+'</li>'
+       + '<li>승인 주체: '+esc(tr.approver)+'</li>'
+       + '<li>배포 방식: '+esc(tr.pilot)+'</li></ul></div>';
+
+    if(roi){
+      h += roi.computed
+        ? '<div class="note ok"><b>간이 ROI</b><br/>'+esc(roi.formula)
+          + '<br/>연간 '+esc(roi.saved_hours_year)+'시간 (약 '+esc(roi.saved_md_year)+' M/D)'
+          + '<br/><small>'+esc(roi.cite)+'</small></div>'
+        : '<div class="note warn"><b>ROI 계산하지 않음 (금칙 G-3)</b><br/>'+esc(roi.reason)+'</div>';
+    }
+    h += '<p class="muted">위 판정은 <b>초안</b>입니다. Go/Drop 확정과 트랙·유형 최종 확정은 G1에서 팀장이 합니다.</p>';
+    $('#verdictBox').innerHTML = h;
+  }
+
+  /* ═══════════════ 문서함 ═══════════════ */
+  var DOCS = [];
+  var SHOW_ARCHIVE = false;
+
+  function loadDocs(){
+    api('/api/projects' + (SHOW_ARCHIVE ? '?archived=1' : '')).then(function(r){
+      DOCS = r.items||[];
+      $('#docTitle').textContent = SHOW_ARCHIVE ? '보관함 (삭제한 문서)' : '접수 문서함';
+      $('#btnArchToggle').textContent = SHOW_ARCHIVE ? '🗂 문서함으로' : '🗄 보관함 보기';
+      $('#docNote').innerHTML = SHOW_ARCHIVE
+        ? '<div class="note info">삭제한 문서는 여기 보관됩니다. <b>파일은 지우지 않았습니다</b> — '
+          + '[되돌리기] 를 누르면 문서함으로 복원됩니다.</div>'
+        : '';
+      renderDocs();
+    }).catch(function(e){
+      $('#docRows').innerHTML='<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">'+esc(e.message)+'</td></tr>'; });
+  }
+
+  function renderDocs(){
+    var q = ($('#docSearch').value||'').trim().toLowerCase();
+    var rows = DOCS.filter(function(d){
+      if(!q) return true;
+      return [d.project_no,d.agent_name,d.requester,d.dept].join(' ').toLowerCase().indexOf(q)>=0;
+    });
+    if(!rows.length){
+      $('#docRows').innerHTML='<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">'
+        + (SHOW_ARCHIVE ? '보관된 문서가 없습니다.' : '문서가 없습니다.') + '</td></tr>';
+      return;
+    }
+    $('#docRows').innerHTML = rows.map(function(d){
+      var act = '<div class="doc-actions">';
+      if(SHOW_ARCHIVE){
+        act += '<button class="btn-mini go" data-restore="'+esc(d.project_no)+'">↩ 되돌리기</button>';
+      } else {
+        act += '<button class="btn-mini go" data-open="'+esc(d.project_no)+'">▶ 열기</button>';
+        if(d.has_int) act += '<button class="btn-mini" data-view="'+esc(d.project_no)+'" data-code="INT">INT</button>';
+        if(d.has_fea) act += '<button class="btn-mini" data-view="'+esc(d.project_no)+'" data-code="FEA">FEA</button>';
+        if(d.has_ard) act += '<button class="btn-mini" data-view="'+esc(d.project_no)+'" data-code="ARD">ARD</button>';
+        act += '<button class="btn-mini danger" data-del="'+esc(d.project_no)+'" title="보관함으로 옮깁니다">🗑 삭제</button>';
+      }
+      act += '</div>';
+      var cur = (CUR && CUR.project_no === d.project_no && !SHOW_ARCHIVE);
+      return '<tr' + (cur ? ' class="is-current"' : '') + '>'
+        + '<td><b>'+esc(d.project_no)+'</b></td>'
+        + '<td>'+esc(d.agent_name)
+        + (d.decision ? ' <span class="pill pill-other">'+esc(d.decision)+'</span>' : '') + '</td>'
+        + '<td>'+esc(d.requester)+'</td>'
+        + '<td>'+esc(d.dept)+'</td>'
+        + '<td><span class="pill pill-'+(d.has_fea?'complete':'active')+'">'+esc(d.status)+'</span></td>'
+        + '<td>'+(d.track?'<span class="pill pill-track-'+esc(d.track)+'">'+esc(d.track)+'</span>':'—')+'</td>'
+        + '<td>'+(d.type?esc(d.type):'—')+'</td>'
+        + '<td>'+act+'</td></tr>';
+    }).join('');
+  }
+
+  $('#docSearch').addEventListener('input', renderDocs);
+  $('#btnReloadDocs').addEventListener('click', loadDocs);
+  $('#btnArchToggle').addEventListener('click', function(){ SHOW_ARCHIVE = !SHOW_ARCHIVE; loadDocs(); });
+
+  $('#docRows').addEventListener('click', function(e){
+    var b;
+    if((b = e.target.closest('[data-view]')))    { openDoc(b.dataset.view, b.dataset.code); return; }
+    if((b = e.target.closest('[data-open]')))    { openProject(b.dataset.open); return; }
+    if((b = e.target.closest('[data-del]')))     { deleteProject(b.dataset.del); return; }
+    if((b = e.target.closest('[data-restore]'))) { restoreProject(b.dataset.restore); return; }
+  });
+
+  /* 활성화 — 그 프로젝트를 이어서 작업한다 (양식·대화 복원) */
+  function openProject(no){
+    window._showLoading('불러오는 중', no);
+    api('/api/projects/'+encodeURIComponent(no)+'?state=1').then(function(r){
+      var p = r.project;
+      CUR = p; setProjBadge();
+      window.__warned = {};
+
+      // ── 요구 접수 복원 ──
+      $('#intakeEmpty').style.display='none';
+      $('#intakeWork').style.display='';
+      renderForm();
+      applyProgress(r.int_progress);
+      $('#chat').innerHTML='';
+      (p.history||[]).forEach(function(h){ pushMsg(h.role==='user'?'user':'agent', h.text); });
+      if(!(p.history||[]).length)
+        pushMsg('agent', no + ' 을(를) 열었습니다. 왼쪽 양식을 확인하고 [작성 완료 및 검증] 을 눌러 주세요.');
+      if(p.int_md){
+        $('#intDocCard').style.display='';
+        $('#intDocNo').textContent = no + '-INT';
+        $('#intDoc').innerHTML = mdToHtml(p.int_md);
+        renderMissing('#intMissing', p.int_validation, null, p.int_assessment);
+      } else $('#intDocCard').style.display='none';
+
+      // ── 요구 정의(ARD) 복원 ──
+      if(p.ard_form && Object.keys(p.ard_form).length){
+        $('#ardEmpty').style.display='none';
+        $('#ardWork').style.display='';
+        $('#ardProjNo').textContent = no;
+        renderArdForm(p.ard_form);
+        applyArdProgress(r.ard_progress);
+        $('#ardChat').innerHTML='';
+        (p.ard_history||[]).forEach(function(x){ ardPush(x.role==='user'?'user':'agent', x.text); });
+        if(p.ard_md){
+          $('#ardDocCard').style.display='';
+          $('#ardDocNo').textContent = no + '-ARD';
+          $('#ardDoc').innerHTML = mdToHtml(p.ard_md);
+        } else $('#ardDocCard').style.display='none';
+      } else {
+        $('#ardEmpty').style.display='';
+        $('#ardWork').style.display='none';
+      }
+
+      // ── 타당성 평가 복원 ──
+      if(p.fea_form && Object.keys(p.fea_form).length){
+        $('#feaEmpty').style.display='none';
+        $('#feaWork').style.display='';
+        $('#feaProjNo').textContent = no;
+        renderFeaForm(p.fea_form, r.fea_readonly||{});
+        applyFeaProgress(r.fea_progress);
+        $('#feaChat').innerHTML='';
+        (p.fea_history||[]).forEach(function(h){ feaPush(h.role==='user'?'user':'agent', h.text); });
+        if(r.judgement){ $('#verdictCard').style.display='';
+          renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
+        renderAdvice(r.verdict); }
+        if(p.fea_md){
+          $('#feaDocCard').style.display='';
+          $('#feaDocNo').textContent = no + '-FEA';
+          $('#feaDoc').innerHTML = mdToHtml(p.fea_md);
+          renderMissing('#feaMissing', p.fea_validation, p.guardrails, p.fea_assessment);
+        } else $('#feaDocCard').style.display='none';
+      } else {
+        $('#feaEmpty').style.display='';
+        $('#feaWork').style.display='none';
+      }
+
+      // 진행 상황에 맞는 탭으로 보낸다
+      goTab(p.fea_form && Object.keys(p.fea_form).length ? 'fea' : 'intake');
+      toast(no + ' 을(를) 열었습니다', 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  }
+
+  /* 삭제 — 보관함으로 옮긴다. 파일은 지우지 않는다. */
+  function deleteProject(no){
+    var d = DOCS.filter(function(x){ return x.project_no===no; })[0] || {};
+    var what = [];
+    if(d.has_int) what.push('INT 문서');
+    if(d.has_fea) what.push('FEA 문서');
+    if(d.has_ard) what.push('ARD 문서');
+    var msg = no + ' 을(를) 문서함에서 지웁니다.\n\n'
+      + (what.length ? '포함된 것: ' + what.join(', ') + '\n\n' : '')
+      + '보관함으로 옮기는 것이라 파일은 지워지지 않고, 언제든 되돌릴 수 있습니다.\n\n계속할까요?';
+    if(!confirm(msg)) return;
+    api('/api/projects/'+encodeURIComponent(no), {method:'DELETE'}).then(function(r){
+      if(CUR && CUR.project_no === no){ CUR = null; setProjBadge(); }
+      toast(r.message || '보관함으로 옮겼습니다', 'ok');
+      loadDocs();
+    }).catch(function(e){ toast(e.message,'err'); });
+  }
+
+  function restoreProject(no){
+    post('/api/projects/'+encodeURIComponent(no)+'/restore', {}).then(function(r){
+      toast(r.message || '되돌렸습니다', 'ok');
+      loadDocs();
+    }).catch(function(e){ toast(e.message,'err'); });
+  }
+
+  var MODAL_DOC = {no:'', code:''};
+  function openDoc(no, code){
+    api('/api/projects/'+encodeURIComponent(no)).then(function(d){
+      var md = (code==='INT') ? d.int_md : d.fea_md;
+      MODAL_DOC = {no:no, code:code};
+      $('#docModalTitle').textContent = no + '-' + code;
+      $('#docModalBody').innerHTML = mdToHtml(md||'(문서 없음)');
+      $('#docModal').classList.add('open');
+    }).catch(function(e){ toast(e.message,'err'); });
+  }
+  function closeDoc(){ $('#docModal').classList.remove('open'); }
+  $('#docX').addEventListener('click', closeDoc);
+  $('#docClose').addEventListener('click', closeDoc);
+  $('#docModal').addEventListener('click', function(e){ if(e.target.id==='docModal') closeDoc(); });
+  $('#docDlMd').addEventListener('click', function(){ doExport(MODAL_DOC.no, MODAL_DOC.code, 'md'); });
+  $('#docDlDoc').addEventListener('click', function(){ doExport(MODAL_DOC.no, MODAL_DOC.code, 'doc'); });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape'){ closeDoc(); closeNotice(); closeSettings(); }
+  });
+
+
+  /* ═══════════════ 요구 정의 (ARD) — 표준체계 문서③ ═══════════════
+     구조는 FEA 와 같다: 좌 양식 / 우 인터뷰. 다른 점은 목적이다 —
+     여기서 문서를 완성하는 게 아니라 **미팅에 들고 갈 1차 문서**를 만든다.
+     G2 필수 3종(한 줄 정의·범위 선언·자율성)만 서면 끝이고, 4~6번은 워크숍 몫이다. */
+  var ARD_KEYS = [];
+
+  function refreshArdPick(){
+    var sel = $('#ardPick');
+    if(!sel) return;
+    api('/api/projects').then(function(r){
+      var rows = (r.items||[]).filter(function(d){ return d.has_fea_form || d.has_fea; });
+      sel.innerHTML = rows.length
+        ? rows.map(function(d){
+            return '<option value="'+esc(d.project_no)+'">'+esc(d.project_no)+' · '
+                 + esc(d.agent_name||'(미정)')+'</option>'; }).join('')
+        : '<option value="">타당성 평가가 진행된 프로젝트가 없습니다</option>';
+      if(CUR && rows.some(function(d){ return d.project_no===CUR.project_no; })) sel.value = CUR.project_no;
+    }).catch(function(){});
+  }
+
+  function renderArdForm(data){
+    var spec = (BOOT && BOOT.ard_form) || [];
+    data = data || {};
+    ARD_KEYS = [];
+    var h = '';
+    spec.forEach(function(sec){
+      h += '<div class="fsec"><h4><span class="n">' + sec.n + '</span>' + esc(sec.title) + '</h4>';
+      if(sec.hint) h += '<p class="fhint">' + esc(sec.hint).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>') + '</p>';
+      sec.fields.forEach(function(f){
+        var v = data[f.k];
+        if(f.kind === 'readonly'){
+          h += '<div class="fld-row ro" data-slot="' + f.k + '"><label>' + esc(f.label) + '</label>'
+             + '<div class="ro-box" id="ard_ro_' + f.k + '">에이전트는 채우지 않습니다 — G2 에서 3자가 서명합니다</div></div>';
+          return;
+        }
+        ARD_KEYS.push(f.k);
+        var optional = ((BOOT.ard_slot_rules||{})[f.k]||{}).optional;
+        h += '<div class="fld-row g-missing" data-slot="' + f.k + '">';
+        h += '<label>' + esc(f.label)
+           + (optional ? '' : ' <span class="req">필수</span>')
+           + ' <span class="gmark missing" data-mark>미입력</span></label>';
+        if(f.hint) h += '<small class="fhint2">' + esc(f.hint) + '</small>';
+        if(f.kind === 'select'){
+          h += '<select class="input" id="ard_' + f.k + '">'
+             + (f.options||[]).map(function(o){
+                 return '<option value="'+esc(o)+'"'+((v||'L1')===o?' selected':'')+'>'+esc(o)+'</option>'; }).join('')
+             + '</select>';
+        } else if(f.kind === 'table'){
+          var txt = Array.isArray(v)
+            ? v.map(function(row){ return (row||[]).join(' | '); }).join('\n') : (v||'');
+          h += '<textarea class="input" id="ard_' + f.k + '" rows="4" placeholder="'
+             + 'FR-01 | 단가 대조 | 발주 항목 | 규정 단가와 비교 | 이상 항목 표시 | M">' + esc(txt) + '</textarea>';
+        } else if(f.kind === 'area'){
+          h += '<textarea class="input" id="ard_' + f.k + '" rows="' + (f.rows||2) + '" placeholder="'
+             + esc(f.ph||'') + '">' + esc(v||'') + '</textarea>';
+        } else {
+          h += '<input class="input" id="ard_' + f.k + '" value="' + esc(v||'')
+             + '" placeholder="' + esc(f.ph||'') + '" />';
+        }
+        h += '<div class="why" data-why hidden></div></div>';
+      });
+      h += '</div>';
+    });
+    $('#ardForm').innerHTML = h;
+  }
+
+  function collectArd(){
+    var out = {};
+    ARD_KEYS.forEach(function(k){
+      var el = $('#ard_' + k);
+      if(!el) return;
+      if(k === 'fr_table'){
+        out[k] = (el.value||'').split('\n').map(function(l){ return l.trim(); })
+                 .filter(function(l){ return l; })
+                 .map(function(l){ return l.split('|').map(function(c){ return c.trim(); }); });
+      } else out[k] = el.value;
+    });
+    return out;
+  }
+
+  function syncArdForm(data, changed){
+    if(!data) return;
+    ARD_KEYS.forEach(function(k){
+      var el = $('#ard_' + k);
+      if(!el || document.activeElement === el) return;
+      var v = data[k];
+      if(k === 'fr_table' && Array.isArray(v)) v = v.map(function(r){ return (r||[]).join(' | '); }).join('\n');
+      if(el.value !== (v==null?'':String(v))){
+        el.value = (v==null?'':String(v));
+        if(typeof flashRow === 'function') flashRow(el, k, changed);
+      }
+    });
+  }
+
+  function applyArdProgress(p){
+    if(!p) return;
+    $('#ardCount').textContent = p.filled + ' / ' + p.total;
+    $('#ardBar').style.width = (p.percent || 0) + '%';
+    $('#ardState').textContent = p.ready ? '✅ 미팅 준비 완료'
+                               : ((p.blocking||[]).length ? '더 필요 ' + p.blocking.length + '건' : '작성 중');
+    $('#ardState').style.color = p.ready ? 'var(--green)' : 'var(--muted)';
+    $('#ardHint').textContent = p.ready
+      ? '4~6번은 비워 두셔도 됩니다 — 미팅에서 함께 채웁니다. [ARD 초안 생성] 을 눌러 보세요.'
+      : '4~6번은 비워 두셔도 됩니다 — 미팅에서 함께 채웁니다.';
+    var bySlot = {};
+    (p.slots||[]).forEach(function(s){ bySlot[s.key] = s; });
+    $$('#ardForm .fld-row').forEach(function(row){
+      if(row.classList.contains('ro')) return;
+      var s = bySlot[row.dataset.slot];
+      if(!s) return;
+      row.className = 'fld-row g-' + s.grade;
+      var mark = row.querySelector('[data-mark]'), why = row.querySelector('[data-why]');
+      if(mark){
+        mark.className = 'gmark ' + (s.held ? 'held' : s.grade);
+        mark.textContent = s.held ? '보류' : (GRADE_LABEL[s.grade] || s.grade);
+      }
+      if(why){
+        if(s.held){ why.hidden=false; why.className='why held';
+          why.textContent = '충분히 여쭤봤습니다. 나머지는 미팅에서 채웁니다.'; }
+        else if(s.grade === 'weak' && s.reason){ why.hidden=false; why.className='why weak'; why.textContent = s.reason; }
+        else { why.hidden = true; why.textContent=''; }
+      }
+    });
+  }
+
+  function ardPush(role, text, cls){
+    var d = document.createElement('div');
+    d.className = 'msg ' + (cls || role);
+    d.innerHTML = '<div class="bubble">' + (role==='agent' && /<span|<b/.test(text) ? text : esc(text)) + '</div>';
+    $('#ardChat').appendChild(d);
+    $('#ardChat').scrollTop = $('#ardChat').scrollHeight;
+    return d;
+  }
+
+  function startArd(no, fresh){
+    window._showLoading('ARD 초안 작성', 'INT·FEA 를 읽고 한 줄 정의·범위·자율성을 정리합니다');
+    post('/api/ard/draft', {project_no: no}).then(function(r){
+      $('#ardEmpty').style.display='none';
+      $('#ardWork').style.display='';
+      $('#ardProjNo').textContent = no;
+      renderArdForm(r.form);
+      applyArdProgress(r.progress);
+      if(fresh) $('#ardChat').innerHTML='';
+      ardPush('agent', r.reply);
+      if(r.next_question) ardPush('agent', r.next_question);
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) ardPush('agent', 'LLM 오류: '+r.llm_error, 'system');
+      goTab('ard');
+      toast('ARD 초안을 만들었습니다', 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  }
+
+  if($('#btnArdStart')) $('#btnArdStart').addEventListener('click', function(){
+    var no = $('#ardPick').value;
+    if(!no){ toast('먼저 타당성 평가를 진행하세요','err'); return; }
+    startArd(no, true);
+  });
+  if($('#btnArdRedraft')) $('#btnArdRedraft').addEventListener('click', function(){
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    startArd(CUR.project_no, false);
+  });
+
+  if($('#btnArdVerify')) $('#btnArdVerify').addEventListener('click', function(){
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    window._showLoading('검증 중', 'G2 관점에서 요구사항 정의서를 검토합니다');
+    $('#btnArdVerify').disabled = true;
+    post('/api/ard/verify', {project_no: CUR.project_no, form: collectArd()}).then(function(r){
+      syncArdForm(r.form, r.changed);
+      applyArdProgress(r.progress);
+      if(r.blocked){ ardPush('agent', r.reply, 'danger'); toast('민감정보가 감지되어 저장하지 않았습니다','err'); return; }
+      ardPush('agent', r.reply);
+      (r.conflicts||[]).forEach(function(c){
+        ardPush('agent', '⚠️ ' + c.where + ' — ' + c.reason, 'system'); });
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) ardPush('agent', 'LLM 오류: '+r.llm_error, 'system');
+      toast(r.done ? '미팅에 들고 갈 수 있습니다' : ((r.issues||[]).length + '개 항목을 더 여쭤보겠습니다'),
+            r.done ? 'ok' : '');
+      $('#ardChatInput').focus();
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); $('#btnArdVerify').disabled = false; });
+  });
+
+  function ardSend(){
+    var inp = $('#ardChatInput'), msg = inp.value.trim();
+    if(!msg) return;
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    inp.value=''; inp.style.height='auto';
+    ardPush('user', msg);
+    var wait = ardPush('agent', '<span class="typing">생각 중<span>.</span><span>.</span><span>.</span></span>');
+    $('#btnArdSend').disabled = true;
+    post('/api/ard/message', {project_no: CUR.project_no, message: msg}).then(function(r){
+      wait.remove();
+      if(r.blocked){ ardPush('agent', r.reply, 'danger'); return; }
+      ardPush('agent', r.reply, (r.out_of_scope && r.out_of_scope.out_of_scope) ? 'system' : null);
+      if(r.llm_error && r.llm_error.indexOf('미설정') < 0) ardPush('agent', 'LLM 오류: '+r.llm_error, 'system');
+      syncArdForm(r.form, r.accepted);
+      applyArdProgress(r.progress);
+    }).catch(function(e){ wait.remove(); toast(e.message,'err'); })
+      .finally(function(){ $('#btnArdSend').disabled = false; });
+  }
+  if($('#btnArdSend')) $('#btnArdSend').addEventListener('click', ardSend);
+  if($('#ardChatInput')) $('#ardChatInput').addEventListener('keydown', function(e){
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); ardSend(); }
+  });
+
+  if($('#btnGenArd')) $('#btnGenArd').addEventListener('click', function(){
+    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+    var st = $('#ardState').textContent || '';
+    if(st.indexOf('더 필요') >= 0 || st === '작성 중'){
+      if(!confirm('아직 G2 필수 3종이 다 서지 않았습니다.\n\n지금 만들면 그 항목은 ⬜ 미확보로 남습니다. 계속할까요?')) return;
+    }
+    window._showLoading('ARD 초안 생성', '표준체계 문서③ 양식으로 정리합니다');
+    post('/api/ard/generate', {project_no: CUR.project_no, form: collectArd()}).then(function(r){
+      $('#ardDocCard').style.display='';
+      $('#ardDocNo').textContent = r.doc_no;
+      $('#ardDoc').innerHTML = mdToHtml(r.markdown);
+      renderMissing('#ardMissing', r.validation, r.guardrails, null);
+      $('#ardValid').textContent = (r.meeting && r.meeting.ready)
+        ? '미팅에 들고 갈 수 있습니다 — 나머지는 워크숍에서'
+        : '필수 항목이 덜 채워졌습니다';
+      $('#ardDocCard').scrollIntoView({behavior:'smooth', block:'start'});
+      toast('ARD 초안을 만들었습니다', 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  });
+
+  if($('#btnArdMd')) $('#btnArdMd').addEventListener('click', function(){
+    doExport(CUR && CUR.project_no, 'ARD', 'md'); });
+  if($('#btnArdDoc')) $('#btnArdDoc').addEventListener('click', function(){
+    doExport(CUR && CUR.project_no, 'ARD', 'doc'); });
+
+
+  /* ═══════════════ 내보내기 (FR-15) ═══════════════ */
+  function doExport(no, code, fmt){
+    if(!no){ toast('문서를 선택하세요','err'); return; }
+    if(window.__exportStandalone){ window.__exportStandalone(no, code, fmt); return; }
+    window.location.href = '/api/export/'+encodeURIComponent(no)+'/'+encodeURIComponent(code)+'?fmt='+fmt;
+  }
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('[data-export]'); if(!b) return;
+    doExport(CUR && CUR.project_no, b.dataset.export, b.dataset.fmt);
+  });
+
+  /* ═══════════════ 감사 로그 ═══════════════ */
+  var EVENT_LABEL = {
+    project_created:'프로젝트 생성', intake_turn:'대화 1턴', int_generated:'INT 초안 생성',
+    fea_generated:'FEA 초안 생성', sensitive_blocked:'⛔ 민감정보 차단',
+    out_of_scope_refused:'⛔ 범위 밖 거절', project_updated:'문서 수정', exported:'내보내기'
+  };
+  function loadAudit(){
+    api('/api/audit?limit=300').then(function(r){
+      var items = r.items||[];
+      if(!items.length){ $('#auditRows').innerHTML='<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">기록이 없습니다.</td></tr>'; return; }
+      $('#auditRows').innerHTML = items.map(function(a){
+        var skip = {at:1,event:1,project_no:1,user:1,app:1,standard_date:1,standard_sha:1,prompt_version:1};
+        var detail = Object.keys(a).filter(function(k){ return !skip[k]; }).map(function(k){
+          var v = a[k];
+          if(v===null||v===''||(Array.isArray(v)&&!v.length)) return '';
+          if(typeof v==='object') v = JSON.stringify(v);
+          return '<b>'+esc(k)+'</b>: '+esc(String(v).slice(0,220));
+        }).filter(Boolean).join(' · ');
+        var lab = EVENT_LABEL[a.event]||a.event;
+        var danger = /민감|거절/.test(lab);
+        return '<tr>'
+          + '<td class="muted">'+esc((a.at||'').replace('T',' ').replace('+00:00',''))+'</td>'
+          + '<td>'+(danger?'<span class="pill pill-danger">'+esc(lab)+'</span>':esc(lab))+'</td>'
+          + '<td>'+esc(a.project_no||'—')+'</td>'
+          + '<td class="muted">'+esc(a.standard_sha||'')+'</td>'
+          + '<td style="font-size:11.5px; color:var(--ink-2)">'+detail+'</td></tr>';
+      }).join('');
+    }).catch(function(e){ toast(e.message,'err'); });
+  }
+  $('#btnReloadAudit').addEventListener('click', loadAudit);
+
+  /* ═══════════════ 설정 모달 ═══════════════ */
+  function openSettings(which){
+    if(which) switchSet(which);
+    $('#settingsModal').classList.add('open');
+    loadSettings();
+  }
+  function closeSettings(){ $('#settingsModal').classList.remove('open'); }
+  function switchSet(id){
+    $$('#setSeg .seg-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.set===id); });
+    $$('.set-panel').forEach(function(p){ p.classList.toggle('active', p.id==='set-'+id); });
+  }
+  $('#btnSettings').addEventListener('click', function(){ openSettings(); });
+  $('#setX').addEventListener('click', closeSettings);
+  $('#setClose').addEventListener('click', closeSettings);
+  $('#settingsModal').addEventListener('click', function(e){ if(e.target.id==='settingsModal') closeSettings(); });
+  $('#setSeg').addEventListener('click', function(e){
+    var b = e.target.closest('.seg-btn'); if(b) switchSet(b.dataset.set);
+  });
+
+  /* 지식 기준 다시 확인 — 표준체계 파일을 실행 중에 바꿔도 잡히게 */
+  $('#btnStdRefresh').addEventListener('click', function(){
+    window._showLoading('확인 중', '표준체계 파일을 다시 읽습니다');
+    api('/api/bootstrap').then(function(b){
+      BOOT = b;
+      var s = b.standard || {};
+      $('#mStdDate').textContent = (s.version||'?') + ' · ' + (s.date||'?');
+      $('#mStdSha').textContent = (s.sha256||'').slice(0,12) || '—';
+      renderStdBox(s);
+      renderNotice(b.notice, s);
+      toast(s.regression_required ? '표준체계가 변경되었습니다 — 회귀 평가가 필요합니다'
+                                  : '기준일 ' + (s.date||'?') + ' · 변경 없음',
+            s.regression_required ? 'err' : 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  });
+
+  /* ── 원본 파일 선택 (지식 기준 · LLM 연결) ── */
+  var SET_SRC = null;   // /api/settings 결과
+
+  function loadSettings(){
+    // 단독 HTML 은 경로 대신 파일을 직접 고른다 (브라우저가 경로를 주지 않음)
+    if(window.__renderSourcePickers){ window.__renderSourcePickers(); return Promise.resolve(); }
+    return api('/api/settings').then(function(r){
+      SET_SRC = r;
+      $('#stdPath').value = r.standard.picked || '';
+      $('#stdPath').placeholder = r.standard.path || '표준체계 문서(.md) 경로';
+      $('#envPath').value = r.llm.picked || '';
+      $('#envPath').placeholder = r.llm.path || 'env 파일 경로';
+      renderCands('#stdCands', r.standard.candidates, r.standard.path, '#stdPath');
+      renderCands('#envCands', r.llm.candidates, r.llm.path, '#envPath');
+      return r;
+    }).catch(function(e){ srcMsg('#stdPathMsg', false, e.message); });
+  }
+
+  /* 어디를 찾아봤는지 보여주고, 클릭하면 그 경로를 입력칸에 넣는다 */
+  function renderCands(sel, list, current, input){
+    var el = $(sel); if(!el) return;
+    el.innerHTML = '<div class="cands-title">탐색 순서 — 클릭하면 경로가 입력됩니다</div>'
+      + (list||[]).map(function(c){
+          var cur = (c.path === current);
+          return '<div class="cand ' + (c.exists ? 'on' : 'off') + (cur ? ' cur' : '') + '" data-path="'
+               + esc(c.path) + '" data-input="' + input + '">'
+               + '<span class="mk">' + (c.exists ? '✓' : '·') + '</span>'
+               + '<span class="lb">' + esc(c.label) + '</span>'
+               + '<span class="pt">' + esc(c.path) + (cur ? '   ← 사용 중' : '') + '</span></div>';
+        }).join('');
+  }
+  document.addEventListener('click', function(e){
+    var c = e.target.closest('.cand'); if(!c) return;
+    var inp = $(c.dataset.input); if(inp){ inp.value = c.dataset.path; inp.focus(); }
+  });
+
+  function srcMsg(sel, ok, text, warn){
+    var cls = ok ? (warn ? 'warn' : 'ok') : 'err';
+    $(sel).innerHTML = text ? '<div class="note ' + cls + '" style="margin:10px 0 0">'
+      + esc(text) + '</div>' : '';
+  }
+
+  function browseFor(kind, input, msg){
+    window._showLoading('파일 선택', '창이 열립니다 — 다른 창 뒤에 있을 수 있습니다');
+    post('/api/settings/browse', {kind: kind}).then(function(r){
+      if(!r.ok){ srcMsg(msg, false, r.error); return; }
+      if(r.cancelled){ srcMsg(msg, true, '선택을 취소했습니다.'); return; }
+      $(input).value = r.path;
+      var ck = r.check || {};
+      srcMsg(msg, ck.ok !== false, ck.ok === false ? ck.error
+        : ('선택됨: ' + r.path + (ck.warn ? '  —  ' + ck.warn : '  —  확인됨. [적용] 을 누르세요.')),
+        !!ck.warn);
+    }).catch(function(e){ srcMsg(msg, false, e.message + ' — 경로를 직접 입력해 주세요.'); })
+      .finally(function(){ window._hideLoading(); });
+  }
+
+  function checkPath(kind, input, msg){
+    var path = $(input).value.trim();
+    if(!path){ srcMsg(msg, false, '경로를 입력하거나 [찾아보기] 로 고르세요.'); return; }
+    post('/api/settings/validate', {kind: kind, path: path}).then(function(r){
+      srcMsg(msg, r.ok, r.ok ? (r.warn || '확인됨. [적용] 을 누르면 이 파일을 씁니다.') : r.error, !!r.warn);
+    }).catch(function(e){ srcMsg(msg, false, e.message); });
+  }
+
+  function applyPath(kind, input, msg){
+    var body = {};
+    body[kind === 'standard' ? 'standard_path' : 'env_path'] = $(input).value.trim();
+    window._showLoading('적용 중', '원본을 다시 읽습니다');
+    post('/api/settings', body).then(function(r){
+      srcMsg(msg, true, (kind === 'standard' ? '표준체계' : 'LLM 설정') + ' 원본을 바꿨습니다.'
+        + ((r.results && r.results[kind === 'standard' ? 'standard' : 'env'] || {}).warn
+           ? '  —  ' + r.results[kind === 'standard' ? 'standard' : 'env'].warn : ''));
+      // 히어로·고지·박스를 새 값으로 갱신
+      return api('/api/bootstrap').then(function(b){
+        BOOT = b;
+        var s = b.standard || {};
+        $('#mStdDate').textContent = (s.version||'?') + ' · ' + (s.date||'?');
+        $('#mStdSha').textContent = (s.sha256||'').slice(0,12) || '—';
+        $('#mLlm').textContent = b.llm && b.llm.ready ? (b.llm.deployment||'연결됨') : '미설정';
+        renderStdBox(s); renderLlmBox(b.llm); renderNotice(b.notice, s);
+        return loadSettings();
+      });
+    }).then(function(){ toast('원본을 바꿨습니다', 'ok'); })
+      .catch(function(e){ srcMsg(msg, false, e.message); })
+      .finally(function(){ window._hideLoading(); });
+  }
+
+  $('#btnStdBrowse').addEventListener('click', function(){ browseFor('standard', '#stdPath', '#stdPathMsg'); });
+  $('#btnEnvBrowse').addEventListener('click', function(){ browseFor('env', '#envPath', '#envPathMsg'); });
+  $('#btnStdCheck').addEventListener('click', function(){ checkPath('standard', '#stdPath', '#stdPathMsg'); });
+  $('#btnEnvCheck').addEventListener('click', function(){ checkPath('env', '#envPath', '#envPathMsg'); });
+  $('#btnStdApply').addEventListener('click', function(){ applyPath('standard', '#stdPath', '#stdPathMsg'); });
+  $('#btnEnvApply').addEventListener('click', function(){ applyPath('env', '#envPath', '#envPathMsg'); });
+  $('#btnStdDefault').addEventListener('click', function(){
+    if(!confirm('지정한 경로를 지우고 기본 위치에서 다시 찾습니다. 계속할까요?')) return;
+    $('#stdPath').value = ''; applyPath('standard', '#stdPath', '#stdPathMsg');
+  });
+  $('#btnEnvDefault').addEventListener('click', function(){
+    if(!confirm('지정한 경로를 지우고 기본 위치에서 다시 찾습니다. 계속할까요?')) return;
+    $('#envPath').value = ''; applyPath('env', '#envPath', '#envPathMsg');
+  });
+
+  $('#btnTestLlm').addEventListener('click', function(){
+    window._showLoading('연결 확인', 'Azure OpenAI 호출');
+    post('/api/llm/test', {}).then(function(r){
+      toast(r.ok ? ('연결 정상 — '+r.deployment) : ('실패: '+r.error), r.ok?'ok':'err');
+    }).catch(function(e){ toast('실패: '+e.message,'err'); })
+      .finally(function(){ window._hideLoading(); });
+  });
+
+  /* ═══════════════ LIVE 하트비트 ═══════════════ */
+  var _fail=0;
+  function setLive(ok){
+    var b=$('#liveBadge');
+    b.classList.toggle('disconnected', !ok);
+    b.querySelector('.live-text').textContent = ok ? 'LIVE' : 'DISCONNECTED';
+  }
+  function heartbeat(){
+    fetch('/ping',{method:'POST'}).then(function(r){ return r.json(); })
+      .then(function(){ _fail=0; setLive(true); })
+      .catch(function(){ _fail++; if(_fail>=2) setLive(false); });
+  }
+  setInterval(heartbeat, 3000); heartbeat();
+
+  /* ═══════════════ init ═══════════════ */
+  boot().then(function(){ loadDocs(); });
+</script>
+</body>
+</html>

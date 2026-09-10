@@ -8,7 +8,16 @@ export function isOngoingProject(project){
   if(project.lowRoute?.enabled)return project.lowRoute.phase!=='operating';
   return Number(project.journeyStep)<9&&!['완료','운영 중','중단','종료'].includes(project.status);
 }
-export function homeProjectList(projects,filter,actor,sort='최신 과제순'){
+const normalizeSearch=value=>String(value??'').normalize('NFKC').toLocaleLowerCase().trim();
+export function matchesProjectSearch(project,query=''){
+  const tokens=normalizeSearch(query).split(/\s+/).filter(Boolean);
+  const fields=[project.no,project.name,project.requester,project.requesterEmail,
+    project.projectOwner,project.projectOwnerEmail,project.owner,project.teamOwner,
+    project.intakeDetails?.department,...(project.developerNames||[])];
+  const text=fields.map(normalizeSearch).join(' ');
+  return tokens.every(token=>text.includes(token));
+}
+export function homeProjectList(projects,filter,actor,sort='최신 과제순',query=''){
   const mine=p=>isProjectDeveloper(p,actor);
   const filtered=filter==='내 진행 중 과제'?projects.filter(p=>mine(p)&&isOngoingProject(p)):
     filter==='내 과제(전체)'?projects.filter(mine):
@@ -21,7 +30,7 @@ export function homeProjectList(projects,filter,actor,sort='최신 과제순'){
     }
     return Infinity;
   };
-  return [...filtered].sort((a,b)=>{
+  return filtered.filter(project=>matchesProjectSearch(project,query)).sort((a,b)=>{
     if(sort==='과제번호순')return byNo(a,b);
     if(sort==='이름순')return String(a.name).localeCompare(String(b.name),'ko')||byNo(a,b);
     if(sort==='진행률순')return (Number(a.progress)||0)-(Number(b.progress)||0)||byNo(a,b);

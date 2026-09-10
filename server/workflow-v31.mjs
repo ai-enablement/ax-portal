@@ -5,7 +5,7 @@ import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
-const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments','fastTrack','ardLite'];
+const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments','fastTrack','ardLite','nativeAgentArtifacts'];
 const markdownPhaseDocument={design:'DES',development_evaluation:'EVD',deployment_rollout:'EVD'};
 export function sanitizeNewWorkflow(state){
   if(state.feaDraft?.standardVersion==='3.0')state.feaDraft=withAutomaticFeaTrack(state.feaDraft);

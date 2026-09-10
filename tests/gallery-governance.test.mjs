@@ -26,7 +26,7 @@ test("Gallery submission covers the requested creation platforms", () => {
     "Power Automate",
     "Power Apps",
   ]) {
-    assert.match(page, new RegExp(platform));
+    assert.match(page + galleryOptions, new RegExp(platform));
   }
   for (const category of ["자료검색", "데이터분석", "업무자동화", "교육/가이드", "기타"]) assert.match(galleryOptions, new RegExp(category));
   assert.match(page, /제작 플랫폼 \* · 복수 선택 가능/);

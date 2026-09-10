@@ -93,6 +93,14 @@ async function ensurePortalCatalog(client) {
 
 export async function ensurePortalUser(client, identity) {
   if (!identity?.email) return null;
+  // Local preview must never overwrite a real Entra identity with a shared test ID.
+  if (identity.source === 'development') {
+    return (await client.query(
+      `select id, email, display_name, app_role, is_active
+         from agent_portal.users where lower(email)=lower($1) and is_active=true limit 1`,
+      [identity.email],
+    )).rows[0] || null;
+  }
   const result = await client.query(
     `select id, email, display_name, app_role, is_active
        from agent_portal.users
@@ -212,7 +220,11 @@ const gallerySelect = `
     to_char(gs.submitted_at at time zone 'Asia/Seoul', 'YYYY.MM.DD HH24:MI') as "submittedAt",
     upper(gs.submission_status) as "status",
     gs.evidence as "evidence",
-    gs.reviewer_note as "reviewerNote"
+    gs.reviewer_note as "reviewerNote",
+    (select jsonb_build_object('access',gr.access_verified,'dataPolicy',gr.data_policy_verified,
+      'safetyNotice',gr.safety_notice_verified,'operationOwner',gr.operation_owner_verified)
+      from agent_portal.gallery_reviews gr where gr.gallery_submission_id=gs.id
+      order by gr.id desc limit 1) as "checks"
   from agent_portal.gallery_submissions gs
   join agent_portal.users u on u.id = gs.submitted_by
   left join agent_portal.projects p on p.id = gs.project_id`;
@@ -352,6 +364,10 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
     if (existing.rows[0].submission_status === "published" && (actor.app_role !== "admin" || databaseStatus !== "published")) {
       return { status: 403, body: { error: "Published Gallery agents can only be edited in place or deleted by an admin." } };
     }
+    if (existing.rows[0].submission_status !== 'published' && ['recommended','published'].includes(databaseStatus)
+      && !['access','dataPolicy','safetyNotice','operationOwner'].every(key => body.checks?.[key] === true)) {
+      return {status:400,body:{error:'접근 권한·데이터·안전성·운영 담당 검토 항목을 모두 확인해 주세요.'}};
+    }
     if (databaseStatus === "changes_requested" && !String(body.reviewerNote || "").trim()) {
       return { status: 400, body: { error: "A change-request reason is required." } };
     }
@@ -444,7 +460,7 @@ async function updateGalleryApplication(submissionNumber, body, identity) {
         published: "published",
         rejected: "rejected",
       }[databaseStatus];
-      if (decision) {
+      if (decision && existing.rows[0].submission_status !== 'published') {
         await client.query(
           `insert into agent_portal.gallery_reviews (
             gallery_submission_id, reviewer_id, review_role, decision,

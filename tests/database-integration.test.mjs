@@ -198,7 +198,7 @@ test("Azure Web App build and Hybrid Connection settings are present", async () 
     read(".github/workflows/main_ax-portal.yml"),
   ]);
 
-  assert.match(packageJson, /"build": "next build"/);
+  assert.match(packageJson, /"build": "next build --webpack"/);
   assert.match(packageJson, /"start": "next start --hostname 0\.0\.0\.0"/);
   assert.match(nextConfig, /output: "standalone"/);
   assert.match(nextConfig, /serverExternalPackages: \["pg"\]/);

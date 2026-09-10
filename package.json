@@ -9,7 +9,7 @@
     "dev": "next dev --hostname 0.0.0.0 --port 4180",
     "dev:with-db": "npm run dev",
     "db:check": "node --env-file=.env server/check-database.mjs",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start --hostname 0.0.0.0",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"

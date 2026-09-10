@@ -12,6 +12,7 @@ import StandardDocumentWorkspace from "./standard-document-workspace";
 import MarkdownDocumentWorkspace from "./markdown-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
+import NativeAgentWorkspace from './native-agent-workspace';
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
 import { intakeRequired, intakeSectionRequired, feaRequired } from '../shared/intake-standard.mjs';
 import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
@@ -653,6 +654,7 @@ type GalleryApplication = {
   status: GalleryReviewStatus;
   evidence: string[];
   reviewerNote?: string;
+  checks?: { access: boolean; dataPolicy: boolean; safetyNotice: boolean; operationOwner: boolean };
 };
 
 const initialGalleryApplications: GalleryApplication[] = [];
@@ -1341,9 +1343,11 @@ export default function Home() {
         ),
       );
       setDatabaseStatus("connected");
+      return true;
     } catch (error) {
       setDatabaseStatus("fallback");
       notify(error instanceof Error ? error.message : "DB 저장에 실패했습니다. 다시 시도해 주세요.");
+      return false;
     }
   };
 
@@ -7036,6 +7040,7 @@ function UserDashboard({
   const availableProjectFilters=projectListFilters(isAiTeam);
   const [filter, setFilter] = useState(()=>projectListFilters(isAiTeam)[0]);
   const [projectSort,setProjectSort]=useState('최신 과제순');
+  const [projectSearch,setProjectSearch]=useState('');
   const [selectedJourney, setSelectedJourney] = useState(0);
   const [selectedDeliveryPhase, setSelectedDeliveryPhase] = useState<"design" | "development">("design");
   const [chatInput, setChatInput] = useState("");
@@ -7184,10 +7189,10 @@ function UserDashboard({
   const developerActorId = identity?.userId || signedInTeamAccount?.id;
   const listActor={...identity,id:developerActorId};
   const activeProjectFilter=availableProjectFilters.includes(filter)?filter:availableProjectFilters[0];
-  const visible: UserProject[] = homeProjectList(projectItems, activeProjectFilter, listActor,projectSort);
+  const visible: UserProject[] = homeProjectList(projectItems, activeProjectFilter, listActor,projectSort,projectSearch);
   const applyFilter = (next: string) => {
     setFilter(next);
-    const matches: UserProject[] = homeProjectList(projectItems, next, listActor,projectSort);
+    const matches: UserProject[] = homeProjectList(projectItems, next, listActor,projectSort,projectSearch);
     if (matches.length === 0) return;
     if (next !== "전체") {
       const project = matches.find(item => item.no === current.no) || matches[0];
@@ -7313,10 +7318,18 @@ function UserDashboard({
                 </button>
               ))}
             </div>
-            <label className="project-list-sort">정렬<select aria-label="과제 목록 정렬" value={projectSort} onChange={event=>setProjectSort(event.target.value)}>{PROJECT_LIST_SORTS.map(option=><option key={option} value={option}>{option}</option>)}</select><span>{visible.length}건</span></label>
+            <div className="project-list-search">
+              <label htmlFor="home-project-search">과제 검색</label>
+              <div className="project-list-search-field">
+                <input id="home-project-search" type="search" value={projectSearch} onChange={event=>setProjectSearch(event.target.value)} placeholder="과제번호·제목·요구자·Owner·팀" />
+                {projectSearch && <button type="button" onClick={()=>setProjectSearch('')} aria-label="과제 검색어 지우기">지우기</button>}
+              </div>
+              <small>선택한 탭 안에서 검색합니다. 이름·이메일·개발 담당자도 검색할 수 있습니다.</small>
+            </div>
+            <label className="project-list-sort">정렬<select aria-label="과제 목록 정렬" value={projectSort} onChange={event=>setProjectSort(event.target.value)}>{PROJECT_LIST_SORTS.map(option=><option key={option} value={option}>{option}</option>)}</select><span role="status" aria-live="polite">{visible.length}건</span></label>
           </header>
           <div className="project-stack">
-            {hasProjects && visible.length === 0 && <div className="project-stack-empty"><b>{filter === "내 과제(전체)" ? "개발 담당자로 배정된 과제가 없습니다." : filter === "내 진행 중 과제" ? "개발 담당자로 배정된 미완료 과제가 없습니다." : "조건에 맞는 과제가 없습니다."}</b></div>}
+            {hasProjects && visible.length === 0 && <div className="project-stack-empty"><b>{projectSearch.trim() ? "선택한 탭에 검색어와 일치하는 과제가 없습니다." : filter === "내 과제(전체)" ? "개발 담당자로 배정된 과제가 없습니다." : filter === "내 진행 중 과제" ? "개발 담당자로 배정된 미완료 과제가 없습니다." : "조건에 맞는 과제가 없습니다."}</b></div>}
             {!hasProjects && (
               <div className="project-stack-empty">
                 <ClipboardText size={30} weight="duotone" />
@@ -7484,9 +7497,6 @@ function UserDashboard({
             <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
-          {hasProjects && current.source === "database" && (current.historicalImport ? selectedJourney===1&&canUseResumedFeaAgent(current,identity) : (!current.fastTrack?.requested || current.fastTrack.status === "REJECTED" || (current.journeyStep === 0 && (!current.intakeReview || intakeRequired(current).length>0)))) && current.journeyStep <= 1 && !current.feaCompleted && selectedJourney <= 1 && (
-            <IntakeAgentPanel key={`${current.no}:${current.journeyStep}`} projectNo={current.no} resumedHistorical={Boolean(current.historicalImport)} fastTrack={Boolean(current.fastTrack?.requested && current.fastTrack.status !== "REJECTED")} />
-          )}
           <div
             ref={currentStageDetailRef}
             id="current-stage-detail"
@@ -7507,6 +7517,8 @@ function UserDashboard({
               title="아직 진행할 수 없는 단계입니다."
               description={`${userJourney[effectiveJourneyStep].title} 단계를 완료하면 다음 단계의 작성과 승인이 활성화됩니다.`}
             />
+          ) : current.source === 'database' && [0,1,3].includes(selectedJourney) ? (
+            <NativeAgentWorkspace key={`${current.no}:${selectedJourney}:${role}`} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined} projectNo={current.no} document={selectedJourney===0?'INT':selectedJourney===1?'FEA':'ARD'} onCompleted={() => { window.location.href='/?workProject='+encodeURIComponent(current.no); }} />
           ) : (current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney) ? (
             <MarkdownDocumentWorkspace
               key={`${deferredDocumentKey}:markdown:${selectedDeliveryPhase}`}
@@ -14071,7 +14083,7 @@ function Gallery({
   onUpdateApplication: (
     id: string,
     changes: Partial<GalleryApplication>,
-  ) => void;
+  ) => Promise<boolean>;
   onDeleteApplication: (id: string) => void;
 }) {
   const isTeam =
@@ -14097,6 +14109,8 @@ function Gallery({
   const [catalogCategory, setCatalogCategory] = useState("전체");
   const [catalogDetailId, setCatalogDetailId] = useState<string | null>(null);
   const [reviewReason, setReviewReason] = useState("");
+  const [reviewPage, setReviewPage] = useState(0);
+  const [checkDrafts, setCheckDrafts] = useState<Record<string, NonNullable<GalleryApplication['checks']>>>({});
   const [selectedApplicationId, setSelectedApplicationId] = useState(
     applications.find((application) => application.status !== "PUBLISHED")?.id ||
       applications[0]?.id ||
@@ -14150,7 +14164,7 @@ function Gallery({
       users: "신규",
       rating: "-",
       tag: application.platform,
-      tone: application.platform === "Power Apps" ? "green" : "blue",
+      tone: galleryPlatformSelections(application.platform).length > 1 ? "orange" : application.platform === "Power Platform" ? "green" : application.platform === "Vibe Coding" ? "purple" : application.platform === "Copilot Studio" ? "blue" : "gray",
       accessUrl: application.accessUrl,
     }));
   const catalog = [
@@ -14168,6 +14182,11 @@ function Gallery({
   const catalogDetailApplication = applications.find(
     (application) => application.id === catalogDetailId && application.status === "PUBLISHED",
   );
+  const pageCount = Math.max(1, Math.ceil(applications.length / 10));
+  const currentReviewPage = Math.min(reviewPage, pageCount - 1);
+  const reviewQueue = applications.slice(currentReviewPage * 10, (currentReviewPage + 1) * 10);
+  const reviewChecks = (selectedApplication && (checkDrafts[selectedApplication.id] || selectedApplication.checks)) || {access:false,dataPolicy:false,safetyNotice:false,operationOwner:false};
+  const allReviewChecks = Object.values(reviewChecks).every(Boolean);
 
   const openAgent = (name: string, accessUrl: string) => {
     let target: URL;
@@ -14310,14 +14329,18 @@ function Gallery({
     setEditingApplicationId(null);
     closeSubmission();
   };
-  const review = (
+  const review = async (
     status: GalleryReviewStatus,
     message: string,
     reviewerNote?: string,
   ) => {
     if (!selectedApplication) return;
-    onUpdateApplication(selectedApplication.id, { status, reviewerNote });
-    notify(message);
+    if ((status === 'PUBLISHED' || status === 'RECOMMENDED') && !allReviewChecks) {
+      notify('검토 항목을 모두 확인해 주세요.');
+      return;
+    }
+    const saved = await onUpdateApplication(selectedApplication.id, { status, reviewerNote, checks: reviewChecks });
+    if (saved) notify(message);
   };
   const requestGalleryChanges = () => {
     const reason = reviewReason.trim();
@@ -14440,7 +14463,7 @@ function Gallery({
                 <div className={`agent-art ${a.tone}`}><span>{a.icon}</span><Pill tone="white">{a.tag}</Pill></div>
                 <div className="agent-body">
                   <Pill>{a.category}</Pill><h3>{a.name}</h3><p>{a.desc}</p>
-                  <div className="agent-stats"><span>★ {a.rating}</span><span>사용자 {a.users}</span><span>검토 완료</span></div>
+                  <div className="agent-stats"><span>★ {a.rating}</span><span>사용자 {a.users}</span><span>등록 완료</span></div>
                   <button className="gallery-open-agent" onClick={(event) => { event.stopPropagation(); openAgent(a.name, a.accessUrl); }}>Agent 보기 <span>→</span></button>
                   {role === ACCOUNT_ROLES.admin && a.applicationId && (
                     <div className="gallery-admin-actions" onClick={(event) => event.stopPropagation()}>
@@ -14497,19 +14520,24 @@ function Gallery({
       {tab === "review" && isTeam && (
         <section className="gallery-review-workspace">
           <aside className="gallery-review-queue">
-            <header><h2>등록 검토 큐</h2><Pill tone="orange">{applications.filter((item) => item.status !== "PUBLISHED").length}건</Pill></header>
+            <header><h2>등록 검토 큐</h2><Pill tone="orange">전체 {applications.length}건</Pill></header>
             {applications.length === 0 && (
               <div className="gallery-empty-state compact">
                 <CheckCircle size={25} weight="duotone" />
                 <b>검토 대기 신청이 없습니다.</b>
               </div>
             )}
-            {applications.map((application) => (
+            {reviewQueue.map((application) => (
               <button key={application.id} className={selectedApplication?.id === application.id ? "active" : ""} onClick={() => { setSelectedApplicationId(application.id); setReviewReason(application.status === "CHANGES_REQUESTED" ? application.reviewerNote || "" : ""); }}>
                 <span><Pill tone={application.source === "OPERATIONS" ? "green" : "blue"}>{application.source === "OPERATIONS" ? "운영" : "개인"}</Pill><small>{application.id}</small></span>
                 <b>{application.name}</b><em>{application.platform} · {statusLabel[application.status]}</em>
               </button>
             ))}
+            <nav className="gallery-queue-pagination" aria-label="등록 검토 큐 페이지">
+              <button disabled={currentReviewPage === 0} onClick={() => {setReviewPage(currentReviewPage-1);setSelectedApplicationId(applications[(currentReviewPage-1)*10]?.id || '');setReviewReason('');}}>이전</button>
+              <span>{currentReviewPage+1} / {pageCount}</span>
+              <button disabled={currentReviewPage+1 >= pageCount} onClick={() => {setReviewPage(currentReviewPage+1);setSelectedApplicationId(applications[(currentReviewPage+1)*10]?.id || '');setReviewReason('');}}>다음</button>
+            </nav>
           </aside>
           {selectedApplication && (
             <article className="gallery-review-detail">
@@ -14525,7 +14553,10 @@ function Gallery({
               </div>
               <div className="gallery-review-access"><span><b>사용/실행 링크</b><small>{selectedApplication.accessUrl}</small></span><button onClick={() => window.open(selectedApplication.accessUrl, "_blank", "noopener,noreferrer")}>사용 화면 열기 <ArrowRight size={13} weight="bold" /></button></div>
               <section className="gallery-evidence"><h3>제출 근거</h3>{selectedApplication.evidence.map((item) => <span key={item}><CheckCircle size={15} weight="fill" /> {item}</span>)}</section>
-              <section className="gallery-review-checklist"><h3>AI 활성화팀 검토</h3><label><input type="checkbox" defaultChecked /> 접근 링크와 사용자 권한 확인</label><label><input type="checkbox" defaultChecked={selectedApplication.source === "OPERATIONS"} /> 데이터 분류와 입력 금지 정보 확인</label><label><input type="checkbox" /> 한계 고지·오류 신고·운영 담당 확인</label></section>
+              <section className="gallery-review-checklist"><h3>AI 활성화팀 검토</h3>
+                {([['access','접근 링크와 사용자 권한 확인'],['dataPolicy','데이터 분류와 입력 금지 정보 확인'],['safetyNotice','한계 고지와 오류 신고 안내 확인'],['operationOwner','운영 담당과 문의 경로 확인']] as const).map(([key,label]) => <label key={key}><input type="checkbox" checked={Boolean(reviewChecks[key])} disabled={selectedApplication.status === 'PUBLISHED'} onChange={event => setCheckDrafts(previous => ({...previous,[selectedApplication.id]:{...reviewChecks,[key]:event.target.checked}}))} /> {label}</label>)}
+                {selectedApplication.status === 'PUBLISHED' && !allReviewChecks && <p>기존 등록·이관 항목으로, 개별 검토 항목의 확인 기록이 없습니다. 등록 완료와 개별 검토 기록은 구분됩니다.</p>}
+              </section>
               {selectedApplication.reviewerNote && <div className="gallery-review-note"><b>검토 의견</b><p>{selectedApplication.reviewerNote}</p></div>}
               {selectedApplication.status !== "PUBLISHED" && (
                 <label className="gallery-change-reason">

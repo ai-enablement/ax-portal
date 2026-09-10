@@ -56,12 +56,13 @@ export function fieldComplete(field,value) {
   if(field.type==='date')return /^\d{4}-\d{2}-\d{2}$/.test(String(value)) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value;
   return knownText(value);
 }
-export function intakeRequired(state) {return INT_FIELDS.filter(f=>f.required&&!fieldComplete(f,standardValue(state,f.key)));}
+export function intakeRequired(state) {if(state.nativeAgentArtifacts?.INT?.status==='complete')return [];return INT_FIELDS.filter(f=>f.required&&!fieldComplete(f,standardValue(state,f.key)));}
 export function intakeSectionRequired(state, sectionNumber) {
   const section=INT_SECTIONS.find(section=>section.number===sectionNumber);
   return (section?.fields||[]).filter(field=>field.required&&!fieldComplete(field,standardValue(state,field.key)));
 }
 export function feaRequired(state) {
+  if(state.nativeAgentArtifacts?.FEA?.status==='complete')return [];
   const missing=FEA_FIELDS.filter(f=>f.required&&!fieldComplete(f,standardValue(state,f.key)));
   return missing;
 }

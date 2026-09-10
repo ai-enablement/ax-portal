@@ -12,6 +12,9 @@ export const JOURNEY_V31=[
   {step:7,title:'배포·확산',number:6},{step:8,title:'확산 승인',gate:'G4'},
 ];
 export function projectTrack(state) {
+  if(state.nativeAgentArtifacts?.ARD?.status==='complete'&&['L2','L3','L4'].includes(state.nativeAgentArtifacts.ARD.autonomy))return 'HIGH';
+  const nativeTrack=state.nativeAgentArtifacts?.FEA?.status==='complete'?state.nativeAgentArtifacts.FEA.track:null;
+  if(nativeTrack==='HIGH')return 'HIGH';
   const ard=state.historicalDocuments?.[3]?.documents?.ARD;
   const ardLevel=String(ard?.fields?.['autonomy.level']||'').match(/^L([0-4])/);
   if(ardLevel&&Number(ardLevel[1])>=2)return 'HIGH';
@@ -22,6 +25,7 @@ export function projectTrack(state) {
     return TRACKS[Math.max(TRACKS.indexOf(ardTrack),TRACKS.indexOf(feaTrack),TRACKS.indexOf(approvedTrack))];
   }
   if(state.workflowTrack)return state.workflowTrack;
+  if(TRACKS.includes(nativeTrack))return nativeTrack;
   const f=state.feaDraft;
   if(!f||['writeExec','sensitive','damageFinancial','scope','autonomy'].some(k=>f[k]===undefined||f[k]===''))return 'UNKNOWN';
   return classifyProject(f).track;
@@ -45,6 +49,7 @@ export function historicalGateComplete(gate,state){
   return state.historicalImport===true&&Number.isFinite(baseline)&&Number.isFinite(gateStep)&&gateStep<baseline;
 }
 export function documentComplete(state,stage,code){
+  if(state.nativeAgentArtifacts?.[code]?.status==='complete'&&Number(state.nativeAgentArtifacts[code].version)>0)return true;
   if(isHistoricalDocumentComplete(state,stage,code))return true;
   const d=state.historicalDocuments?.[stage]?.documents?.[code];
   return d?.status==='complete'&&standardDocuments[code]?.sections.every(s=>sectionHasContent(s,d.fields));
@@ -60,7 +65,7 @@ export function designDocumentComplete(state){return markdownDocumentComplete(st
 export function developmentEvdComplete(state){return markdownDocumentComplete(state,'EVD','development_evaluation')||documentComplete(state,5,'EVR');}
 export function releaseEvdComplete(state){return markdownDocumentComplete(state,'EVD','deployment_rollout')||documentComplete(state,7,'DEP');}
 export function gateGaps(gate,state){
-  if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...(isHistoricalDocumentComplete(state,0)?[]:intakeRequired(state).map(f=>f.label)),...(isHistoricalDocumentComplete(state,1)?[]:feaRequired(state).map(f=>f.label))];
+  if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...(state.nativeAgentArtifacts?.INT?.status==='complete'||isHistoricalDocumentComplete(state,0)?[]:intakeRequired(state).map(f=>f.label)),...(state.nativeAgentArtifacts?.FEA?.status==='complete'||isHistoricalDocumentComplete(state,1)?[]:feaRequired(state).map(f=>f.label))];
   if(gate==='G2')return documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료'];
   if(gate==='G3'){
     const c=state.gateChecks?.G3||{};
@@ -82,9 +87,9 @@ export function eligibleRole(role,actor,project,state){
   return false;
 }
 export function gateBasis(gate,state){
-  return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],projectTrack(state)]:
+  return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],state.nativeAgentArtifacts?.ARD,projectTrack(state)]:
     gate==='G3'?[state.historicalDocuments?.[5],state.markdownDocuments?.DES?.phases?.design,state.markdownDocuments?.EVD?.phases?.development_evaluation,state.gateChecks?.G3,state.securityReviewerId,state.uatRecord]:
-    gate==='G4'?[state.historicalDocuments?.[7],state.markdownDocuments?.EVD?.phases?.deployment_rollout,state.markdownDocuments?.UG?.phases?.deployment_rollout,state.gateChecks?.G4]:[state.intakeAnswers,state.intakeDetails,state.feaDraft,state.feaCompleted]);
+    gate==='G4'?[state.historicalDocuments?.[7],state.markdownDocuments?.EVD?.phases?.deployment_rollout,state.markdownDocuments?.UG?.phases?.deployment_rollout,state.gateChecks?.G4]:[state.intakeAnswers,state.intakeDetails,state.feaDraft,state.feaCompleted,state.nativeAgentArtifacts?.INT,state.nativeAgentArtifacts?.FEA]);
 }
 export function gateSummary(gate,state){
   const roles=requiredApprovers(gate,state);

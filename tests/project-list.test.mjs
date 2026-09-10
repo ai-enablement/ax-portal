@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {homeProjectList,isOngoingProject,projectNumberBadge,PROJECT_LIST_FILTERS,projectListFilters} from '../shared/project-list.mjs';
 const actor={id:'7',appRole:'admin'};
+test('search matches project, requester, Owner, department and developers without expanding tabs',()=>{
+ const projects=[
+  {no:'2026-033',name:'CDC 일정 캘린더',requester:'이유진 · PMM팀',requesterEmail:'Yujin.Lee@example.com',projectOwner:'김기현',projectOwnerEmail:'owner@example.com',intakeDetails:{department:'생산지원팀'},developerNames:['Park, Hyebin'],developerIds:['7'],journeyStep:1},
+  {no:'2026-044',name:'CDC 완료 과제',developerIds:['7'],journeyStep:9},
+  {no:'2026-045',name:'CDC 다른 담당 과제',developerIds:['8'],journeyStep:1}
+ ];
+ const original=structuredClone(projects);
+ for(const query of ['2026-033','캘린더','이유진','PMM','YUJIN.LEE','김기현','OWNER@EXAMPLE.COM','생산지원','hyebin','cdc 생산지원']){
+  assert.deepEqual(homeProjectList(projects,'전체',actor,'최신 과제순',query).map(p=>p.no),['2026-033'],query);
+ }
+ assert.deepEqual(homeProjectList(projects,'내 진행 중 과제',actor,'최신 과제순','CDC').map(p=>p.no),['2026-033']);
+ assert.deepEqual(homeProjectList(projects,'내 과제(전체)',actor,'과제번호순','CDC').map(p=>p.no),['2026-033','2026-044']);
+ assert.equal(homeProjectList(projects,'전체',actor,'최신 과제순','없는 검색어').length,0);
+ assert.equal(homeProjectList(projects,'전체',actor,'최신 과제순','   ').length,3);
+ assert.deepEqual(projects,original);
+});
 test('non-AI users have only ongoing and all tabs with ongoing as default',()=>{
  assert.deepEqual(projectListFilters(false),['진행 중','전체']);
  assert.deepEqual(projectListFilters(true),PROJECT_LIST_FILTERS);

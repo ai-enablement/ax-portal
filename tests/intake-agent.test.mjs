@@ -43,8 +43,8 @@ test('historical FEA receives INT evidence without changing import history or as
 test('historical FEA panel is mounted after import completion and offers continuation despite old INT messages',async()=>{
  const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');
  const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');
- assert.match(page,/selectedJourney===1&&canUseResumedFeaAgent\(current,identity\)/);
- assert.match(page,/resumedHistorical=\{Boolean\(current.historicalImport\)\}/);
+ assert.match(page,/\[0,1,3\]\.includes\(selectedJourney\)/);
+ assert.match(page,/<NativeAgentWorkspace/);
  assert.match(panel,/INT 기반 FEA 인터뷰 시작·계속/);
  assert.doesNotMatch(panel,/신규 과제 전용/);
 });
@@ -186,7 +186,7 @@ test('sensitive input is blocked before persistence and transmission',()=>{
 test('portal wiring guards server state, revisions and completion; original database route remains protected',async()=>{
   const api=await readFile(new URL('../server/database-api.mjs',import.meta.url),'utf8');
   assert.match(api,/changedKeys.includes\("agentSession"\)/);assert.match(api,/body.agentRevision/);assert.match(api,/missingFields\(merged/);
-  const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<IntakeAgentPanel/);assert.match(page,/portal-agent-saved/);
+  const page=await readFile(new URL('../app/page.tsx',import.meta.url),'utf8');assert.match(page,/<NativeAgentWorkspace/);assert.match(page,/portal-agent-saved/);
   const panel=await readFile(new URL('../app/intake-agent-panel.tsx',import.meta.url),'utf8');assert.match(panel,/phase==='INT'&&data\.progress\.ready&&!interviewMissing\.length/);assert.match(panel,/현재 INT 필수 항목 중 부족한 정보만/);
   assert.doesNotMatch(panel,/data\.session\.request\?\.status!=='complete'/);
   assert.match(panel,/action==='review_intake'\?\(fastTrack\?'INT 확인을 완료했습니다/);
