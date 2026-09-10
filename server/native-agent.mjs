@@ -4,6 +4,7 @@ import {documentAccess} from './document-files.mjs';
 import {runNativeAgent} from './native-agent-runtime.mjs';
 import {azureConfiguration} from './intake-agent.mjs';
 import {canBackfillDocument} from '../shared/historical-import-policy.mjs';
+import {canManageAssessment,canReadRecommendation,redactNativeResponse} from '../shared/document-role-policy.mjs';
 const steps={INT:0,FEA:1,ARD:3};
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 export function nativeFormFingerprint(value){
@@ -23,12 +24,12 @@ export function seedNativeProject(code,state){
 }
 export function allowedNativePath(path,method,code,document){
  if(!Object.hasOwn(steps,document)||!/^\d{4}-\d{3}$/.test(code))return false;
- if(method==='GET')return ['/portal/history','/api/bootstrap','/api/projects','/api/audit',`/api/projects/${code}`,`/api/projects/${code}?state=1`].includes(path)||/^\/portal\/version\/\d+$/.test(path)||new RegExp(`^/api/export/${code}/(INT|FEA|ARD)\\?fmt=(md|doc)$`).test(path);
+ if(method==='GET')return ['/portal/access','/portal/history','/api/bootstrap','/api/projects','/api/audit',`/api/projects/${code}`,`/api/projects/${code}?state=1`].includes(path)||/^\/portal\/version\/\d+$/.test(path)||new RegExp(`^/api/export/${code}/${document}\\?fmt=(md|doc)$`).test(path);
  if(method==='PUT')return path===`/api/projects/${code}`;
  if(method!=='POST')return false;
- return ['/portal/complete','/api/scan','/api/rules/preview'].includes(path)||path.startsWith({INT:'/api/intake/',FEA:'/api/fea/',ARD:'/api/ard/'}[document])&&/\/(message|verify|finalize|draft|judge|generate)$/.test(path);
+ return ['/portal/verify-complete','/portal/complete','/api/scan','/api/rules/preview'].includes(path)||path.startsWith({INT:'/api/intake/',FEA:'/api/fea/',ARD:'/api/ard/'}[document])&&/\/(message|verify|finalize|draft|judge|generate)$/.test(path);
 }
-async function context(client,identity,code,document,write){
+async function context(client,identity,code,document,write,summary=false){
  const access=await documentAccess(client,identity,code);
  if(!access)throw fail(403,'이 과제에 접근할 권한이 없습니다.');
  const row=(await client.query('select raw_answers from agent_portal.intake_requests where project_id=$1',[access.project.id])).rows[0];
@@ -36,22 +37,54 @@ async function context(client,identity,code,document,write){
  const actor=access.actor;
  const member=(await client.query("select 1 from agent_portal.project_members where project_id=$1 and user_id=$2 and relationship='developer' and ended_at is null",[access.project.id,actor.id])).rowCount>0;
  const policy=nativeDocumentPolicy(actor,access.project,state,member,document);
- if(!policy.canReadStage||write&&!policy.canEdit)throw fail(403,'현재 단계의 지정 담당자만 작성할 수 있습니다. 이전 문서는 조회할 수 있습니다.');
+ if(!summary&&(!policy.canReadStage||write&&!policy.canEdit))throw fail(403,'이 문서는 팀장·Admin만 조회·작성할 수 있습니다. 완료 문서는 보완 요청 전까지 변경할 수 없습니다.');
  return {...access,state,...policy};
 }
 export function nativeDocumentPolicy(actor,project,state,member,document){
  const related=[project.requester_id,project.owner_id].some(id=>id!=null&&String(id)===String(actor.id));
  const importing=state.historicalImport&&!state.historicalImportFinalizedAt;
- const authorized=actor.app_role==='admin'||(importing?member:related||member);
+ const full=document==='INT'||canManageAssessment(actor.app_role);
+ const authorized=document==='INT'?(actor.app_role==='admin'||(importing?member:related||member)):canManageAssessment(actor.app_role);
  const step=Number(state.journeyStep||0),target=steps[document];
  const backfill=canBackfillDocument(state,target);
  const rework=document==='ARD'&&step===4&&Object.values(state.workflowApprovals?.G2||{}).some(v=>v.decision==='REWORK')||document==='FEA'&&step===2&&state.g1Resolution?.decision==='DROP';
- return {canReadStage:target<=step,canEdit:target<=step&&authorized&&(backfill||rework||step===target),rework,backfill};
+ const complete=state.nativeAgentArtifacts?.[document]?.status==='complete';
+ return {canReadStage:full&&target<=step,canEdit:full&&target<=step&&authorized&&(!complete||rework)&&(backfill||rework||step===target),rework,backfill,complete};
+}
+
+// Every operation is awaited and revision checked. Failed validation or document
+// generation cannot mark a stage complete; gate approval remains separate.
+export async function verifyAndComplete(document,data,revision,call){
+ const prefix={INT:'/api/intake',FEA:'/api/fea',ARD:'/api/ard'}[document];
+ const verified=await call(prefix+'/verify',data,revision);
+ if(verified.status>=400||!verified.body?.done||verified.body.blocked||verified.body.llm_error)return verified;
+ const generated=await call(prefix+(document==='INT'?'/finalize':'/generate'),{project_no:data.project_no},verified.revision);
+ if(generated.status>=400)return generated;
+ const complete=await call('/portal/complete',{},generated.revision);
+ if(complete.status>=400)return complete;
+ return {...complete,body:{...verified.body,portalCompleted:true},canEdit:false};
 }
 export async function nativeAgentRequest(identity,code,document,path,method,data={},revision,dependencies={}){
  if(!allowedNativePath(path,method,code,document))throw fail(400,'허용되지 않은 Agent 작업입니다.');
  const write=method!=='GET'&&!['/api/scan','/api/rules/preview'].includes(path);
- const pool=dependencies.pool||getPool(),transact=dependencies.transact||withTransaction,ctx=await context(pool,identity,code,document,write);
+ const pool=dependencies.pool||getPool(),transact=dependencies.transact||withTransaction,ctx=await context(pool,identity,code,document,write,path==='/portal/access');
+ if(path==='/portal/access'){
+  const step=Number(ctx.state.journeyStep||0),target=steps[document];
+  const body={mode:ctx.canReadStage?'full':canReadRecommendation(ctx.actor.app_role)&&target<=step?'recommendation':'status',status:ctx.complete||step>target?'완료':step===target?'진행 중':'예정',canEdit:ctx.canEdit};
+  if(body.mode==='recommendation'){
+   const saved=(await pool.query('select payload from agent_portal.native_agent_sessions where project_id=$1',[ctx.project.id])).rows[0]?.payload;
+   // Explicit allowlist: no forms, source evidence, chat, or full markdown.
+   const snapshot=saved||seedNativeProject(code,ctx.state);
+   const calculated=await (dependencies.runAgent||runNativeAgent)({project:snapshot,path:'/api/fea/judge',method:'POST',body:{project_no:code},actor:ctx.actor.display_name});
+   if(calculated.status>=400)throw fail(503,'판정 권고를 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.');
+   const verdict=calculated.body?.verdict||saved?.verdict;
+   body.recommendation=verdict?[verdict.verdict,verdict.headline,...(verdict.conditions||[])].filter(v=>typeof v==='string').join('\n'):saved?.fea_data?.recommendation||null;
+   body.track=calculated.body?.judgement?.track?.track||ctx.state.nativeAgentArtifacts?.FEA?.track||null;
+   body.autonomy=document==='ARD'?(snapshot.ard_form?.autonomy_level||null):(calculated.body?.judgement?.autonomy?.level||null);
+  }
+  return {status:200,body,canEdit:ctx.canEdit};
+ }
+ if(path==='/portal/verify-complete')return verifyAndComplete(document,{...data,project_no:code},revision,(operation,input,rev)=>nativeAgentRequest(identity,code,document,operation,'POST',input,rev,dependencies));
  if(path==='/portal/history')return {status:200,body:{versions:(await pool.query('select id,version_number,original_name,created_at from agent_portal.native_agent_documents where project_id=$1 and document_type=$2 order by version_number desc',[ctx.project.id,document])).rows},canEdit:ctx.canEdit};
  if(path.startsWith('/portal/version/')){
   const row=(await pool.query('select markdown from agent_portal.native_agent_documents where id=$1 and project_id=$2 and document_type=$3',[path.split('/').at(-1),ctx.project.id,document])).rows[0];
@@ -78,7 +111,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
   result=await runNativeAgent({project,path,method,body:data,actor:ctx.actor.display_name});
  }
  if(result.status>=400)return {...result,revision:rev};
- if(!write)return {...result,revision:rev,canEdit:ctx.canEdit};
+ if(!write)return {...result,body:canManageAssessment(ctx.actor.app_role)||path==='/api/bootstrap'?result.body:redactNativeResponse(result.body),revision:rev,canEdit:ctx.canEdit};
  return transact(async client=>{
   await client.query('select id from agent_portal.projects where id=$1 for update',[ctx.project.id]);
   const latest=await context(client,identity,code,document,true);
@@ -113,7 +146,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
    if(!latest.backfill&&!(document==='INT'&&state.fastTrack?.requested&&state.fastTrack.status!=='REJECTED')){
     state.journeyStep=steps[document]+1;state.status={INT:'타당성 평가 진행 중',FEA:'G1 착수 승인 진행 중',ARD:'G2 개발 착수 승인 진행 중'}[document];
     state.stage={INT:2,FEA:2,ARD:3}[document];state.progress=Math.round(state.journeyStep/9*100);state.nextAction=state.status;
-    await client.query('update agent_portal.projects set current_stage_code=$2,project_status=$3,updated_at=now() where id=$1',[ctx.project.id,{INT:'FEA',FEA:'G1',ARD:'G2'}[document],document==='INT'?'in_progress':'in_review']);
+    await client.query('update agent_portal.projects set current_stage_code=$2,project_status=$3,progress_percent=$4,next_action=$5,updated_at=now() where id=$1',[ctx.project.id,{INT:'FEA',FEA:'G1',ARD:'G2'}[document],document==='INT'?'in_progress':'in_review',state.progress,state.nextAction]);
    }
    await client.query("update agent_portal.intake_requests set raw_answers=jsonb_set(coalesce(raw_answers,'{}'::jsonb),'{portalState}',$2::jsonb),updated_at=now() where project_id=$1",[ctx.project.id,JSON.stringify(state)]);
   }else if(latest.state.nativeAgentArtifacts?.[document]?.status==='complete'||latest.rework){
@@ -133,6 +166,6 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
   }
   await client.query('update agent_portal.native_agent_sessions set payload=$2::jsonb,revision=revision+1,updated_by=$3,updated_at=now() where project_id=$1',[ctx.project.id,JSON.stringify(project),ctx.actor.id]);
   await client.query("insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,after_data) values($1,$2,'NATIVE_AGENT','document',$3,$4::jsonb)",[ctx.actor.id,ctx.project.id,`${code}-${document}`,JSON.stringify({operation:path,revision:rev+1,documentVersion:doc?.version_number,events:result.audit?.map(a=>a.event)})]);
-  return {...result,revision:rev+1,canEdit:latest.canEdit};
+  return {...result,body:canManageAssessment(ctx.actor.app_role)?result.body:redactNativeResponse(result.body),revision:rev+1,canEdit:path==='/portal/complete'?false:latest.canEdit};
  });
 }

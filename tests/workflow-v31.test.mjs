@@ -120,7 +120,8 @@ test('journey keeps rich current, completed Gate and rejection visuals with a re
 test('basis edits reset current votes and retain history',()=>{
  let s=run(gateState(),vote('G2','requester'),requester);
  const docs=structuredClone(s.historicalDocuments);docs[3].documents.ARD.fields['overview.name']='변경';
- s=run(s,{historicalDocuments:docs},developer);
+ assert.throws(()=>run(s,{historicalDocuments:docs},developer),/팀장/);
+ s=run(s,{historicalDocuments:docs},leader);
  assert.deepEqual(s.workflowApprovals.G2,{});
  assert.equal(s.workflowApprovalHistory[0].approvals.requester.actorId,'1');
 });
@@ -178,12 +179,12 @@ test('Fast Track requires leader qualification, complete ARD-Lite and developer 
  s={...s,intakeDraftCompleted:true,intakeReview:{at:'2026-09-07T00:00:00Z'},intakeAnswers:['문서 수작업 확인'],intakeDetails:{performer:'품질 담당',countPerMonth:'20',asIsMinutes:'30',people:'2',failureImpact:'재작업 발생'}};
  assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/ARD-Lite/);
  const ardLite={definition:'품질 담당자가 시행일부터 규정 질의를 확인',outOfScope:'자동 승인 제외',autonomy:'L1 초안 생성',successCriteria:'정확도 90% 이상',prohibitedActions:'근거 없는 승인 금지',emergencyReasonAndDeadline:'법규 시행 2026-10-01'};
- s=run(s,{fastTrackAction:{type:'save_ard_lite',ardLite}},requester);
+ s=run(s,{fastTrackAction:{type:'save_ard_lite',ardLite}},leader);
  assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/최종 버전/);
  s={...s,markdownDocuments:{ARD_LITE:{phases:{fast_track_requirements:{id:'document-1',version:1,status:'draft'}}}}};
- assert.throws(()=>run(s,{fastTrackAction:{type:'complete_ard_lite',version:2}},requester),/최신/);
- assert.throws(()=>run(s,{fastTrackAction:{type:'complete_ard_lite',version:1}},{...developer,id:88}),/권한/);
- s=run(s,{fastTrackAction:{type:'complete_ard_lite',version:1}},requester);
+ assert.throws(()=>run(s,{fastTrackAction:{type:'complete_ard_lite',version:2}},leader),/최신/);
+ assert.throws(()=>run(s,{fastTrackAction:{type:'complete_ard_lite',version:1}},{...developer,id:88}),/팀장/);
+ s=run(s,{fastTrackAction:{type:'complete_ard_lite',version:1}},leader);
  assert.equal(s.journeyStep,0);
  assert.throws(()=>run(s,{fastTrackAction:{type:'approve_gf'}},leader),/개발 담당자/);
  s=run(s,{developerIds:['5']},admin);

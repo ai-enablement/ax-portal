@@ -17,7 +17,8 @@ test('resumed INT supplementation belongs to requester, not importing admin or O
  assert.equal(canSaveResumedIntake(actor,project,{...s,historicalImportFinalizedAt:null},changes),false);
 });
 
-test('resumed G1 Drop lets requester revise FEA without granting approval or skipping G1',()=>{
+test('resumed G1 Drop lets leader revise FEA without skipping G1',()=>{
+ const actor={id:7,is_active:true,app_role:'team_leader'};
  const s={historicalImport:true,historicalImportFinalizedAt:'2026-09-09',journeyStep:2,feaCompleted:true,g1Resolution:{decision:'DROP',reason:'보완'},workflowApprovals:{G1:{team_leader:{decision:'REJECTED'}}}};
  const changes={feaDraft:{summary:'보완 후'},feaCompleted:true};
  assert.equal(canSaveResumedFea(actor,{...project,current_stage_code:'G1'},s,changes),true);
@@ -33,11 +34,12 @@ test('resumed G1 Drop lets requester revise FEA without granting approval or ski
  assert.equal(canSaveResumedFea(actor,{...project,current_stage_code:'G1'},draft,{feaCompleted:true}),true);
 });
 
-test('historical importer is not an assignment: actual requester can save and submit only current FEA',()=>{
+test('resumed FEA authoring requires leader or admin regardless of importer identity',()=>{
+ const actor={id:7,is_active:true,app_role:'team_leader'};
  const state={historicalImport:true,historicalImportFinalizedAt:'2026-09-08',journeyStep:1,workflowVersion:'3.1',feaAuthor:{id:'99',name:'Importer'},developerIds:['9']};
  assert.equal(canWriteResumedFea({...state,requesterId:'7'},actor),true);
  for(const changes of [{feaDraft:{summary:'수정'}},{feaDraft:{summary:'수정'},feaCompleted:true}])assert.equal(canSaveResumedFea(actor,project,state,changes),true);
- for(const id of [8,9,99])assert.equal(canSaveResumedFea({...actor,id},project,state,{feaDraft:{}}),false);
+ for(const app_role of ['general_user','team_member','bts','bp_solution'])assert.equal(canSaveResumedFea({...actor,app_role},project,state,{feaDraft:{}}),false);
  for(const changes of [{journeyStep:2,feaCompleted:true},{historicalDocuments:{'3':{}}},{finalizeHistoricalImport:true},{feaCompleted:false}])assert.equal(canSaveResumedFea(actor,project,state,changes),false);
  for(const patch of [{journeyStep:0},{journeyStep:2},{journeyStep:3},{feaCompleted:true},{historicalImportFinalizedAt:null}])assert.equal(canSaveResumedFea(actor,project,{...state,...patch},{feaDraft:{}}),false);
  assert.equal(canSaveResumedFea({...actor,is_active:false},project,state,{feaDraft:{}}),false);
@@ -45,11 +47,12 @@ test('historical importer is not an assignment: actual requester can save and su
  assert.equal(result.journeyStep,2);
  assert.equal(result.g1Resolution,undefined);
 });
-test('only requester or owner can complete their active regular FEA',()=>{
+test('only leader or admin can complete active regular FEA',()=>{
+ const actor={id:7,is_active:true,app_role:'team_leader'};
  const state={journeyStep:1},changes={feaCompleted:true};
  assert.equal(canCompleteOwnFea(actor,project,state,changes),true);
  assert.equal(canCompleteOwnFea({...actor,id:8},project,state,changes),true);
- for(const id of [9,10])assert.equal(canCompleteOwnFea({...actor,id},project,state,changes),false);
+ for(const app_role of ['general_user','team_member','bts','bp_solution'])assert.equal(canCompleteOwnFea({...actor,app_role},project,state,changes),false);
  for(const s of [{journeyStep:0},{journeyStep:2},{...state,historicalImport:true},{...state,feaCompleted:true}])assert.equal(canCompleteOwnFea(actor,project,s,changes),false);
  assert.equal(canCompleteOwnFea({...actor,is_active:false},project,state,changes),false);
  assert.equal(canCompleteOwnFea(actor,project,state,{feaCompleted:false}),false);

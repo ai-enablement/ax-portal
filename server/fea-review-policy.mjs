@@ -1,5 +1,6 @@
 import {AGENT_FIELDS,fieldValue} from '../shared/intake-agent.mjs';
 import {canWriteResumedFea,canWriteResumedIntake} from '../shared/fea-assignment.mjs';
+import {canManageAssessment} from '../shared/document-role-policy.mjs';
 
 export function canSaveResumedIntake(actor,project,state,changes){
   const keys=Object.keys(changes);
@@ -19,7 +20,7 @@ export function canSaveResumedFea(actor,project,state,changes){
 }
 
 export function canCompleteOwnFea(actor,project,state,changes){
-  return actor.is_active===true && [project.requester_id,project.owner_id].some(id=>id!=null&&String(id)===String(actor.id)) &&
+  return actor.is_active===true && canManageAssessment(actor.app_role) &&
     !state.historicalImport && Number(state.journeyStep)===1 && project.current_stage_code==='FEA' && !state.feaCompleted &&
     changes.feaCompleted===true;
 }

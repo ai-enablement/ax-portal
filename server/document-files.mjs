@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { getPool, withTransaction } from './db/pool.mjs';
 import { standardDocuments } from '../shared/standard-documents.mjs';
 import { MAX_FILE_BYTES } from '../shared/document-content.mjs';
+import {canManageAssessment,restrictedDocument} from '../shared/document-role-policy.mjs';
 
 export function validateUpload(name, bytes) {
   if (!bytes.length || bytes.length > MAX_FILE_BYTES) throw new Error('파일은 5MB 이하로 첨부해 주세요.');
@@ -32,11 +33,12 @@ export async function documentAccess(client, identity, code, write = false, docu
         order by case when u.id in ($2,$3) then 0 else 1 end,u.id limit 1`,[developmentRole,project.requester_id,project.owner_id,['admin','team_leader','team_member'],project.id])).rows[0]
     : (await client.query(`select id,app_role,display_name from agent_portal.users where lower(email)=lower($1) and is_active=true limit 1`,[identity.email])).rows[0];
   if (!actor) return null;
+  if(restrictedDocument(documentType)&&!canManageAssessment(actor.app_role))return null;
   const members = (await client.query(`select user_id,relationship from agent_portal.project_members where project_id=$1 and ended_at is null`,[project.id])).rows;
   const same = id => String(id) === String(actor.id);
   const assigned = members.filter(m => m.relationship === 'developer');
   const canRead = ['admin','team_leader','team_member'].includes(actor.app_role) || same(project.requester_id) || same(project.owner_id) || members.some(m=>same(m.user_id));
-  const canWrite = actor.app_role === 'admin' || (actor.app_role !== 'general_user' && (assigned.length ? assigned.some(m=>same(m.user_id)) : ['team_member','team_leader'].includes(actor.app_role)));
+  const canWrite = restrictedDocument(documentType)?canManageAssessment(actor.app_role):actor.app_role === 'admin' || (actor.app_role !== 'general_user' && (assigned.length ? assigned.some(m=>same(m.user_id)) : ['team_member','team_leader'].includes(actor.app_role)));
   const order = ['INT','FEA','G1','ARD','G2','DES','G3','PILOT','G4','OPS'];
   const target = { ARD:3, DES:5, EVD:5, EVP:5, EVR:5, DEP:7, UG:7, OPS:9, CHG:9 }[documentType];
   if (!canRead || (write && (!canWrite || target === undefined || order.indexOf(project.current_stage_code) < target))) return null;
@@ -60,7 +62,7 @@ export async function uploadDocumentFile(identity, projectCode, documentType, fi
 export async function readDocumentFile(identity,id) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const pool=getPool();
-  const metadata=(await pool.query(`select f.id,p.project_code from agent_portal.document_files f join agent_portal.projects p on p.id=f.project_id where f.id=$1 and p.deleted_at is null`,[id])).rows[0];
-  if (!metadata || !await documentAccess(pool,identity,metadata.project_code)) return null;
+  const metadata=(await pool.query(`select f.id,f.document_type,p.project_code from agent_portal.document_files f join agent_portal.projects p on p.id=f.project_id where f.id=$1 and p.deleted_at is null`,[id])).rows[0];
+  if (!metadata || !await documentAccess(pool,identity,metadata.project_code,false,metadata.document_type)) return null;
   return (await pool.query('select original_name,mime_type,content from agent_portal.document_files where id=$1',[id])).rows[0];
 }

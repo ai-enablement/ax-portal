@@ -1,4 +1,5 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
+import {changeProjectDevelopers,sameDeveloperIds} from './developer-assignment.mjs';
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 import { mergeStoredStandardDocuments, persistStandardDocuments } from "./standard-documents.mjs";
 import {applyImportLifecycle, assertImportTransition} from "../shared/historical-import-policy.mjs";
@@ -12,6 +13,7 @@ import {emailFromPartyLabel} from '../shared/project-contacts.mjs';
 import {assertGalleryCategory,galleryCodes,galleryPlatformSelections,primaryGalleryDataClass} from "../shared/gallery-options.mjs";
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
 import {canCompleteOwnFea,canSaveResumedFea,canSaveResumedIntake,reconcileManualAgentFields} from './fea-review-policy.mjs';
+import {canManageAssessment,redactAssessmentContent,assessmentWriteRequested} from '../shared/document-role-policy.mjs';
 
 const statusToDatabase = {
   SUBMITTED: "submitted",
@@ -830,7 +832,9 @@ async function listOperationalProjects(identity) {
   const pool = getPool();
   const actor = await findUser(pool, identity);
   if (!actor || !actor.is_active) return { status: 403, body: { error: "Active portal account is required." } };
-  return listNotificationProjectsForActor(pool, actor);
+  const result=await listNotificationProjectsForActor(pool, actor);
+  if(result.body?.projects)result.body.projects=result.body.projects.map(project=>redactAssessmentContent(project,actor.app_role));
+  return result;
 }
 
 // Internal worker only. Reuse the same visibility predicate and DB projection as the UI.
@@ -1076,7 +1080,7 @@ async function createOperationalProject(body, identity) {
         [clientRequestId, String(actor.id)],
       )).rows[0];
       if (existing) {
-        return { status: 200, body: { project: { ...(existing.state || {}), no: existing.projectCode, source: "database" } } };
+        return { status: 200, body: { project: redactAssessmentContent({ ...(existing.state || {}), no: existing.projectCode, source: "database" },actor.app_role) } };
       }
     }
     const contacts = registrationContacts(submittedState, actor);
@@ -1159,6 +1163,25 @@ async function updateOperationalProject(projectCode, body, identity) {
     )).rows[0];
     if (!project) return { status: 404, body: { error: "Project not found." } };
     const previousState = project.runtime_state || {};
+    if(!canManageAssessment(actor.app_role)&&changes.historicalDocuments){
+      const visible=redactAssessmentContent(previousState,actor.app_role);
+      for(const step of [1,3])if(JSON.stringify(changes.historicalDocuments[step])===JSON.stringify(visible.historicalDocuments?.[step])){
+        if(previousState.historicalDocuments?.[step])changes.historicalDocuments[step]=previousState.historicalDocuments[step];
+      }
+    }
+    if(!canManageAssessment(actor.app_role)&&assessmentWriteRequested(changes,previousState))return {status:403,body:{error:'타당성 평가·요구 정의는 팀장과 Admin만 작성할 수 있습니다.'}};
+    if('developerAssignmentHistory' in changes||'developerNames' in changes)return {status:403,body:{error:'개발 담당자와 변경 이력은 전용 변경 기능에서 관리합니다.'}};
+    if('developerChange' in changes){
+      if(Object.keys(changes).length!==1)return {status:400,body:{error:'담당자 변경은 다른 저장과 별도로 진행해 주세요.'}};
+      return changeProjectDevelopers(client,project,actor,changes.developerChange);
+    }
+    if('developerIds' in changes){
+      const assignedIds=(await client.query("select user_id from agent_portal.project_members where project_id=$1 and relationship='developer' and ended_at is null",[project.id])).rows.map(row=>String(row.user_id));
+      if(!sameDeveloperIds(assignedIds,changes.developerIds)){
+        if(actor.app_role!=='admin')return {status:403,body:{error:'Admin만 개발 담당자를 배정할 수 있습니다.'}};
+        if(assignedIds.length)return {status:400,body:{error:'개발 담당자 변경 기능에서 변경 사유를 입력해 주세요.'}};
+      }
+    }
     const developerIds = (previousState.developerIds || []).map(String);
     const canWriteImport = actor.app_role === "admin" || (actor.app_role !== "general_user" && (developerIds.length ? developerIds.includes(String(actor.id)) : !previousState.historicalImportFinalizedAt&&["team_leader","team_member"].includes(actor.app_role)));
     const related = String(previousState.securityReviewerId||'')===String(actor.id) || project.requester_id === actor.id || project.owner_id === actor.id || (await client.query(
@@ -1284,7 +1307,7 @@ async function updateOperationalProject(projectCode, body, identity) {
        values ($1,$2,'PROJECT_UPDATE','project',$3,$4::jsonb,$5::jsonb)`,
       [actor.id, project.id, projectCode, JSON.stringify(previousState), JSON.stringify(merged)],
     );
-    return { status: 200, body: { project: merged } };
+    return { status: 200, body: { project: redactAssessmentContent(merged,actor.app_role) } };
   });
 }
 
@@ -1419,7 +1442,10 @@ async function assignProjectDeveloper(projectCode, body, identity) {
       [projectCode],
     )).rows[0];
     if (!project) return { status: 404, body: { error: "Project not found." } };
+    const assigned=(await client.query("select 1 from agent_portal.project_members where project_id=$1 and relationship='developer' and ended_at is null limit 1",[project.id])).rows[0];
+    if(assigned)return {status:400,body:{error:'개발 담당자 변경 기능에서 변경 사유를 입력해 주세요.'}};
     const assignee = (await client.query(
+      // Existing assignments must be changed through the reasoned, audited action.
       `select id, display_name as "displayName", app_role as "appRole"
          from agent_portal.users
         where id=$1 and is_active=true and app_role <> 'general_user'

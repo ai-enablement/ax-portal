@@ -7,15 +7,15 @@ import {canUseResumedFeaAgent} from '../shared/fea-assignment.mjs';
 const configured={AZURE_OPENAI_ENDPOINT:'https://test.openai.azure.com/',AZURE_OPENAI_API_KEY:'test-only',AZURE_OPENAI_DEPLOYMENT:'test-deployment'};
 const blank=()=>({journeyStep:1,name:'테스트 과제',intakeAnswers:['','','','',''],agentSession:{revision:1,confirmed:{},proposals:[],held:[],attempts:{}}});
 
-test('finalized historical FEA reuses the agent for actual requester, assigned developer and admin only',()=>{
+test('finalized historical FEA reuses the agent for leader and admin only',()=>{
  const project={requester_id:'1',owner_id:'2',current_stage_code:'FEA'};
  const state={...blank(),historicalImport:true,historicalImportFinalizedAt:'2026-09-09',intakeDraftCompleted:true,developerIds:['3']};
- for(const [id,app_role] of [['1','general_user'],['3','team_member'],['9','admin']]){
+ for(const [id,app_role] of [['5','team_leader'],['9','admin']]){
   const actor={id,app_role,is_active:true};
   assert.equal(canUseResumedFeaAgent({...state,requesterId:'1'},actor),true);
   assert.doesNotThrow(()=>assertAgentAccess(actor,project,state,false));
  }
- for(const [id,app_role] of [['2','general_user'],['4','team_member'],['5','team_leader']])assert.throws(()=>assertAgentAccess({id,app_role,is_active:true},project,state,true),e=>e.status===403);
+ for(const [id,app_role] of [['1','general_user'],['2','general_user'],['4','team_member']])assert.throws(()=>assertAgentAccess({id,app_role,is_active:true},project,state,true),e=>e.status===403);
  const actor={id:'1',app_role:'general_user',is_active:true};
  for(const patch of [{historicalImportFinalizedAt:null},{intakeDraftCompleted:false},{feaCompleted:true},{journeyStep:0},{journeyStep:2}])assert.throws(()=>assertAgentAccess(actor,project,{...state,...patch},true));
  assert.throws(()=>assertAgentAccess(actor,{...project,current_stage_code:'G1'},state,true));
@@ -111,13 +111,14 @@ test('Azure failures and incomplete output do not expose provider diagnostics',a
 test('only authorized active accounts on new INT/FEA projects can use the agent',()=>{
   const p={requester_id:'1',owner_id:'2',current_stage_code:'FEA'};
   const actor={id:'1',app_role:'general_user',is_active:true};
-  assert.doesNotThrow(()=>assertAgentAccess(actor,p,{},false));
+  assert.throws(()=>assertAgentAccess(actor,p,{},false),e=>e.status===403);
+  assert.doesNotThrow(()=>assertAgentAccess({...actor,app_role:'team_leader'},p,{},false));
   assert.throws(()=>assertAgentAccess({...actor,id:'3'},p,{},false),e=>e.status===403);
   assert.throws(()=>assertAgentAccess(actor,p,{historicalImport:true},false),e=>e.status===403);
   assert.throws(()=>assertAgentAccess(actor,{...p,current_stage_code:'G1'},{},true),e=>e.status===409);
   assert.throws(()=>assertAgentAccess({...actor,is_active:false},p,{},true));
   assert.throws(()=>assertAgentAccess({id:'3',app_role:'team_member',is_active:true},p,{developerIds:['4']},false));
-  assert.doesNotThrow(()=>assertAgentAccess({id:'3',app_role:'team_member',is_active:true},p,{},false));
+  assert.throws(()=>assertAgentAccess({id:'3',app_role:'team_member',is_active:true},p,{},false),e=>e.status===403);
 });
 test('missing numbers, defaults and vague narratives cannot become complete',()=>{
   for(const value of ['','미확보','약 20','20~30','-1','1e4','NaN','0']) assert.equal(validField(FIELD_MAP.get('fea.countPerMonth'),value),false);

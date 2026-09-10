@@ -19,11 +19,11 @@ test('every UI role resolves persisted account ID even when email or roster is m
 test('historical lifecycle alerts use real parties and never the bulk import creator',()=>{
  const actors=[{id:'1',appRole:'general_user'},{id:'2',appRole:'general_user'},{id:'3',appRole:'team_member'},{id:'4',appRole:'team_member'},{id:'5',appRole:'team_leader'},{id:'99',appRole:'admin',email:'stale@example.com'}];
  const cases=[
-  [0,{},['1']], [1,{},['1']], [2,{},['5']], [3,{},['3']], [4,{},['1','2','5']],
+  [0,{},['1']], [1,{},['5','99']], [2,{},['5']], [3,{},['5','99']], [4,{},['1','2','5']],
   [5,{deliveryPhase:'design'},['3']], [5,{deliveryPhase:'development'},['1','3']],
   [6,{workflowTrack:'HIGH',uatRecord:{completed:true}},['4','5']], [7,{},['3']], [8,{},['2','5']],
   [2,{g1Resolution:{decision:'GO'},developerIds:[]},['99']],
-  [2,{g1Resolution:{decision:'DROP',reason:'보완'}},['1']]
+  [2,{g1Resolution:{decision:'DROP',reason:'보완'}},['5','99']]
  ];
  for(const [journeyStep,extra,expected] of cases){
   const project={...p,journeyStep,...extra};

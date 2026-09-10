@@ -3,9 +3,10 @@ import {isImportInProgress,needsImportCompletionRepair} from '../shared/historic
 import {ardLiteGaps,ardLiteDocumentComplete,fastTrackRequestGaps,FAST_TRACK_STATUSES} from '../shared/fast-track.mjs';
 import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
+import {canManageAssessment,assessmentWriteRequested} from '../shared/document-role-policy.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
-const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments','fastTrack','ardLite','nativeAgentArtifacts'];
+const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments','fastTrack','ardLite','nativeAgentArtifacts','developerAssignmentHistory'];
 const markdownPhaseDocument={design:'DES',development_evaluation:'EVD',deployment_rollout:'EVD'};
 export function sanitizeNewWorkflow(state){
   if(state.feaDraft?.standardVersion==='3.0')state.feaDraft=withAutomaticFeaTrack(state.feaDraft);
@@ -33,6 +34,7 @@ export function sanitizeNewWorkflow(state){
   return state;
 }
 export function applyWorkflow(previous,changes,merged,actor,project,now=new Date().toISOString()){
+  if(!canManageAssessment(actor.app_role)&&assessmentWriteRequested(changes,previous))deny('타당성 평가·요구 정의는 팀장·Admin만 작성할 수 있습니다.',403);
   for(const key of serverKeys)if(key in changes)deny('승인·단축 경로 상태는 서버에서만 변경할 수 있습니다.',403);
   if('g2Approvals' in changes)deny('승인 결과를 직접 수정할 수 없습니다.',403);
   const step=Number(previous.journeyStep??0);
@@ -83,7 +85,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     const action=changes.fastTrackAction;
     const fast=previous.fastTrack;
     if(!fast?.requested||previous.historicalImport)deny('Fast Track 신청 과제에서만 처리할 수 있습니다.');
-    const requirementsAuthor=author||actor.app_role==='team_leader'||[project.requester_id,project.owner_id].some(id=>id!=null&&String(id)===String(actor.id));
+    const requirementsAuthor=canManageAssessment(actor.app_role);
     merged.fastTrack=structuredClone(fast);
     if(action.type==='qualify'||action.type==='reject'){
       if(actor.app_role!=='team_leader'||fast.status!==FAST_TRACK_STATUSES.REQUESTED)deny('팀장이 자격 판정 대기 중인 Fast Track만 판정할 수 있습니다.',403);
@@ -148,7 +150,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     }else deny('유효한 Fast Track 작업이 필요합니다.');
   }
   const editedDocs=Object.keys(changes.historicalDocuments||{}).filter(k=>JSON.stringify(changes.historicalDocuments[k])!==JSON.stringify(previous.historicalDocuments?.[k]));
-  if(editedDocs.length&&!author)deny('지정 개발 담당자 또는 Admin만 문서를 수정할 수 있습니다.',403);
+  if(editedDocs.some(k=>[1,3].includes(Number(k))?!canManageAssessment(actor.app_role):!author))deny('해당 문서 작성 권한이 없습니다.',403);
   if(editedDocs.some(k=>Number(k)>step))deny('현재 단계 이후 문서를 먼저 저장할 수 없습니다.');
   if(changes.feaDraft&&step>2&&!previous.fastTrack?.requested&&projectTrack({...merged,workflowTrack:undefined})!==projectTrack({...previous,workflowTrack:undefined}))deny('트랙 변경은 착수 판정 재검토가 필요합니다. 기존 승인 상태에서 분류를 변경할 수 없습니다.');
   if(editedDocs.includes('3')&&step>4&&!previous.historicalImport&&previous.fastTrack?.status!==FAST_TRACK_STATUSES.TEMPORARY)deny('승인된 ARD 변경은 G2 재심사가 필요합니다.');

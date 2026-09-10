@@ -13,6 +13,8 @@ import MarkdownDocumentWorkspace from "./markdown-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
+import {canOpenCostMonitoring} from '../shared/navigation-policy.mjs';
+import DeveloperAssignment from './developer-assignment';
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
 import { intakeRequired, intakeSectionRequired, feaRequired } from '../shared/intake-standard.mjs';
 import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
@@ -1405,7 +1407,10 @@ export default function Home() {
     go("hub");
   };
 
+  const canAccessLlmCost = canOpenCostMonitoring(identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : identity?.appRole);
+  useEffect(() => { if (!canAccessLlmCost) setLlmCostGuideOpen(false); }, [canAccessLlmCost]);
   const openLlmCostMonitoring = () => {
+    if (!canAccessLlmCost) return;
     if (window.localStorage.getItem("llm-cost-hosts-ready") === "true") {
       window.open(
         "http://llmcost.changshininc.com/",
@@ -1673,7 +1678,7 @@ export default function Home() {
                   )}
                 </button>
               ))}
-              {group.label === "SERVICE & CONTROL" && (
+              {group.label === "SERVICE & CONTROL" && canAccessLlmCost && (
                 <button
                   type="button"
                   className="nav-external-link"
@@ -1926,7 +1931,7 @@ export default function Home() {
           onSubmit={submitAgentRequest}
         />
       )}
-      {llmCostGuideOpen && (
+      {canAccessLlmCost && llmCostGuideOpen && (
         <div
           className="llm-cost-setup-backdrop"
           onMouseDown={() => setLlmCostGuideOpen(false)}
@@ -5092,7 +5097,7 @@ function GateApprovalResult({
   const [g2Reason, setG2Reason] = useState(initialG2Approval?.reason || "");
   const [deadlineChangeOpen, setDeadlineChangeOpen] = useState(false);
   const [proposedDeadline, setProposedDeadline] = useState(
-    project.committedDate.includes("G2") ? "" : project.committedDate,
+    String(project.committedDate || "").includes("G2") ? "" : project.committedDate || "",
   );
   const [deadlineReason, setDeadlineReason] = useState("");
   const [deadlineRequestSent, setDeadlineRequestSent] = useState(false);
@@ -7503,6 +7508,7 @@ function UserDashboard({
             className="current-stage-detail"
             tabIndex={-1}
           >
+          {hasProjects&&current.source==='database'&&<DeveloperAssignment key={`${current.no}:${(current.developerIds||[]).join(',')}`} project={current} people={teamAccounts} admin={Number(current.journeyStep)===4&&selectedJourney===4&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')} onSave={(change: Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           {!hasProjects ? (
             <EmptyDataPage
               title="선택된 Agent 과제가 없습니다."
@@ -7510,7 +7516,7 @@ function UserDashboard({
             />
           ) : current.source === "database" && isLowRoute(current) && selectedJourney > 2 && selectedJourney < 9 ? (
             <EmptyDataPage title="하 트랙 적용 제외" description="G1 승인 후 운영대장 등록·배포로 연결되는 단축 경로입니다. 이 단계의 가짜 승인 이력을 생성하지 않습니다." />
-          ) : current.source === "database" && [2,4,6,8].includes(selectedJourney) && !importInProgress ? (
+          ) : current.source === "database" && [2,4,6,8].includes(selectedJourney) ? (
             <WorkflowGate key={current.no + ":" + selectedJourney + ":" + JSON.stringify(current.workflowApprovals)} project={current} gate={{2:"G1",4:"G2",6:"G3",8:"G4"}[selectedJourney]} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />
           ) : current.source === "database" && selectedJourney > effectiveJourneyStep ? (
             <EmptyDataPage

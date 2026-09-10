@@ -38,7 +38,8 @@ test('open historical imports suppress every external role at every stage, even 
 
 test('finalized historical imports resume actual external document and approval assignments',()=>{
  const imported={...base,historicalImport:true,historicalImportFinalizedAt:'2026-09-09'};
- for(const appRole of ['bts','bp_solution'])assert.equal(buildWorkNotifications([imported],{id:'21',appRole})[0].title,'ARD 요구 정의 작성');
+ for(const appRole of ['bts','bp_solution'])assert.deepEqual(buildWorkNotifications([imported],{id:'21',appRole}),[]);
+ for(const appRole of ['admin','team_leader'])assert.equal(buildWorkNotifications([imported],{id:'31',appRole})[0].title,'ARD 요구 정의 작성');
  const g2={...imported,journeyStep:4};
  for(const actor of [{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'31',appRole:'team_leader'}])assert.equal(buildWorkNotifications([g2],actor)[0].title,'G2 승인 요청');
  assert.deepEqual(buildWorkNotifications([g2],{id:'99',appRole:'general_user'}),[]);
@@ -73,9 +74,10 @@ test('G1 through G4 notify pending configured approval roles, never an unrelated
   assert.deepEqual(actors.filter(a=>buildWorkNotifications([p],a).length),[]);
  }
 });
-test('new FEA without a recorded author notifies requester, not every permitted editor',()=>{
+test('new FEA notifies privileged authors and never the requester',()=>{
  const project={...base,journeyStep:1};
- assert.equal(buildWorkNotifications([project],{id:'11',appRole:'general_user'})[0].journeyStep,1);
+ assert.equal(buildWorkNotifications([project],{id:'11',appRole:'general_user'}).length,0);
+ assert.equal(buildWorkNotifications([project],{id:'31',appRole:'team_leader'})[0].journeyStep,1);
  assert.equal(buildWorkNotifications([project],{id:'12',appRole:'general_user'}).length,0);
  assert.equal(buildWorkNotifications([project],{id:'99',appRole:'general_user'}).length,0);
  assert.equal(buildWorkNotifications([{...project,feaCompleted:true}],{id:'11',appRole:'general_user'}).length,0);
@@ -85,18 +87,18 @@ test('new FEA targets recorded author; finalized historical FEA targets requeste
  const actors=[{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'21',appRole:'team_member'},{id:'22',appRole:'team_member'},{id:'1',appRole:'admin'},{id:'2',appRole:'team_leader'}];
  const recipients=p=>actors.filter(a=>buildWorkNotifications([p],a).length).map(a=>a.id);
  const p={...base,journeyStep:1,feaAuthor:{id:'22'}};
- assert.deepEqual(recipients(p),['22']);
- assert.deepEqual(recipients({...p,historicalImport:true,historicalImportFinalizedAt:'2026-09-08',feaAuthor:{id:'1'}}),['11']);
- assert.deepEqual(recipients({...p,feaAuthor:{id:'1'}}),['1']);
- assert.deepEqual(recipients({...p,historicalImport:true,historicalImportFinalizedAt:'2026-09-08',developerIds:[]}),['11']);
+ assert.deepEqual(recipients(p),['1','2']);
+ assert.deepEqual(recipients({...p,historicalImport:true,historicalImportFinalizedAt:'2026-09-08',feaAuthor:{id:'1'}}),['1','2']);
+ assert.deepEqual(recipients({...p,feaAuthor:{id:'1'}}),['1','2']);
+ assert.deepEqual(recipients({...p,historicalImport:true,historicalImportFinalizedAt:'2026-09-08',developerIds:[]}),['1','2']);
 });
 
 test('document work in new and historical projects targets assigned developers, including explicitly assigned admins',()=>{
  for(const historicalImport of [false,true])for(const [journeyStep,deliveryPhase] of [[3,undefined],[5,'design'],[5,'development'],[7,undefined]]){
   const p={...base,historicalImport,historicalImportFinalizedAt:'2026-09-08',journeyStep,deliveryPhase};
-  assert.equal(buildWorkNotifications([p],{id:'1',appRole:'admin'}).length,0);
+  assert.equal(buildWorkNotifications([p],{id:'1',appRole:'admin'}).length,journeyStep===3?1:0);
   assert.equal(buildWorkNotifications([p],{id:'22',appRole:'team_member'}).length,0);
-  assert.equal(buildWorkNotifications([p],{id:'21',appRole:'team_member'}).length,1);
+  assert.equal(buildWorkNotifications([p],{id:'21',appRole:'team_member'}).length,journeyStep===3?0:1);
   assert.equal(buildWorkNotifications([p],{id:'21',appRole:'admin'}).length,1);
  }
 });
@@ -104,10 +106,10 @@ test('document work in new and historical projects targets assigned developers, 
 test('all gate rework targets the document author and suspends pending approval notices',()=>{
  for(const [gate,journeyStep] of [['G1',2],['G2',4],['G3',6],['G4',8]]){
   const p={...base,journeyStep,feaAuthor:{id:'11'},uatRecord:{completed:true},workflowApprovals:{[gate]:{owner:{decision:'REWORK',reason:'보완 사유'}}}};
-  const id=gate==='G1'?'11':'21';
-  assert.equal(buildWorkNotifications([p],{id,appRole:'general_user'})[0].title,`${gate} 보완 요청 반영`);
-  assert.equal(buildWorkNotifications([p],{id:'1',appRole:'admin'}).length,0);
-  assert.equal(buildWorkNotifications([p],{id:'2',appRole:'team_leader'}).length,0);
+  const restricted=['G1','G2'].includes(gate);
+  assert.equal(buildWorkNotifications([p],{id:restricted?'2':'21',appRole:restricted?'team_leader':'team_member'})[0].title,`${gate} 보완 요청 반영`);
+  assert.equal(buildWorkNotifications([p],{id:'1',appRole:'admin'}).length,restricted?1:0);
+  assert.equal(buildWorkNotifications([p],{id:'2',appRole:'team_leader'}).length,restricted?1:0);
  }
 });
 test('G3 still notifies requester until UAT is recorded',()=>{
@@ -125,8 +127,8 @@ test('one account with multiple G2 roles keeps an alert until every role has vot
  assert.equal(buildWorkNotifications([project],actor).length,0);
 });
 
-test("assigned developer receives the current ARD action and another developer does not", () => {
-  const assigned = buildWorkNotifications([base], { id: "21", appRole: "team_member", email: "dev@changshininc.com" });
+test("leader receives the current ARD action and developers do not", () => {
+  const assigned = buildWorkNotifications([base], { id: "21", appRole: "team_leader", email: "leader@changshininc.com" });
   const other = buildWorkNotifications([base], { id: "22", appRole: "team_member", email: "other@changshininc.com" });
   assert.equal(assigned.length, 1);
   assert.equal(assigned[0].title, "ARD 요구 정의 작성");
@@ -152,7 +154,7 @@ test("a rework decision routes the assigned author directly to the preceding doc
     journeyStep: 4,
     workflowApprovals: { G2: { owner: { decision: "REWORK", reason: "범위를 더 구체화해 주세요." } } },
   };
-  const notifications = buildWorkNotifications([project], { id: "21", appRole: "team_member", email: "dev@changshininc.com" });
+  const notifications = buildWorkNotifications([project], { id: "21", appRole: "team_leader", email: "leader@changshininc.com" });
   assert.equal(notifications[0].title, "G2 보완 요청 반영");
   assert.equal(notifications[0].journeyStep, 3);
   assert.match(notifications[0].body, /범위를 더 구체화/);

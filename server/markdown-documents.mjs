@@ -5,6 +5,7 @@ import { documentAccess } from './document-files.mjs';
 import { INT_FIELDS, FEA_FIELDS, standardValue } from '../shared/intake-standard.mjs';
 import { standardDocuments } from '../shared/standard-documents.mjs';
 import {parseArdLiteMarkdown,ardLiteGaps} from '../shared/fast-track.mjs';
+import {canManageAssessment,restrictedDocument} from '../shared/document-role-policy.mjs';
 
 export const MAX_MARKDOWN_BYTES = 5 * 1024 * 1024;
 export const MARKDOWN_DOCUMENTS = Object.freeze({
@@ -136,12 +137,13 @@ export async function loadCompletedNativeDocuments(client,projectId,state) {
   return rows;
 }
 
-export function buildCumulativeMarkdown(project, state, phase, versions=[], nativeDocuments=[]) {
+export function buildCumulativeMarkdown(project, state, phase, versions=[], nativeDocuments=[], includeAssessments=true) {
   const phaseTitle={design:'설계',development_evaluation:'개발·평가',deployment_rollout:'배포·확산'}[phase];
   if(!phaseTitle)throw new Error('유효한 누적 문서 단계가 아닙니다.');
   const lines=[`# ${project.project_name} · ${phaseTitle} 단계 누적 이력`,'',`- 과제 번호: ${project.project_code}`,`- 생성 시각: ${new Date().toISOString()}`,`- 현재 단계: ${project.current_stage_code||'미확인'}`,''];
   const refs=completedNativeReferences(state);
   for(const code of ['INT','FEA','ARD']){
+    if(!includeAssessments&&restrictedDocument(code)){lines.push(`## ${code}`,'','접근 제한: 팀장·Admin만 문서 원문을 조회할 수 있습니다.','');continue;}
     const ref=refs.find(r=>r.document_type===code);
     if(ref){
       const doc=nativeDocuments.find(d=>d.document_type===code&&String(d.id)===ref.id&&Number(d.version_number)===ref.version_number);
@@ -171,7 +173,7 @@ export async function exportCumulativeMarkdown(identity, projectCode, phase) {
     where v.project_id=$1 and (($2='development_evaluation' and v.document_type='DES') or ($2='deployment_rollout' and (v.document_type='DES' or (v.document_type='EVD' and v.lifecycle_phase='development_evaluation'))))
     order by case v.document_type when 'DES' then 1 else 2 end,v.version_number`,[access.project.id,phase])).rows;
   const nativeDocuments=await loadCompletedNativeDocuments(pool,access.project.id,row.state||{});
-  const markdown=buildCumulativeMarkdown(row,row.state||{},phase,versions,nativeDocuments);
+  const markdown=buildCumulativeMarkdown(row,row.state||{},phase,versions,nativeDocuments,canManageAssessment(access.actor.app_role));
   return {status:200,body:{markdown,name:`${row.project_code}-${phase}-history.md`}};
 }
 
@@ -185,7 +187,7 @@ export async function listMarkdownDocuments(identity, projectCode) {
     from agent_portal.markdown_document_versions v
     join agent_portal.users u on u.id=v.created_by
     where v.project_id=$1 order by v.created_at desc, v.version_number desc`, [access.project.id])).rows;
-  return { status: 200, body: { documents: rows } };
+  return { status: 200, body: { documents: rows.filter(row=>!restrictedDocument(row.documentType)||canManageAssessment(access.actor.app_role)) } };
 }
 
 export async function uploadMarkdownDocument(identity, projectCode, documentType, requestedPhase, name, bytes) {
@@ -232,8 +234,8 @@ export async function uploadMarkdownDocument(identity, projectCode, documentType
 export async function readMarkdownDocument(identity, id) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { status: 404, body: { error: '문서를 찾지 못했습니다.' } };
   const pool = getPool();
-  const metadata = (await pool.query(`select p.project_code from agent_portal.markdown_document_versions v join agent_portal.projects p on p.id=v.project_id where v.id=$1 and p.deleted_at is null`, [id])).rows[0];
-  if (!metadata || !await documentAccess(pool, identity, metadata.project_code)) return { status: 404, body: { error: '문서를 찾지 못했습니다.' } };
+  const metadata = (await pool.query(`select p.project_code,v.document_type from agent_portal.markdown_document_versions v join agent_portal.projects p on p.id=v.project_id where v.id=$1 and p.deleted_at is null`, [id])).rows[0];
+  if (!metadata || !await documentAccess(pool, identity, metadata.project_code,false,metadata.document_type)) return { status: 404, body: { error: '문서를 찾지 못했습니다.' } };
   const row = (await pool.query(`select v.id::text, v.document_type as "documentType", v.lifecycle_phase as phase,
       v.version_number as version, v.original_name as name, v.content_markdown as markdown,
       v.byte_size as size, v.checksum_sha256 as checksum, v.created_at as "createdAt", u.display_name as "authorName"

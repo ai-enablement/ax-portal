@@ -12,14 +12,14 @@ test('INT/FEA/ARD author roles and historical boundary retain portal permissions
  const requester={id:1,app_role:'general_user'},owner={id:2,app_role:'general_user'},developer={id:3,app_role:'team_member'},leader={id:4,app_role:'team_leader'},admin={id:5,app_role:'admin'};
  for(const [document,journeyStep] of [['INT',0],['FEA',1],['ARD',3]]){
   const state={journeyStep};
-  for(const actor of [requester,owner,admin])assert.equal(nativeDocumentPolicy(actor,project,state,false,document).canEdit,true);
-  assert.equal(nativeDocumentPolicy(developer,project,state,true,document).canEdit,true);
-  for(const actor of [developer,leader,{id:8,app_role:'general_user'}])assert.equal(nativeDocumentPolicy(actor,project,state,false,document).canEdit,false);
+  for(const actor of [requester,owner,admin])assert.equal(nativeDocumentPolicy(actor,project,state,false,document).canEdit,document==='INT'||actor===admin);
+  assert.equal(nativeDocumentPolicy(developer,project,state,true,document).canEdit,document==='INT');
+  for(const actor of [developer,leader,{id:8,app_role:'general_user'}])assert.equal(nativeDocumentPolicy(actor,project,state,false,document).canEdit,document!=='INT'&&actor===leader);
   const importing={...state,historicalImport:true,historicalBaselineStep:journeyStep};
   assert.equal(nativeDocumentPolicy(requester,project,importing,false,document).canEdit,false);
-  assert.equal(nativeDocumentPolicy(developer,project,importing,true,document).canEdit,true);
+  assert.equal(nativeDocumentPolicy(developer,project,importing,true,document).canEdit,document==='INT');
   const finalized={...importing,historicalImportFinalizedAt:'2026-09-10',historicalCompletedThrough:{step:journeyStep},journeyStep:journeyStep+1};
-  assert.equal(nativeDocumentPolicy(requester,project,finalized,false,document).canEdit,true);
+  assert.equal(nativeDocumentPolicy(requester,project,finalized,false,document).canEdit,document==='INT');
   assert.equal(nativeDocumentPolicy(requester,project,finalized,false,document).backfill,true);
  }
  assert.equal(nativeDocumentPolicy(admin,project,{journeyStep:0},false,'ARD').canEdit,false);

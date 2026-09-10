@@ -33,7 +33,7 @@ export default function FastTrackPanel({project,identity,people,onSave}){
   const leader=role==="team_leader",admin=role==="admin";
   const related=email===(project.requesterEmail||"").toLowerCase()||email===(project.projectOwnerEmail||"").toLowerCase();
   const assigned=people.some(p=>(project.developerIds||[]).map(String).includes(String(p.id))&&(p.email||"").toLowerCase()===email);
-  const canEdit=admin||leader||related||assigned;
+  const canEdit=admin||leader;
   const gaps=useMemo(()=>ardLiteGaps(draft),[draft]);
   const intakeReady=Boolean(project.intakeReview?.at&&project.intakeDraftCompleted&&!intakeRequired(project).length);
   const regularizationGaps=useMemo(()=>[
@@ -64,7 +64,7 @@ export default function FastTrackPanel({project,identity,people,onSave}){
     {fast.status===FAST_TRACK_STATUSES.REJECTED&&<div className="fast-track-result rejected"><WarningCircle size={18} weight="fill"/><span><b>정규 접수 절차로 진행합니다.</b><small>{fast.eligibilityReason}</small></span></div>}
     {fast.status===FAST_TRACK_STATUSES.QUALIFIED&&<>
       <div className="fast-track-result"><CheckCircle size={18} weight="fill"/><span><b>{fast.qualifiedByName} 팀장 자격 인정</b><small>{fast.eligibilityReason}</small></span></div>
-      <MarkdownDocumentWorkspace key={project.no+":ard-lite"} project={project} phase="fast_track_requirements" canEdit={canEdit&&intakeReady} onComplete={(_phase,version)=>save({fastTrackAction:{type:"complete_ard_lite",version}})}/>
+      {canEdit?<MarkdownDocumentWorkspace key={project.no+":ard-lite"} project={project} phase="fast_track_requirements" canEdit={intakeReady} onComplete={(_phase,version)=>save({fastTrackAction:{type:"complete_ard_lite",version}})}/>:<p>ARD-Lite · 팀장·Admin 작성 진행 중</p>}
       {admin&&<div className="fast-track-assignment"><label>개발 담당자<select value={developer} onChange={event=>setDeveloper(event.target.value)}><option value="">선택하세요</option>{people.map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label><button type="button" disabled={busy||!developer} onClick={()=>save({developerIds:[developer]})}>개발 담당자 배정</button></div>}
       {!intakeReady&&<p className="fast-track-missing">INT AI 인터뷰·검토를 먼저 완료해 주세요. 요구정의를 작성해도 INT 검토 전에는 착수 승인할 수 없습니다.</p>}
       {leader&&<button type="button" className="primary fast-track-gf" disabled={busy||!intakeReady||!ardLiteDocumentComplete(project)||!project.developerIds?.length} onClick={()=>save({fastTrackAction:{type:"approve_gf"}})}>GF 긴급 착수 승인 → 개발·평가</button>}

@@ -24,7 +24,9 @@ export function WorkflowGate({project,gate,identity,people,onSave}){
   const {busy,message,save}=useSave(onSave),[reason,setReason]=useState(''),[decision,setDecision]=useState('GO'),[developer,setDeveloper]=useState('');
   const role=identity?.appRole,admin=role==='admin',leader=role==='team_leader',email=(identity?.email||'').toLowerCase();
   const mine=r=>isProjectApprover(project,identity,r);
-  const expected={G1:2,G2:4,G3:6,G4:8}[gate],active=project.journeyStep===expected,passed=project.journeyStep>expected,importedApproval=historicalGateComplete(gate,project);
+  const importing=project.historicalImport===true&&!project.historicalImportFinalizedAt;
+  const expected={G1:2,G2:4,G3:6,G4:8}[gate],active=!importing&&project.journeyStep===expected,passed=project.journeyStep>expected,importedApproval=historicalGateComplete(gate,project);
+  const historicalRecord=project.historicalDocuments?.[expected];
   const gaps=gateGaps(gate,project);
   const reworkVotes=Object.entries(project.workflowApprovals?.[gate]||{}).filter(([,vote])=>['REWORK','REJECTED'].includes(vote?.decision));
   const dropped=gate==='G1'&&project.g1Resolution?.decision==='DROP';
@@ -33,7 +35,11 @@ export function WorkflowGate({project,gate,identity,people,onSave}){
     {(dropped||reworkVotes.length>0)&&<div className="workflow-rework-banner"><b>{dropped?'Drop 판정':'보완 요청'} · {supplementStage} 단계로 돌아가 수정해 주세요.</b><p>{dropped?project.g1Resolution?.reason:reworkVotes.map(([role,vote])=>`${ROLE_LABELS[role]||role}: ${vote.reason||'보완 사유 확인 필요'}`).join(' · ')}</p><small>상단 진행 표시에서 {supplementStage} 단계를 선택하면 담당 개발자 또는 작성 권한자가 내용을 보완할 수 있습니다. 근거가 변경되면 기존 승인 라운드는 이력으로 보존되고 새 승인을 받습니다.</small></div>}
     {importedApproval&&<div className="workflow-imported-gate"><Check size={20} weight="bold" aria-hidden="true"/><div><b>과거 이관 승인 완료</b><p>이관 당시 선택한 현재 단계보다 앞선 {gate} 게이트의 완료 이력입니다.</p><small>기존 완료 이력을 보존하며 개별 승인자의 전자 승인을 새로 요구하지 않습니다.</small></div></div>}
     {passed&&!importedApproval&&!project.workflowApprovals?.[gate]&&<p>이전 절차의 통과 이력을 보존합니다. 신규 승인으로 대체하지 않습니다.</p>}
-    {!active&&!passed&&<p>앞 단계를 완료한 뒤 승인할 수 있습니다.</p>}
+    {importing&&<p className="workflow-warning">과거 이관 보완 중 · 등록된 정보를 조회할 수 있습니다. 실제 승인·보완 요청은 과거 이관 완료 후 해당 단계에서 진행합니다.</p>}
+    {!importing&&!active&&!passed&&<p>앞 단계를 완료한 뒤 승인할 수 있습니다.</p>}
+    {project.historicalImport&&<div className="workflow-v31-vote"><div><b>요구자</b><p>{project.requester||'미등록'}</p></div><div><b>Project Owner</b><p>{project.projectOwner||project.owner||'미등록'}</p></div><div><b>개발 담당</b><p>{project.developerNames?.join(' · ')||'미배정'}</p></div><div><b>G2 확정 프로젝트 마감일</b><p>{project.committedDate||'미등록'}</p></div></div>}
+    {importedApproval&&Object.entries(project.workflowApprovals?.[gate]||{}).map(([r,vote])=><div className="workflow-v31-vote" key={r}><div><b>{ROLE_LABELS[r]||r} · 등록된 승인 이력</b><p>{vote?.actorName||'승인자 미등록'} · {vote?.decision||'판정 미등록'}</p>{vote?.reason&&<p>{vote.reason}</p>}</div></div>)}
+    {historicalRecord&&<details><summary>등록된 {gate} 이관 기록</summary><p>작성자: {historicalRecord.authorName||'미등록'} · 승인자: {historicalRecord.approverName||'미등록'} · 판정: {historicalRecord.decision||'미등록'}</p>{(historicalRecord.values||[]).filter(value=>typeof value==='string'&&value.trim()).map((value,i)=><p key={i}>{value}</p>)}</details>}
     {!importedApproval&&gate==='G1'&&<div className="workflow-v31-vote"><div><b>FEA 작성 담당</b><p>{project.feaAuthor?.name||project.historicalDocuments?.[1]?.authorName||'작성자 미확인'} · {project.feaCompleted?'작성 완료':'작성 중'}</p></div><div><b>G1 승인자</b><p>{project.workflowApprovals?.G1?.team_leader?.actorName||people.filter(p=>p.appRole==='team_leader').map(p=>p.displayName).join(' · ')||'팀장 판정 대기'}</p></div><div><b>개발 담당</b><p>{project.developerNames?.length?project.developerNames.join(' · '):'미배정'}</p></div></div>}
     {active&&gaps.length>0&&<p className="workflow-warning">미완료: {gaps.join(' · ')}</p>}
     {!importedApproval&&requiredApprovers(gate,project).map(r=><div className="workflow-v31-vote" key={r}><div><b>{ROLE_LABELS[r]}</b><p>{project.workflowApprovals?.[gate]?.[r]?.actorName||'해당 담당자 계정으로 승인'} · {project.workflowApprovals?.[gate]?.[r]?.decision||'대기'}</p></div>{gate!=='G1'&&mine(r)&&active&&<div><button type="button" disabled={busy||gaps.length>0} onClick={()=>save({gateVote:{gate,role:r,decision:'APPROVED',reason}})}>승인</button><button type="button" disabled={busy||!reason.trim()} onClick={()=>save({gateVote:{gate,role:r,decision:'REWORK',reason}})}>보완 요청</button></div>}</div>)}

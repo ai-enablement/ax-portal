@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {getPool, withTransaction} from './db/pool.mjs';
 import {syncProjectArtifacts} from './database-api.mjs';
 import {canUseResumedFeaAgent} from '../shared/fea-assignment.mjs';
+import {canManageAssessment,redactAssessmentContent} from '../shared/document-role-policy.mjs';
 import {AGENT_FIELDS, fieldValue, progress, deterministicSummary, safeMessage, applyProposals, acceptModelTurn,autoApplyIntakeExtractions} from '../shared/intake-agent.mjs';
 
 export class AgentError extends Error { constructor(status,message) {super(message);this.status=status;} }
@@ -53,6 +54,11 @@ export async function generateTurn(state,message,{env=process.env,fetcher=fetch}
 export function assertAgentAccess(actor,project,state,related) {
   if(!actor?.is_active) throw new AgentError(403,'활성 포털 계정이 필요합니다.');
   if(!project || project.deleted_at) throw new AgentError(404,'과제를 찾을 수 없습니다.');
+  if(project.current_stage_code==='FEA'){
+    if(!canManageAssessment(actor.app_role))throw new AgentError(403,'FEA는 팀장·Admin만 조회하고 작성할 수 있습니다.');
+    if(state.feaCompleted)throw new AgentError(409,'이미 완료된 문서입니다.');
+    return;
+  }
   if(state.historicalImport){
     if(project.current_stage_code!=='FEA'||!canUseResumedFeaAgent({...state,requester_id:project.requester_id},actor))throw new AgentError(403,'이관 완료 후 INT를 완료한 FEA 단계에서 요구자·지정 개발 담당자 또는 Admin이 사용할 수 있습니다.');
     return;
@@ -90,8 +96,13 @@ export async function persistAgentState(client,project,state,actorId,previousSta
   await client.query('update agent_portal.intake_conversations set last_message_at=now(),updated_at=now() where id=$1',[conversation.id]);
   await client.query(`insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,after_data) values($1,$2,'INTAKE_AGENT','project',$3,$4::jsonb)`,[actorId,project.id,project.project_code,JSON.stringify({revision:state.agentSession?.revision,request:state.agentSession?.request?.id,status:state.agentSession?.request?.status,confirmedKeys:Object.keys(state.agentSession?.confirmed||{})})]);
 }
-function publicState(state) {
+function publicState(state,actor) {
   let configured=true;try {azureConfiguration();} catch {configured=false;}
+  if(!canManageAssessment(actor?.app_role)){
+    const session=state.agentSession||{};
+    const intEntries=value=>Object.fromEntries(Object.entries(value||{}).filter(([key])=>key.startsWith('int.')));
+    return {configured,project:redactAssessmentContent(state,actor?.app_role),progress:progress({...state,journeyStep:0}),computed:{},fields:AGENT_FIELDS.filter(f=>f.key.startsWith('int.')).map(f=>({key:f.key,label:f.label,choices:f.choices})),session:{revision:session.revision||0,confirmed:intEntries(session.confirmed),proposals:(session.proposals||[]).filter(p=>p.key.startsWith('int.')),held:(session.held||[]).filter(k=>k.startsWith('int.')),attempts:intEntries(session.attempts)},messages:Number(state.journeyStep||0)===0?state.intakeMessages||[]:[]};
+  }
   return {configured,project:state,progress:progress(state),computed:deterministicSummary(state),fields:AGENT_FIELDS.map(f=>({key:f.key,label:f.label,choices:f.choices})),session:state.agentSession||{},messages:state.intakeMessages||[]};
 }
 export function completeIntakeReview(state,actor){
@@ -102,7 +113,7 @@ export function completeIntakeReview(state,actor){
 }
 export async function handleAgentRequest({method,identity,code,body={},generate=generateTurn,pool=getPool(),transaction=withTransaction}) {
   if(!/^\d{4}-\d{3,}$/.test(code)) throw new AgentError(400,'과제 번호가 올바르지 않습니다.');
-  if(method==='GET') return publicState((await load(pool,identity,code)).state);
+  if(method==='GET'){const {state,actor}=await load(pool,identity,code);return publicState(state,actor);}
   if(!['message','confirm','resume','review_intake'].includes(body.action)) throw new AgentError(400,'잘못된 요청입니다.');
   if(body.action!=='message') return transaction(async client=>{
     const {actor,project,state}=await load(client,identity,code,true);
@@ -123,7 +134,7 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
     next.agentSession.revision=(state.agentSession?.revision||0)+1;
     if(JSON.stringify(next.feaDraft)!==JSON.stringify(state.feaDraft))next.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
     await persistAgentState(client,project,next,actor.id,state);
-    return {...publicState(next),conflicts};
+    return {...publicState(next,actor),conflicts};
   });
   if(typeof body.message!=='string' || !body.message.trim() || body.message.length>6000 || !/^[\w-]{16,80}$/.test(body.requestId||'')) throw new AgentError(400,'답변은 1~6,000자로 입력해 주세요.');
   if(!safeMessage(body.message)) throw new AgentError(400,'민감정보가 감지되었습니다. 주민번호·계좌번호·비밀키를 제거해 주세요.');
@@ -131,7 +142,7 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
   const reservation=await transaction(async client=>{
     const {actor,project,state}=await load(client,identity,code,true);
     const last=state.agentSession?.request;
-    if(last?.id===body.requestId && last.status==='complete') return {cached:publicState(state)};
+    if(last?.id===body.requestId && last.status==='complete') return {cached:publicState(state,actor)};
     if((state.intakeMessages||[]).some(m=>m.requestId===body.requestId) && last?.id!==body.requestId) throw new AgentError(409,'이미 처리한 요청입니다. 대화를 새로고침해 주세요.');
     if(last?.status==='running' && Date.now()-Date.parse(last.startedAt)<90000) throw new AgentError(409,'이 과제의 AI가 답변을 작성 중입니다. 잠시 기다려 주세요.');
     if(last?.startedAt && Date.now()-Date.parse(last.startedAt)<3000) throw new AgentError(429,'잠시 후 다시 시도해 주세요.');
@@ -162,7 +173,7 @@ export async function handleAgentRequest({method,identity,code,body={},generate=
       next.agentSession.revision++;
       next.intakeMessages.push({role:'agent',text:reply,requestId:body.requestId,at:new Date().toISOString()});
       await persistAgentState(client,project,next,actor.id,state);
-      return publicState(next);
+      return publicState(next,actor);
     });
   } catch(error) {
     await transaction(async client=>{

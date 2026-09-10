@@ -31,7 +31,7 @@ test('live mail isolates each recipient, project, role, title, body and project 
   return {rows:[],rowCount:0};
  }};
  await scanWorkMail(client,liveEnv,async()=>({status:200,body:{projects:roleProjects}}));
- const expected=[['1','2026-033','G1 착수 판정'],['1','2026-051','G2 승인 요청'],['11','2026-051','G2 승인 요청'],['12','2026-051','G2 승인 요청'],['13','2026-052','타당성 평가서 작성'],['21','2026-050','ARD 요구 정의 작성'],['22','2026-053','설계 작성 완료']];
+ const expected=[['1','2026-033','G1 착수 판정'],['1','2026-051','G2 승인 요청'],['11','2026-051','G2 승인 요청'],['12','2026-051','G2 승인 요청'],['1','2026-052','타당성 평가서 작성'],['2','2026-052','타당성 평가서 작성'],['1','2026-050','ARD 요구 정의 작성'],['2','2026-050','ARD 요구 정의 작성'],['22','2026-053','설계 작성 완료']];
  assert.equal(queued.length,expected.length);
  for(const [actorId,no,title] of expected){
   const actor=roleActors.find(a=>a.id===actorId),project=roleProjects.find(p=>p.no===no);
@@ -46,7 +46,7 @@ test('live mail isolates each recipient, project, role, title, body and project 
  }
  assert.ok(queued.find(q=>q.actorId==='1'&&q.payload.subject.includes('2026-051')).payload.htmlBody.includes('담당 역할: AI 활성화팀장'));
  assert.ok(queued.find(q=>q.actorId==='12').payload.htmlBody.includes('담당 역할: Project Owner'));
- assert.ok(queued.find(q=>q.actorId==='21').payload.htmlBody.includes('AI Agent와 함께 요구 정의서를 작성'));
+ assert.ok(queued.find(q=>q.actorId==='1'&&q.payload.subject.includes('2026-050')).payload.htmlBody.includes('AI Agent와 함께 요구 정의서를 작성'));
 });
 
 test('before delivery stale content and recipient are rebuilt from the current assigned task',async()=>{
@@ -60,17 +60,17 @@ test('before delivery stale content and recipient are rebuilt from the current a
  assert.ok(payload.subject.includes('G1 착수 판정'));
  assert.ok(payload.htmlBody.includes('Calendar (2026-033)'));
  assert.ok(!payload.htmlBody.includes('wrong'));
- const reassigned={...roleActors[5],email:'current-developer@example.com'};
- const doc=buildWorkNotifications(roleProjects,{id:'21',appRole:'team_member'})[0];
- assert.equal((await currentJobPayload({query:async()=>({rows:[reassigned]})},{...job,actor_id:'21',notification_key:mailKey(doc)},liveEnv,load)).recipient,reassigned.email);
+ const reassigned={...roleActors[6],email:'current-developer@example.com'};
+ const doc=buildWorkNotifications(roleProjects,{id:'22',appRole:'team_member'})[0];
+ assert.equal((await currentJobPayload({query:async()=>({rows:[reassigned]})},{...job,actor_id:'22',notification_key:mailKey(doc)},liveEnv,load)).recipient,reassigned.email);
 });
 
 test('completed, reassigned, inactive and inaccessible tasks never deliver the old payload',async()=>{
- const actor=roleActors[5];
+ const actor=roleActors[6];
  const task=buildWorkNotifications(roleProjects,{id:actor.id,appRole:actor.app_role})[0];
  const job={id:'job-1',actor_id:actor.id,notification_key:mailKey(task),payload:{subject:'old'}};
  const client={query:async()=>({rows:[actor]})};
- for(const projects of [[],roleProjects.map(p=>({...p,developerIds:['22']})),roleProjects.map(p=>({...p,journeyStep:9}))]){
+ for(const projects of [[],roleProjects.map(p=>({...p,developerIds:['21']})),roleProjects.map(p=>({...p,journeyStep:9}))]){
   assert.equal(await currentJobPayload(client,job,liveEnv,async()=>({status:200,body:{projects}})),null);
  }
  assert.equal(await currentJobPayload({query:async()=>({rows:[]})},job,liveEnv),null);
@@ -91,8 +91,8 @@ test('live scan queues the actual FEA assignee and cancels obsolete admin work w
   }};
   const project={no:'2026-033',name:'Test',source:'database',journeyStep:1,requesterId:'11',developerIds:['21'],historicalImport,historicalImportFinalizedAt:'2026-09-08',feaAuthor:{id:historicalImport?'1':'11'}};
   await scanWorkMail(client,{PORTAL_MAIL_MODE:'live',PORTAL_APP_URL:'https://portal.example.com'},async()=>({body:{projects:[project]}}));
-  assert.deepEqual(queued.map(p=>p.recipient),['requester@example.com']);
-  assert.deepEqual(cancelled.find(([id])=>id==='1'),['1',[]]);
+  assert.deepEqual(queued.map(p=>p.recipient),['admin@example.com']);
+  assert.deepEqual(cancelled.find(([id])=>id==='11'),['11',[]]);
  }
 });
 test('automatic work mail checks run hourly',()=>{
@@ -101,7 +101,7 @@ test('automatic work mail checks run hourly',()=>{
 
 test('pending external mail is cancelled before historical finalization, and resumes only after finalization',async()=>{
  const actor={id:'21',email:'external@example.com',app_role:'bts'};
- const project={no:'2026-070',name:'Import',source:'database',journeyStep:3,developerIds:['21'],historicalImport:true};
+ const project={no:'2026-070',name:'Import',source:'database',journeyStep:5,deliveryPhase:'design',developerIds:['21'],historicalImport:true};
  const completed={...project,historicalImportFinalizedAt:'2026-09-09'};
  const action=buildWorkNotifications([completed],{id:actor.id,appRole:actor.app_role})[0];
  const job={id:'j',actor_id:actor.id,notification_key:mailKey(action),payload:{recipient:actor.email}};

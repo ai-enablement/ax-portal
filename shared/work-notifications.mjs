@@ -9,6 +9,7 @@ import {
 import { ardLiteGaps,ardLiteDocumentComplete } from "./fast-track.mjs";
 import {intakeRequired} from './intake-standard.mjs';
 import {isProjectParty} from './project-actors.mjs';
+import {canManageAssessment} from './document-role-policy.mjs';
 
 const same = (left, right) =>
   left !== undefined &&
@@ -31,15 +32,11 @@ function actorRelations(project, actor) {
   const developer = isAssignedDeveloper(project, actor.id);
   const requester = isProjectParty(project,actor,'requester');
   const owner = isProjectParty(project,actor,'owner');
-  // Administrative edit permission is not an assignment. Resumed FEA belongs
-  // to the linked requester, not the admin who imported or last saved the draft.
-  const feaAuthor = project.historicalImport ? (project.historicalImportFinalizedAt&&(project.requesterId||project.requesterEmail)?requester:developer)
-    : project.feaAuthor?.id ? same(project.feaAuthor.id, actor.id)
-    : project.requesterId || project.requesterEmail ? requester : owner;
   return {
     developer,
     author: developer,
-    feaAuthor,
+    feaAuthor:canManageAssessment(actor.appRole),
+    requirementsAuthor:canManageAssessment(actor.appRole),
     requester,
     owner,
     securityReviewer: same(project.securityReviewerId, actor.id),
@@ -78,7 +75,7 @@ function currentGateNotification(project, actor, relations, gate) {
   const approvals = project.workflowApprovals?.[gate] || {};
   const rework = Object.values(approvals).find((vote) => vote?.decision === "REWORK");
 
-  if (rework && (gate === 'G1' ? relations.feaAuthor : relations.author)) {
+  if (rework && (gate === 'G1' ? relations.feaAuthor : gate==='G2'?relations.requirementsAuthor:relations.author)) {
     const editStep = { G1: 1, G2: 3, G3: 5, G4: 7 }[gate];
     return item(
       project,
@@ -132,7 +129,7 @@ function projectNotification(project, actor) {
     if (relations.admin && !(project.developerIds || []).length) {
       return item(project, "Fast Track 개발 담당자 배정", "GF 승인 전에 개발 담당자를 배정해 주세요.", 0, "danger");
     }
-    if (fastIntakeReady&&(relations.developer||relations.requester||relations.owner)&&!ardLiteDocumentComplete(project)) {
+    if (fastIntakeReady&&relations.requirementsAuthor&&!ardLiteDocumentComplete(project)) {
       return item(project, "ARD-Lite 작성", "최소 요구정의 .md를 첨부하고 최종 버전을 완료해 주세요.", 0, "danger");
     }
     if (relations.teamLeader && fastIntakeReady && ardLiteDocumentComplete(project) && project.developerIds?.length) {
@@ -174,7 +171,7 @@ function projectNotification(project, actor) {
   }
 
   if (step === 3) {
-    if (relations.author && !documentComplete(project, 3, "ARD")) {
+    if (relations.requirementsAuthor && !documentComplete(project, 3, "ARD")) {
       return item(project, "ARD 요구 정의 작성", "AI Agent와 함께 요구 정의서를 작성하고, 내용을 확인한 후 G2 승인을 요청해 주세요.", 3, "danger");
     }
     return null;
@@ -259,7 +256,7 @@ export function buildWorkNotifications(projects, actor) {
         /G1 착수 판정|Fast Track 자격 판정|GF 긴급 착수 승인/.test(notification.title) ? 'AI 활성화팀장' :
         /개발 담당자 배정/.test(notification.title) ? 'Admin' :
         /UAT|요구 접수서 작성/.test(notification.title) ? '요구자' :
-        /타당성 평가서 작성|G1 보완 요청/.test(notification.title) ? 'FEA 작성 담당자' :
+        /타당성 평가서 작성|G1 보완 요청|ARD 요구 정의 작성|G2 보완 요청|ARD-Lite 작성/.test(notification.title) ? (actor.appRole==='team_leader'?'AI 활성화팀장':'Admin') :
         isAssignedDeveloper(project, actor.id) ? '개발 담당자' :
         isProjectParty(project,actor,'requester') ? '요구자' :
         isProjectParty(project,actor,'owner') ? 'Project Owner' :
