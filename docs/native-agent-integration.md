@@ -13,9 +13,10 @@ Only standalone filesystem directory creation is disabled in embedded mode.
 4. Continue using the existing server-only `AZURE_OPENAI_*` configuration. No credentials are sent to the iframe.
 5. Include `server/vendor/intake-agent` in the standalone deployment (Next output tracing configured).
 
-Do not deploy the new UI without both database and Python readiness checks. A Node-only Azure runtime is not sufficient.
+Do not deploy the new UI without both database and Python readiness checks. The ax-portal app container was checked over SSH on 2026-09-10: Python 3.11.2 exists; global Flask does not.
+The GitHub ZIP build now packages Flask and dependencies as CPython 3.11 / manylinux2014 x86_64 wheels under `server/vendor/intake-agent/python-packages`. The bridge prepends that directory to PYTHONPATH; no global installation or startup-time download is required. CI enables the native engine tests and checks the final standalone package with Python `-S` (global site packages disabled) before deployment. See [pip target/platform options](https://pip.pypa.io/en/stable/cli/pip_install/).
 The build uses Webpack: verified standalone tracing includes the vendor engine without sweeping workspace artifacts into the deployment package. The Azure workflow already strips root `.env` files; Docker build also excludes them.
-`Dockerfile.native-agent` supplies a Node 22 + Python/Flask container alternative. It has not been built on this Windows machine or deployed. Existing Azure GitHub ZIP deployment has NOT been converted to a container deployment; production requires a verified Python runtime first.
+`Dockerfile.native-agent` supplies an optional Node 22 + Python/Flask container alternative; it is not used by the existing Azure GitHub ZIP deployment. The ZIP path retains the confirmed built-in Python runtime and packages only its libraries.
 
 ## Data and workflow
 

@@ -24,7 +24,16 @@ jobs:
           node-version: '22.x'
           cache: 'npm'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Package Linux Python dependencies
+        run: python -m pip install --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.11 --implementation cp --abi cp311 --no-compile --target server/vendor/intake-agent/python-packages -r server/vendor/intake-agent/requirements.txt
+
       - name: Install, build, and test
+        env:
+          PORTAL_AGENT_PYTHON: python
         run: npm ci && npm test
 
       - name: Prepare Next.js standalone package
@@ -35,6 +44,15 @@ jobs:
           if [ -d public ]; then cp -R public deployment/public; fi
           rm -f deployment/.env deployment/.env.*
           node -e "const fs=require('fs'); const file='deployment/package.json'; const pkg=JSON.parse(fs.readFileSync(file,'utf8')); pkg.scripts={start:'node server.js'}; fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');"
+
+      - name: Verify packaged native Agent without global Flask
+        run: |
+          cd deployment
+          PYTHONPATH=server/vendor/intake-agent/python-packages python -S -B -c "import flask; from importlib.metadata import version; print('Packaged Flask:', version('Flask'))"
+          PORTAL_AGENT_EMBEDDED=1 PYTHONPATH=server/vendor/intake-agent/python-packages python -S -B server/vendor/intake-agent/portal_bridge.py <<'JSON' > native-smoke.json
+          {"project":{"project_no":"2099-999","history":[],"int_data":{}},"path":"/api/bootstrap","method":"GET","body":{},"actor":"Deployment QA"}
+          JSON
+          node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('native-smoke.json'));if(r.status!==200||r.body.form.length!==5||r.body.fea_form.length!==6||r.body.ard_form.length!==7)process.exit(1);fs.unlinkSync('native-smoke.json');console.log('Packaged INT/FEA/ARD bootstrap passed');"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
