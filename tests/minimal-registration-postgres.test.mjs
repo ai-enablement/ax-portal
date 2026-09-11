@@ -4,6 +4,7 @@ import {getPool,closePool} from '../server/db/pool.mjs';
 import {resolvePortalIdentity} from '../server/auth.mjs';
 import {createOperationalProject} from '../server/database-api.mjs';
 import {nativeAgentRequest} from '../server/native-agent.mjs';
+import {assignCompletedIntNumber} from '../server/project-numbering.mjs';
 
 test('real DB: minimal registration, duplicate retry, native INT initialization and save, rolled back', {
   skip: process.env.PORTAL_MINIMAL_DB_TEST !== '1' || !process.env.PORTAL_AGENT_PYTHON,
@@ -47,6 +48,14 @@ test('real DB: minimal registration, duplicate retry, native INT initialization 
     assert.ok(JSON.stringify(session).includes('반복 회의 일정 확인'));
     const stillInt=(await client.query('select current_stage_code from agent_portal.projects where id=$1',[row.id])).rows[0];
     assert.equal(stillInt.current_stage_code,'INT');
+    // Exercise the same atomic numbering operation used after successful INT validation.
+    const assigned=await assignCompletedIntNumber(client,row.id,code,state,session.payload,actor.id);
+    assert.match(assigned.code,/^\d{4}-\d{3,}$/);
+    assert.equal(assigned.payload.project_no,assigned.code);
+    assert.equal((await client.query('select project_code from agent_portal.projects where id=$1',[row.id])).rows[0].project_code,assigned.code);
+    const repeated=await assignCompletedIntNumber(client,row.id,assigned.code,assigned.state,assigned.payload,actor.id);
+    assert.equal(repeated.code,assigned.code);
+    code=assigned.code;
   } finally {
     await client.query('rollback');
     if(code)assert.equal((await client.query('select count(*)::int as n from agent_portal.projects where project_code=$1',[code])).rows[0].n,0);
