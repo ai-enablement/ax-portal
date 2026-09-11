@@ -1,4 +1,5 @@
 import {classifyProject,TRACKS,TRACK_LABELS} from './project-classification.mjs';
+import {validDeadline} from './project-deadline.mjs';
 import {standardDocuments,sectionHasContent} from './standard-documents.mjs';
 import {intakeRequired,feaRequired} from './intake-standard.mjs';
 import {isHistoricalDocumentComplete} from './historical-import-policy.mjs';
@@ -66,7 +67,7 @@ export function developmentEvdComplete(state){return markdownDocumentComplete(st
 export function releaseEvdComplete(state){return markdownDocumentComplete(state,'EVD','deployment_rollout')||documentComplete(state,7,'DEP');}
 export function gateGaps(gate,state){
   if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...(state.nativeAgentArtifacts?.INT?.status==='complete'||isHistoricalDocumentComplete(state,0)?[]:intakeRequired(state).map(f=>f.label)),...(state.nativeAgentArtifacts?.FEA?.status==='complete'||isHistoricalDocumentComplete(state,1)?[]:feaRequired(state).map(f=>f.label))];
-  if(gate==='G2')return documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료'];
+  if(gate==='G2')return [...(documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료']),...(!validDeadline(state.committedDate)?['팀장 프로젝트 마감일 확정']:[])];
   if(gate==='G3'){
     const c=state.gateChecks?.G3||{};
     return [...(!developmentEvdComplete(state)?['개발·평가 문서[EVD] 첨부 완료']:[]),...(c.criteriaPassed!==true?['ARD 성공 기준 전 항목 통과']:[]),...(c.zeroViolations!==true?['금칙 위반 0건']:[]),...(!String(c.evidence||'').trim()?['평가 근거 문서·버전']:[]),...(state.uatRecord?.completed!==true?['요구자 UAT 완료']:[])];
@@ -87,7 +88,7 @@ export function eligibleRole(role,actor,project,state){
   return false;
 }
 export function gateBasis(gate,state){
-  return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],state.nativeAgentArtifacts?.ARD,projectTrack(state)]:
+  return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],state.nativeAgentArtifacts?.ARD,projectTrack(state),state.committedDate]:
     gate==='G3'?[state.historicalDocuments?.[5],state.markdownDocuments?.DES?.phases?.design,state.markdownDocuments?.EVD?.phases?.development_evaluation,state.gateChecks?.G3,state.securityReviewerId,state.uatRecord]:
     gate==='G4'?[state.historicalDocuments?.[7],state.markdownDocuments?.EVD?.phases?.deployment_rollout,state.markdownDocuments?.UG?.phases?.deployment_rollout,state.gateChecks?.G4]:[state.intakeAnswers,state.intakeDetails,state.feaDraft,state.feaCompleted,state.nativeAgentArtifacts?.INT,state.nativeAgentArtifacts?.FEA]);
 }

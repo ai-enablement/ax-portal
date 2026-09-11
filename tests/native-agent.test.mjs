@@ -38,7 +38,7 @@ test('legacy INT values seed original engine fields without losing quantitative 
  assert.equal(p.int_data.frequency,0);
 });
 test('native documents satisfy document readiness but do not impersonate approvers',()=>{
- const state={feaCompleted:true,nativeAgentArtifacts:{INT:{status:'complete',version:1},FEA:{status:'complete',version:1,track:'MEDIUM'},ARD:{status:'complete',version:1,autonomy:'L2'}}};
+ const state={committedDate:'2026-10-01',feaCompleted:true,nativeAgentArtifacts:{INT:{status:'complete',version:1},FEA:{status:'complete',version:1,track:'MEDIUM'},ARD:{status:'complete',version:1,autonomy:'L2'}}};
  assert.deepEqual(gateGaps('G1',state),[]);assert.deepEqual(gateGaps('G2',state),[]);
  assert.deepEqual(requiredApprovers('G2',state),['requester','owner','team_leader']);
  assert.equal(projectTrack(state),'HIGH');

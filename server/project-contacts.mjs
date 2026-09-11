@@ -39,7 +39,10 @@ export function registrationContacts(state, actor) {
   if (state.registrationEntry === 'INT_AGENT' && !state.historicalImport) {
     const requesterEmail = normalizeContactEmail(actor.email);
     if (!isContactEmail(requesterEmail)) throw new ProjectContactError('로그인한 MS 계정 이메일을 확인해 주세요.');
-    return {requesterEmail, projectOwnerEmail: ''};
+    const projectOwnerEmail=state.ownerMode==='SELF'?requesterEmail:normalizeContactEmail(state.projectOwnerEmail);
+    if(state.ownerMode!=='SELF'&&!String(state.projectOwner||state.owner||'').trim())throw new ProjectContactError('Project Owner 이름을 입력해 주세요.');
+    if(!isContactEmail(projectOwnerEmail))throw new ProjectContactError('Project Owner의 올바른 MS 계정 이메일을 입력해 주세요.');
+    return {requesterEmail, projectOwnerEmail};
   }
   const requesterEmail = actor.app_role === 'general_user'
     ? normalizeContactEmail(actor.email)

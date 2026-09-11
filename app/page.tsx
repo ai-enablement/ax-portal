@@ -14,6 +14,7 @@ import MarkdownDocumentWorkspace from "./markdown-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
+import ProjectDeadline from './project-deadline';
 import {projectCodeLabel} from '../shared/project-code.mjs';
 import {canOpenCostMonitoring} from '../shared/navigation-policy.mjs';
 import DeveloperAssignment from './developer-assignment';
@@ -233,6 +234,8 @@ type UserProject = {
   requestedDate: string;
   receivedDate?: string;
   committedDate: string;
+  deadlineChange?: {date:string;previousDate:string;reason:string};
+  deadlineHistory?: Array<{previousDate:string|null;date:string;reason:string;actorId:string;actorName:string;at:string}>;
   scheduleState: string;
   checkpoints: string;
   route: View;
@@ -7508,6 +7511,7 @@ function UserDashboard({
             <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
+          {hasProjects&&current.source==='database'&&<ProjectDeadline key={current.no} project={current} identity={{...identity,appRole:identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole}} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           <div
             ref={currentStageDetailRef}
             id="current-stage-detail"
@@ -15377,7 +15381,7 @@ function RequestWizard({
   const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim();
-  const canSubmit = !isHistorical ? Boolean(manualTitle.trim() && identity?.displayName && isContactEmail(resolvedRequesterEmail) && !submitted && (!fastTrackRequested || (fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()))) : Boolean(
+  const canSubmit = !isHistorical ? Boolean(manualTitle.trim() && projectOwner.trim() && isContactEmail(normalizeContactEmail(projectOwnerEmail)) && identity?.displayName && isContactEmail(resolvedRequesterEmail) && !submitted && (!fastTrackRequested || (fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()))) : Boolean(
     manualTitle.trim() && receivedDate &&
       (!requiresHistoricalG1Record ||
         (historicalDeveloperIds.length > 0 &&
@@ -15391,6 +15395,8 @@ function RequestWizard({
       !submitted,
   );
   const registrationGaps = !isHistorical ? [
+    ...(!projectOwner.trim()?['Project Owner 이름']:[]),
+    ...(!isContactEmail(normalizeContactEmail(projectOwnerEmail))?['Project Owner MS 이메일']:[]),
     ...(!manualTitle.trim() ? ["Agent 과제명"] : []),
     ...(!identity?.displayName || !isContactEmail(resolvedRequesterEmail) ? ["로그인한 MS 계정 이름·이메일"] : []),
     ...(fastTrackRequested && !(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()) ? ["Fast Track 외부 기한 유형·날짜·사유"] : []),
@@ -15413,7 +15419,7 @@ function RequestWizard({
     const saved = await onSubmit(
       isHistorical ? [...answers] : [],
       requestTitle,
-      isHistorical ? resolvedProjectOwner : "",
+      isHistorical ? resolvedProjectOwner : projectOwner.trim(),
       resolvedRequester,
       {
         historical: isHistorical,
@@ -15421,8 +15427,8 @@ function RequestWizard({
         intakeDetails: {...intakeDetails,department:requesterDepartment.trim()},
         feaDraft: isHistorical ? historicalFea : undefined,
         intakeDraftCompleted: false,
-        ownerMode,
-        projectOwnerEmail: isHistorical ? resolvedOwnerEmail : "",
+        ownerMode: isHistorical ? ownerMode : 'OTHER',
+        projectOwnerEmail: isHistorical ? resolvedOwnerEmail : normalizeContactEmail(projectOwnerEmail),
         requesterEmail: resolvedRequesterEmail,
         category: role === ACCOUNT_ROLES.user ? "개별 접수" : projectCategory,
         receivedDate,
@@ -15459,7 +15465,7 @@ function RequestWizard({
           <div>
             <Pill tone="blue">{isHistorical ? "과거 과제 이관" : "요구 접수 · INT"}</Pill>
             <h2 id="request-wizard-title">{isAiTeam ? "새 Agent 과제 등록" : "새 Agent 과제 요청"}</h2>
-            <p>{isHistorical ? "최소 정보와 현재 진행 단계로 기존 과제를 이관합니다." : "과제 이름만 입력하세요. 등록 후 INT Agent와 함께 요구 접수를 작성합니다."}</p>
+            <p>{isHistorical ? "최소 정보와 현재 진행 단계로 기존 과제를 이관합니다." : "과제명과 Project Owner를 등록한 뒤 INT Agent와 함께 요구 접수를 작성합니다."}</p>
           </div>
           <button aria-label="요청 창 닫기" onClick={close}>
             <X size={17} />
@@ -15558,6 +15564,13 @@ function RequestWizard({
             <section className="new-request-identity" aria-label="로그인 계정 · 요구자">
               <strong>요구자 <small>MS 로그인 계정 자동 연결</small></strong>
               <dl><div><dt>이름</dt><dd>{identity?.displayName || "로그인 정보를 확인해 주세요"}</dd></div><div><dt>이메일</dt><dd>{identity?.email || "로그인이 필요합니다"}</dd></div></dl>
+            </section>
+            <section className="new-request-identity" aria-label="Project Owner 승인 담당자">
+              <strong>Project Owner <small>승인 담당자 · 필수</small></strong>
+              <div className="new-request-owner-fields">
+                <label className="new-request-name"><span>이름</span><input value={projectOwner} onChange={e=>setProjectOwner(e.target.value)} placeholder="Project Owner 이름" required maxLength={100}/></label>
+                <label className="new-request-name"><span>MS 계정 이메일</span><input type="email" value={projectOwnerEmail} onChange={e=>setProjectOwnerEmail(e.target.value)} placeholder="name@changshininc.com" required/></label>
+              </div><p className="new-request-validation">해당 계정에 Owner 승인 권한이 연결되며, 승인 단계에 도달하면 업무 알림과 메일이 발송됩니다.</p>
             </section>
             <p className="new-request-hint"><ChatsCircle size={20} /><span>업무 내용은 등록 후 작성합니다.<small>생성된 과제의 요구 접수 화면으로 이동해 INT 양식과 AI 인터뷰를 이어갑니다.</small></span></p>
             {registrationError && <p role="alert" className="new-request-error">{registrationError}</p>}

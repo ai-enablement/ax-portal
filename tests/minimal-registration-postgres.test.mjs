@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {getPool,closePool} from '../server/db/pool.mjs';
 import {resolvePortalIdentity} from '../server/auth.mjs';
-import {createOperationalProject} from '../server/database-api.mjs';
+import {createOperationalProject,updateOperationalProject} from '../server/database-api.mjs';
 import {nativeAgentRequest} from '../server/native-agent.mjs';
 import {assignCompletedIntNumber} from '../server/project-numbering.mjs';
 
@@ -19,7 +19,7 @@ test('real DB: minimal registration, duplicate retry, native INT initialization 
     const actor=(await client.query('select id,email,display_name from agent_portal.users where lower(email)=lower($1) and is_active=true',[identity.email])).rows[0];
     assert.ok(actor,'configured development account must already exist');
     const transact=work=>work(client);
-    const input={name:'검증 전용 · 최소 접수 롤백',registrationEntry:'INT_AGENT',clientRequestId:crypto.randomUUID(),category:'개별 접수',requesterEmail:'ignored@example.invalid',ownerMode:'SELF'};
+    const input={name:'검증 전용 · 최소 접수 롤백',registrationEntry:'INT_AGENT',clientRequestId:crypto.randomUUID(),category:'개별 접수',requesterEmail:'ignored@example.invalid',ownerMode:'OTHER',projectOwner:'검증 Owner',projectOwnerEmail:`owner-${crypto.randomUUID()}@example.com`};
     const result=await createOperationalProject({project:input},identity,transact);
     assert.equal(result.status,201,JSON.stringify(result.body));
     const state=result.body.project;code=state.no;
@@ -29,10 +29,12 @@ test('real DB: minimal registration, duplicate retry, native INT initialization 
     assert.equal(state.intakeDraftCompleted,false);
     assert.equal(state.journeyStep,0);
     assert.equal(state.progress,0);
-    assert.equal(state.projectOwnerEmail,'');
+    assert.equal(state.projectOwnerEmail,input.projectOwnerEmail);
     const row=(await client.query('select id,requester_id,owner_id,current_stage_code from agent_portal.projects where project_code=$1',[code])).rows[0];
     assert.equal(String(row.requester_id),String(actor.id));
-    assert.equal(row.owner_id,null);
+    assert.ok(row.owner_id);assert.notEqual(String(row.owner_id),String(actor.id));
+    assert.equal((await client.query('select email from agent_portal.users where id=$1',[row.owner_id])).rows[0].email,input.projectOwnerEmail);
+    assert.equal((await client.query("select count(*)::int as n from agent_portal.project_members where project_id=$1 and user_id=$2 and relationship='owner' and ended_at is null",[row.id,row.owner_id])).rows[0].n,1);
     assert.equal(row.current_stage_code,'INT');
     const retry=await createOperationalProject({project:input},identity,transact);
     assert.equal(retry.status,200);assert.equal(retry.body.project.no,code);
@@ -56,6 +58,18 @@ test('real DB: minimal registration, duplicate retry, native INT initialization 
     const repeated=await assignCompletedIntNumber(client,row.id,assigned.code,assigned.state,assigned.payload,actor.id);
     assert.equal(repeated.code,assigned.code);
     code=assigned.code;
+    // Only this rollback-only fixture advances to G2; no existing project is touched.
+    const g2={...assigned.state,journeyStep:4,workflowTrack:'MEDIUM',intakeDraftCompleted:true};
+    await client.query("update agent_portal.projects set current_stage_code='G2' where id=$1",[row.id]);
+    await client.query("update agent_portal.intake_requests set raw_answers=jsonb_set(raw_answers,'{portalState}',$2::jsonb) where project_id=$1",[row.id,JSON.stringify(g2)]);
+    const deadline=await updateOperationalProject(code,{deadlineChange:{date:'2026-10-01',previousDate:'',reason:'검증용 G2 일정'}},identity,transact);
+    assert.equal(deadline.status,200,JSON.stringify(deadline.body));
+    const changed=await updateOperationalProject(code,{deadlineChange:{date:'2026-10-08',previousDate:'2026-10-01',reason:'검증용 일정 변경'}},identity,transact);
+    assert.equal(changed.status,200,JSON.stringify(changed.body));
+    const persisted=(await client.query("select p.committed_completion_date::text as date,ir.raw_answers->'portalState'->'deadlineHistory' as history from agent_portal.projects p join agent_portal.intake_requests ir on ir.project_id=p.id where p.id=$1",[row.id])).rows[0];
+    assert.equal(persisted.date,'2026-10-08');assert.equal(persisted.history.length,2);
+    assert.equal(persisted.history[1].previousDate,'2026-10-01');
+    assert.equal((await client.query("select count(*)::int as n from agent_portal.audit_logs where project_id=$1 and action_code='PROJECT_DEADLINE_CHANGED'",[row.id])).rows[0].n,2);
   } finally {
     await client.query('rollback');
     if(code)assert.equal((await client.query('select count(*)::int as n from agent_portal.projects where project_code=$1',[code])).rows[0].n,0);

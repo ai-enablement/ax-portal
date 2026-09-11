@@ -13,6 +13,8 @@
 .new-request-identity strong { display: flex; align-items: center; gap: 10px; font-size: 15px; }
 .new-request-identity strong small { font-size: 12px; color: #627992; font-weight: 400; }
 .new-request-identity dl { display: grid; grid-template-columns: 1fr 1.7fr; gap: 18px; margin: 16px 0 0; }
+.new-request-owner-fields {display:grid;grid-template-columns:1fr 1.7fr;gap:16px;margin-top:16px;}
+@media(max-width:600px){.new-request-owner-fields{grid-template-columns:1fr;}}
 .new-request-identity dt { font-size: 13px; color: #687e99; margin-bottom: 6px; }
 .new-request-identity dd { font-size: 15px; margin: 0; overflow-wrap: anywhere; }
 .new-request-hint { display: flex; gap: 10px; align-items: flex-start; margin: 20px 0; font-size: 14px; line-height: 1.6; }

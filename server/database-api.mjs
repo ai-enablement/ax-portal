@@ -1089,7 +1089,8 @@ export async function createOperationalProject(body, identity, transact = withTr
       Object.assign(submittedState, {
         requester: [actor.display_name, actor.email].filter(Boolean).join(' · '),
         requesterName: actor.display_name, requesterDepartment: '',
-        projectOwner: '', owner: '', ownerMode: 'OTHER',
+        projectOwner: submittedState.ownerMode==='SELF'?actor.display_name:String(submittedState.projectOwner||submittedState.owner).trim(),
+        owner: submittedState.ownerMode==='SELF'?actor.display_name:String(submittedState.projectOwner||submittedState.owner).trim(),
         intakeAnswers: [], intakeDetails: {}, intakeDraftCompleted: false,
         feaDraft: undefined, feaCompleted: false, progress: 0,
       });
@@ -1165,9 +1166,9 @@ export async function createOperationalProject(body, identity, transact = withTr
   });
 }
 
-async function updateOperationalProject(projectCode, body, identity) {
+export async function updateOperationalProject(projectCode, body, identity, transact=withTransaction) {
   const changes = body.changes && typeof body.changes === "object" ? body.changes : body;
-  return withTransaction(async (client) => {
+  return transact(async (client) => {
     const actor = await findUser(client, identity);
     if (!actor || !actor.is_active) return { status: 403, body: { error: "Project update permission is required." } };
     const project = (await client.query(
@@ -1301,6 +1302,10 @@ async function updateOperationalProject(projectCode, body, identity) {
        where id=$1`,
       [project.id, String(merged.name).trim(), portalProjectCategories.has(merged.category) ? merged.category : "개별 접수", merged.description || null, databaseProjectStatus(merged.journeyStep, merged), Math.max(0, Math.min(100, Number(merged.progress) || 0)), validIsoDate(merged.requestedDate), merged.nextAction || null],
     );
+    if(changes.deadlineChange){
+      await client.query('update agent_portal.projects set committed_completion_date=$2::date where id=$1',[project.id,merged.committedDate]);
+      await client.query("insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,after_data) values($1,$2,'PROJECT_DEADLINE_CHANGED','project',$3,$4::jsonb)",[actor.id,project.id,projectCode,JSON.stringify(merged.deadlineHistory.at(-1))]);
+    }
     await client.query(
       `update agent_portal.intake_requests set
          business_problem=$2, input_sources=$3, desired_outcome=$4,

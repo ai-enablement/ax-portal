@@ -4,9 +4,12 @@ import {registrationContacts} from '../server/project-contacts.mjs';
 import {seedNativeProject} from '../server/native-agent.mjs';
 
 for (const app_role of ['general_user','team_member','team_leader','admin','bts','bp_solution']) {
-  test(`minimal registration uses authenticated requester and defers Owner: ${app_role}`, () => {
+  test(`minimal registration uses authenticated requester and explicitly selected Owner: ${app_role}`, () => {
     const result = registrationContacts({registrationEntry:'INT_AGENT',requesterEmail:'other@example.com',ownerMode:'SELF',projectOwnerEmail:'other@example.com'}, {app_role,email:'logged-in@example.com'});
-    assert.deepEqual(result,{requesterEmail:'logged-in@example.com',projectOwnerEmail:''});
+    assert.deepEqual(result,{requesterEmail:'logged-in@example.com',projectOwnerEmail:'logged-in@example.com'});
+    assert.deepEqual(registrationContacts({registrationEntry:'INT_AGENT',ownerMode:'OTHER',projectOwner:'오너',projectOwnerEmail:'owner@example.com'},{app_role,email:'logged-in@example.com'}),{requesterEmail:'logged-in@example.com',projectOwnerEmail:'owner@example.com'});
+    assert.throws(()=>registrationContacts({registrationEntry:'INT_AGENT',ownerMode:'OTHER',projectOwnerEmail:'owner@example.com'},{app_role,email:'logged-in@example.com'}),/이름/);
+    assert.throws(()=>registrationContacts({registrationEntry:'INT_AGENT',ownerMode:'OTHER',projectOwner:'오너',projectOwnerEmail:'invalid'},{app_role,email:'logged-in@example.com'}),/이메일/);
   });
 }
 test('minimal registration requires a valid signed-in email', () => {

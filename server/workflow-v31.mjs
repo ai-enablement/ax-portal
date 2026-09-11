@@ -4,11 +4,14 @@ import {ardLiteGaps,ardLiteDocumentComplete,fastTrackRequestGaps,FAST_TRACK_STAT
 import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
 import {canManageAssessment,assessmentWriteRequested} from '../shared/document-role-policy.mjs';
+import {applyDeadlineChange} from '../shared/project-deadline.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
 const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments','fastTrack','ardLite','nativeAgentArtifacts','developerAssignmentHistory'];
 const markdownPhaseDocument={design:'DES',development_evaluation:'EVD',deployment_rollout:'EVD'};
 export function sanitizeNewWorkflow(state){
+  delete state.deadlineHistory;delete state.deadlineChange;
+  if(!state.historicalImport)delete state.committedDate;
   if(state.feaDraft?.standardVersion==='3.0')state.feaDraft=withAutomaticFeaTrack(state.feaDraft);
   const fastTrackRequest=state.fastTrack;
   const historicalStep=Number(state.journeyStep??0),historicalPhase=state.deliveryPhase;
@@ -34,6 +37,12 @@ export function sanitizeNewWorkflow(state){
   return state;
 }
 export function applyWorkflow(previous,changes,merged,actor,project,now=new Date().toISOString()){
+  if('committedDate' in changes||'deadlineHistory' in changes)deny('마감일 전용 변경 기능을 사용해 주세요.',403);
+  if(changes.deadlineChange){
+    try{Object.assign(merged,applyDeadlineChange(previous,changes.deadlineChange,actor,now));}
+    catch(error){throw new WorkflowError(error.status||400,error.message);}
+    delete merged.deadlineChange;
+  }
   if(!canManageAssessment(actor.app_role)&&assessmentWriteRequested(changes,previous))deny('타당성 평가·요구 정의는 팀장·Admin만 작성할 수 있습니다.',403);
   for(const key of serverKeys)if(key in changes)deny('승인·단축 경로 상태는 서버에서만 변경할 수 있습니다.',403);
   if('g2Approvals' in changes)deny('승인 결과를 직접 수정할 수 없습니다.',403);
