@@ -38,4 +38,4 @@ export function homeProjectList(projects,filter,actor,sort='최신 과제순',qu
     return byNo(b,a);
   });
 }
-export const projectNumberBadge=no=>/^\d{4}-(\d+)$/.exec(String(no))?.[1]||String(no);
+export const projectNumberBadge=no=>String(no).startsWith('DRAFT-')?'작성 중':/^\d{4}-(\d+)$/.exec(String(no))?.[1]||String(no);

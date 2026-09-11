@@ -188,6 +188,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     const unchanged=JSON.stringify(changes.g1Resolution)===JSON.stringify(previous.g1Resolution);
     if(!unchanged){
       if(step!==2||actor.app_role!=='team_leader')deny('현재 G1에서 팀장만 판정을 확정할 수 있습니다.',403);
+      if(merged.workflowApprovals?.G1?.team_leader?.decision==='APPROVED')deny('이미 G1 판정이 완료되었습니다. 보완 후 새 승인 라운드에서 처리해 주세요.');
       if(gateGaps('G1',merged).length)deny('G1 필수 항목을 먼저 완료해 주세요.');
       if(!['GO','CONDITIONAL','DROP'].includes(changes.g1Resolution.decision))deny('유효한 G1 판정이 필요합니다.');
       if(changes.g1Resolution.decision!=='GO'&&!String(changes.g1Resolution.reason||'').trim())deny('조건 또는 Drop 사유를 입력해 주세요.');
@@ -200,6 +201,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     const {gate,role,decision,reason}=changes.gateVote;
     if(GATE_STEPS[gate]!==step||gate==='G1'||isLowRoute(previous))deny('현재 승인 대기 중인 게이트에서만 승인할 수 있습니다.');
     if(!requiredApprovers(gate,merged).includes(role)||!eligibleRole(role,actor,project,merged))deny('이 승인 역할의 담당자가 아닙니다.',403);
+    if(merged.workflowApprovals?.[gate]?.[role]?.decision==='APPROVED')deny('이미 해당 역할의 판정이 완료되었습니다. 보완 후 새 승인 라운드에서 처리해 주세요.');
     if(!['APPROVED','REWORK'].includes(decision))deny('유효한 승인 결과가 필요합니다.');
     if(decision==='REWORK'&&!String(reason||'').trim())deny('보완 사유를 입력해 주세요.');
     const gaps=gateGaps(gate,merged);

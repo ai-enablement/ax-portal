@@ -14,6 +14,7 @@ import MarkdownDocumentWorkspace from "./markdown-document-workspace";
 import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
+import {projectCodeLabel} from '../shared/project-code.mjs';
 import {canOpenCostMonitoring} from '../shared/navigation-policy.mjs';
 import DeveloperAssignment from './developer-assignment';
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
@@ -209,6 +210,7 @@ const projects: ProjectSummary[] = [];
 type UserProject = {
   no: string;
   registrationEntry?: "INT_AGENT";
+  provisionalProjectCode?: string;
   clientRequestId?: string;
   createdByUserId?: string;
   requesterId?: string;
@@ -1394,12 +1396,12 @@ export default function Home() {
     if(mailLinkHandled.current || databaseStatus !== 'connected' || !identity?.userId) return;
     const code = new URL(window.location.href).searchParams.get('workProject');
     if(!code) return;
-    const project = userProjectItems.find(p=>p.no===code && p.source==='database');
+    const project = userProjectItems.find(p=>(p.no===code || p.provisionalProjectCode===code) && p.source==='database');
     if(!project) return; // Never load a project outside the authenticated API result.
     mailLinkHandled.current=true;
-    const action=notifications.find(n=>n.projectNo===code);
-    setWorkflowTarget(code);
-    if(action) setWorkflowActionTarget({projectNo:code,journeyStep:action.journeyStep,deliveryPhase:action.deliveryPhase,nonce:Date.now()});
+    const action=notifications.find(n=>n.projectNo===project.no);
+    setWorkflowTarget(project.no);
+    if(action) setWorkflowActionTarget({projectNo:project.no,journeyStep:action.journeyStep,deliveryPhase:action.deliveryPhase,nonce:Date.now()});
     setView(action?.view==='intake'?'intake':action?.view==='definition'?'definition':action?.view==='delivery'?'delivery':'home');
   }, [databaseStatus, identity?.userId, userProjectItems, notifications]);
 
@@ -2256,7 +2258,7 @@ function Dashboard({
                 <div className="review-main">
                   <p>
                     <Pill tone={item.project.tone}>{item.gate} 승인 대기</Pill>
-                    <span>{item.project.no}</span>
+                    <span>{projectCodeLabel(item.project.no)}</span>
                   </p>
                   <strong>{item.project.name}</strong>
                   <small>
@@ -7363,7 +7365,7 @@ function UserDashboard({
                   </span>
                   <div>
                     <p>
-                      <small>{project.no}</small>
+                      <small>{projectCodeLabel(project.no)}</small>
                       {role !== ACCOUNT_ROLES.leader && role !== ACCOUNT_ROLES.admin && <Pill
                         tone={
                           getProjectRelationships(role, project.no).includes(
@@ -7403,7 +7405,7 @@ function UserDashboard({
                         : "작성 중"}
                 </Pill>
               )}
-              <small>{current.no}{hasProjects ? ` · ${current.category}` : ""}</small>
+              <small>{projectCodeLabel(current.no)}{hasProjects ? ` · ${current.category}` : ""}</small>
               <h2>{current.name || "\u00a0"}</h2>
             </div>
             <div className="project-header-actions">
@@ -7528,7 +7530,7 @@ function UserDashboard({
               description={`${userJourney[effectiveJourneyStep].title} 단계를 완료하면 다음 단계의 작성과 승인이 활성화됩니다.`}
             />
           ) : current.source === 'database' && [0,1,3].includes(selectedJourney) ? (
-            <NativeAgentWorkspace key={`${current.no}:${selectedJourney}:${role}`} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined} projectNo={current.no} document={selectedJourney===0?'INT':selectedJourney===1?'FEA':'ARD'} onCompleted={() => { window.location.href='/?workProject='+encodeURIComponent(current.no); }} />
+            <NativeAgentWorkspace key={`${current.no}:${selectedJourney}:${role}`} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined} projectNo={current.no} document={selectedJourney===0?'INT':selectedJourney===1?'FEA':'ARD'} onCompleted={(projectCode) => { window.location.href='/?workProject='+encodeURIComponent(projectCode||current.no); }} />
           ) : (current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney) ? (
             <MarkdownDocumentWorkspace
               key={`${deferredDocumentKey}:markdown:${selectedDeliveryPhase}`}

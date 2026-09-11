@@ -230,7 +230,7 @@ def read_audit(limit=300, project_no=""):
 # 3. 저장소 (FR-14) — 프로젝트당 파일 1개.
 #    사용자 데이터는 지우지 않는다. 덮어쓰기 전 항상 기존 내용을 읽어 병합한다.
 # ════════════════════════════════════════════════════════════════════════════
-_SAFE_NO = re.compile(r"^\d{4}-\d{3}$")
+_SAFE_NO = re.compile(r"^(?:\d{4}-\d{3,}|DRAFT-[a-f0-9]{32})$")
 
 
 def proj_path(no: str, archived: bool = False) -> Path:

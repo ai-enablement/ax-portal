@@ -21,6 +21,16 @@ function doc(code){
 const gateState=(step=4)=>({journeyStep:step,workflowTrack:'MEDIUM',developerIds:['5'],historicalDocuments:{3:{documents:{ARD:doc('ARD')}},5:{documents:{EVR:doc('EVR')}}},markdownDocuments:{DES:{phases:{design:{version:1}}},EVD:{phases:{development_evaluation:{version:1},deployment_rollout:{version:2}}}},gateChecks:{G3:{criteriaPassed:true,zeroViolations:true,evidence:'평가 v1 전건 확인'},G4:{criteriaPassed:true,evidence:'사용 20건 오류 0건 만족도 4.5, 종료 조건 충족'}},uatRecord:{completed:true,cases:5,actorId:'1'}});
 const vote=(gate,role)=>({gateVote:{gate,role,decision:'APPROVED'}});
 
+test('a recorded gate decision cannot be overwritten while other approvers are pending',()=>{
+ for(const [gate,step] of [['G2',4],['G3',6],['G4',8]]){
+  const s={...gateState(step),workflowApprovals:{[gate]:{team_leader:{decision:'APPROVED',actorId:'3',at:'2026-09-07'}}}};
+  assert.throws(()=>run(s,vote(gate,'team_leader')),/이미/);
+  assert.throws(()=>run(s,{gateVote:{gate,role:'team_leader',decision:'REWORK',reason:'재클릭'}}),/이미/);
+ }
+ const s=run(gateState(),vote('G2','requester'),requester);
+ assert.doesNotThrow(()=>run(s,vote('G2','owner'),owner));
+});
+
 test('completed bulk imports use real requester, Owner, developer and approvers throughout the resumed lifecycle',()=>{
  const imported={historicalImport:true,historicalImportFinalizedAt:'2026-09-09',historicalBaselineStep:0,createdByUserId:String(admin.id),feaAuthor:{id:String(admin.id)}};
  let s={...gateState(4),...imported};

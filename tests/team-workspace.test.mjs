@@ -56,7 +56,7 @@ test("uses the same one-page home for every account role", () => {
 test("hides redundant leader and admin management badges in the home project list", () => {
   const list = page.slice(page.indexOf('<div className="project-stack">'), page.indexOf('<article className="panel selected-project-status oneview-status">'));
   assert.ok(list.includes('role !== ACCOUNT_ROLES.leader && role !== ACCOUNT_ROLES.admin && <Pill'));
-  assert.ok(list.includes('<small>{project.no}</small>'));
+  assert.ok(list.includes('<small>{projectCodeLabel(project.no)}</small>'));
   assert.ok(list.includes('<strong>{project.name}</strong>'));
 });
 

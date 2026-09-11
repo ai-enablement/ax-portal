@@ -1,4 +1,6 @@
 import {createHash} from 'node:crypto';
+import {isProjectCode} from '../shared/project-code.mjs';
+import {assignCompletedIntNumber} from './project-numbering.mjs';
 import {getPool,withTransaction} from './db/pool.mjs';
 import {documentAccess} from './document-files.mjs';
 import {runNativeAgent} from './native-agent-runtime.mjs';
@@ -23,7 +25,7 @@ export function seedNativeProject(code,state){
   ...(Object.keys(f).length?{fea_form:{summary:f.summary||'',alt_process:f.alternatives?.[0]||'',alt_system:f.alternatives?.[1]||'',alt_macro:f.alternatives?.[2]||'',alt_llm:f.alternatives?.[3]||'',alt_conclusion:f.conclusion||'',roi_saving:f.expectedEffect||'',autonomy:f.autonomy||'',write_exec:f.writeExec,sensitive:f.sensitive,identifying:f.businessIdentity,damage_financial:f.damageFinancial,scope:{PERSONAL:'개인',TEAM:'팀',DEPT:'부서',MULTI_DEPT:'3개부서이상',COMPANY:'전사'}[f.scope]||f.scope||'',damage_desc:f.maximumDamage||''}}:{})};
 }
 export function allowedNativePath(path,method,code,document){
- if(!Object.hasOwn(steps,document)||!/^\d{4}-\d{3}$/.test(code))return false;
+ if(!Object.hasOwn(steps,document)||!isProjectCode(code))return false;
  if(method==='GET')return ['/portal/access','/portal/history','/api/bootstrap','/api/projects','/api/audit',`/api/projects/${code}`,`/api/projects/${code}?state=1`].includes(path)||/^\/portal\/version\/\d+$/.test(path)||new RegExp(`^/api/export/${code}/${document}\\?fmt=(md|doc)$`).test(path);
  if(method==='PUT')return path===`/api/projects/${code}`;
  if(method!=='POST')return false;
@@ -62,7 +64,7 @@ export async function verifyAndComplete(document,data,revision,call){
  if(generated.status>=400)return generated;
  const complete=await call('/portal/complete',{},generated.revision);
  if(complete.status>=400)return complete;
- return {...complete,body:{...verified.body,portalCompleted:true},canEdit:false};
+ return {...complete,body:{...verified.body,portalCompleted:true,projectCode:complete.body?.projectCode},canEdit:false};
 }
 export async function nativeAgentRequest(identity,code,document,path,method,data={},revision,dependencies={}){
  if(!allowedNativePath(path,method,code,document))throw fail(400,'허용되지 않은 Agent 작업입니다.');
@@ -128,7 +130,13 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
    if(doc?.content_sha256!==hash)doc=(await client.query('insert into agent_portal.native_agent_documents(project_id,document_type,version_number,original_name,markdown,content_sha256,created_by) values($1,$2,$3,$4,$5,$6,$7) returning id,version_number,content_sha256',[ctx.project.id,document,(doc?.version_number||0)+1,`${code}-${document}.md`,markdown,hash,ctx.actor.id])).rows[0];
   }
   if(path==='/portal/complete'){
-   const state=structuredClone(latest.state);
+   let state=structuredClone(latest.state);
+   if(document==='INT'){
+    const assigned=await assignCompletedIntNumber(client,ctx.project.id,code,state,project,ctx.actor.id);
+    state=assigned.state;project=assigned.payload;
+    result.body={...result.body,projectCode:assigned.code};
+    if(project._portal_generated_from)project._portal_generated_from.INT=nativeFormFingerprint(project.int_data||{});
+   }
    state.nativeAgentArtifacts={...state.nativeAgentArtifacts,[document]:{id:String(doc.id),version:doc.version_number,status:'complete',at:new Date().toISOString(),authorId:String(ctx.actor.id)}};
    if(document==='INT'){
     const d=project.int_data||{};

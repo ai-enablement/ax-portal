@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {resolvePortalIdentity} from '../../../../../server/auth.mjs';
+import {isProjectCode} from '../../../../../shared/project-code.mjs';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export async function GET(request,context){
@@ -8,7 +9,7 @@ export async function GET(request,context){
  const {code}=await context.params,doc=new URL(request.url).searchParams.get('document')||'INT';
  const requestedRole=new URL(request.url).searchParams.get('devRole');
  const role=resolvePortalIdentity(request.headers)?.canSwitchRole&&['admin','team_leader','team_member','general_user','bts','bp_solution'].includes(requestedRole)?requestedRole:'';
- if(!/^\d{4}-\d{3}$/.test(code)||!['INT','FEA','ARD'].includes(doc))return new Response('Invalid project',{status:400});
+ if(!isProjectCode(code)||!['INT','FEA','ARD'].includes(doc))return new Response('Invalid project',{status:400});
  let html=await fs.readFile(path.join(process.cwd(),'server/vendor/intake-agent/templates/index.html'),'utf8');
  const init=`<script>
  var PORTAL_CODE=${JSON.stringify(code)}, PORTAL_DOC=${JSON.stringify(doc)}, PORTAL_REVISION=0, PORTAL_ROLE=${JSON.stringify(role)};
@@ -48,7 +49,7 @@ export async function GET(request,context){
   function offerPortalCompletion(result){
     if(!result.portalCompleted)return;
     portalReadOnly=true;enforceReadOnly();
-    window.parent.postMessage({type:'native-agent-completed',project:PORTAL_CODE},location.origin);
+    window.parent.postMessage({type:'native-agent-completed',project:PORTAL_CODE,projectCode:result.projectCode||PORTAL_CODE},location.origin);
   }
   /* ═══════════════ 검증 (좌 → 우) ═══════════════ */`);
  return new Response(html,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'private, no-store','content-security-policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'"}});

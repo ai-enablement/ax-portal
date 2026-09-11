@@ -110,7 +110,7 @@ create table if not exists projects (
   organization_id bigint not null references organizations(id) on delete restrict,
   request_team_id bigint references teams(id) on delete set null,
   project_code text not null unique
-    check (project_code ~ '^[0-9]{4}-[0-9]{3,}$'),
+    check (project_code ~ '^[0-9]{4}-[0-9]{3,}$' or project_code ~ '^DRAFT-[a-f0-9]{32}$'),
   project_name text not null,
   project_category text not null default '개별 접수'
     check (project_category in ('개별 접수', '아이디어톤', 'D2B', 'RPA(기존 과제)', '기타')),

@@ -1,4 +1,5 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
+import {draftProjectCode} from './project-numbering.mjs';
 import {changeProjectDevelopers,sameDeveloperIds} from './developer-assignment.mjs';
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 import { mergeStoredStandardDocuments, persistStandardDocuments } from "./standard-documents.mjs";
@@ -1105,7 +1106,9 @@ export async function createOperationalProject(body, identity, transact = withTr
     const catalog = await ensurePortalCatalog(client);
     const receivedDate = validIsoDate(submittedState.receivedDate) || new Date().toISOString().slice(0, 10);
     const year = Number(receivedDate.slice(0, 4));
-    const projectCode = (await client.query(`select agent_portal.next_project_code($1) as code`, [year])).rows[0].code;
+    const projectCode = submittedState.historicalImport
+      ? (await client.query(`select agent_portal.next_project_code($1) as code`, [year])).rows[0].code
+      : draftProjectCode();
     const requesterId = await resolveContactUser(client, submittedState.requester, contacts.requesterEmail, catalog.organizationId) || actor.id;
     const ownerId = await resolveContactUser(client, submittedState.projectOwner || submittedState.owner, contacts.projectOwnerEmail, catalog.organizationId);
     const journeyStep = Math.max(0, Math.min(portalJourneyStageCodes.length - 1, Number(submittedState.journeyStep) || 0));

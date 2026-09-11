@@ -900,6 +900,7 @@
 
   function setProjBadge(){
     var no = CUR ? CUR.project_no : '—';
+    if(/^DRAFT-[a-f0-9]{32}$/.test(no))no='INT 작성 중 · 번호 미부여';
     $('#mProj').innerHTML = '프로젝트 <b>' + esc(no) + '</b>';
     $('#pProjNo').textContent = no;
     $('#feaProjNo').textContent = no;

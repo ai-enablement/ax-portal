@@ -22,6 +22,7 @@ test('real DB: minimal registration, duplicate retry, native INT initialization 
     const result=await createOperationalProject({project:input},identity,transact);
     assert.equal(result.status,201,JSON.stringify(result.body));
     const state=result.body.project;code=state.no;
+    assert.match(code,/^DRAFT-[a-f0-9]{32}$/);
     assert.equal(state.requesterEmail,actor.email.toLowerCase());
     assert.equal(state.requesterName,actor.display_name);
     assert.equal(state.intakeDraftCompleted,false);
