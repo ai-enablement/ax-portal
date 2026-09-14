@@ -16,6 +16,7 @@ import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
 import ProjectDeadline from './project-deadline';
 import ArdReview from './ard-review';
+import HistoricalAdmin from './historical-admin';
 import {projectCodeLabel} from '../shared/project-code.mjs';
 import {canOpenCostMonitoring} from '../shared/navigation-policy.mjs';
 import DeveloperAssignment from './developer-assignment';
@@ -7512,6 +7513,7 @@ function UserDashboard({
             <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
           </section>
 
+          {hasProjects&&current.source==='database'&&<HistoricalAdmin key={current.no} project={current} admin={(identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)==='admin'} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined}/>}
           {hasProjects&&current.source==='database'&&<ProjectDeadline key={current.no} project={current} identity={{...identity,appRole:identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole}} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           <div
             ref={currentStageDetailRef}

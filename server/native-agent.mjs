@@ -83,6 +83,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
  if(path==='/portal/access'){
   const step=Number(ctx.state.journeyStep||0),target=steps[document];
   const body={mode:ctx.canReadStage?'full':ctx.canReadFinal?'final':canReadRecommendation(ctx.actor.app_role)&&target<=step?'recommendation':'status',hasFinal:ctx.canReadFinal,status:ctx.complete||step>target?'완료':step===target?'진행 중':'예정',canEdit:ctx.canEdit};
+  if(ctx.canReadFinal&&ctx.state.nativeAgentArtifacts?.[document]?.source==='admin_historical_upload')body.mode='final';
   if(body.mode==='recommendation'){
    const saved=(await pool.query('select payload from agent_portal.native_agent_sessions where project_id=$1',[ctx.project.id])).rows[0]?.payload;
    // Explicit allowlist: no forms, source evidence, chat, or full markdown.
