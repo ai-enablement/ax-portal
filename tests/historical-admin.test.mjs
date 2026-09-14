@@ -56,4 +56,24 @@ test('replacement persistence uses project lock, final snapshot, seeded session 
  assert.ok(payload.int_data);assert.match(payload.int_md,/원문/);
  assert.ok(calls.some(x=>x.sql.includes('ADMIN_HISTORICAL_OVERRIDE')));
  assert.ok(!calls.some(x=>x.sql.startsWith('update agent_portal.projects')));
+ calls.length=0;
+ const batch={action:'replace',reason:'일괄 대체',previousStep:1,documents:['INT','FEA','ARD'].map(document=>({...input(),document}))};
+ await historicalAdminUpdate({email:'test@example.com'},'2026-001',batch,async work=>work(client));
+ assert.equal(calls.filter(x=>x.sql.includes('insert into agent_portal.native_agent_documents')).length,3);
+ assert.equal(calls.filter(x=>x.sql.includes('ADMIN_HISTORICAL_OVERRIDE')).length,1);
+ const bulkSaved=JSON.parse(calls.find(x=>x.sql.startsWith('update agent_portal.intake_requests')).args[1]);
+ assert.equal(bulkSaved.historicalAdminHistory.length,1);
+ assert.equal(bulkSaved.historicalAdminHistory[0].documents.length,3);
+ for(const document of ['INT','FEA','ARD'])assert.equal(bulkSaved.nativeAgentArtifacts[document].status,'complete');
+ calls.length=0;
+ batch.documents[2].markdown='';
+ await assert.rejects(()=>historicalAdminUpdate({email:'test@example.com'},'2026-001',batch,work=>work(client)),{status:400});
+ assert.equal(calls.filter(x=>/^(insert|update)/.test(x.sql)).length,0,'validate every file before the first write');
+});
+test('batch accepts subsets and rejects duplicate, empty, invalid or stale selections',()=>{
+ const batch={action:'replace',reason:'일괄 대체',previousStep:1,documents:['INT','FEA','ARD'].map(document=>({...input(),document}))};
+ assert.equal(historicalAdminChange(state(),admin,batch).event.documents.length,3);
+ assert.equal(historicalAdminChange(state(),admin,{...batch,documents:batch.documents.slice(0,2)}).event.documents.length,2);
+ for(const documents of [[],[input(),input()],[null],{},[...batch.documents,input()]])assert.throws(()=>historicalAdminChange(state(),admin,{...batch,documents}),{status:400});
+ assert.throws(()=>historicalAdminChange(state(),admin,{...batch,documents:[{...input(),previousVersion:1}]}),{status:409});
 });
