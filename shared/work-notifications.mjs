@@ -89,6 +89,12 @@ function currentGateNotification(project, actor, relations, gate) {
 
   // Wait for the author to resubmit rather than prompting other approvers.
   if (rework) return null;
+  if(gate==='G2'){
+    const pending=['requester','owner'].filter(role=>approvals[role]?.decision!=='APPROVED');
+    const party=pending.find(role=>relations[role]);
+    if(party&&documentComplete(project,3,'ARD'))return {...item(project,'ARD 요구 정의 승인','작성 완료된 요구 정의서를 읽고 요구 정의 화면에서 승인해 주세요.',3,'danger'),recipientRole:party==='owner'?'Project Owner':'요구자'};
+    if(pending.length)return null;
+  }
 
   const role = gateRoleForActor(project, actor, relations, gate);
   if (!role || approvals[role]?.decision) return null;
@@ -174,7 +180,7 @@ function projectNotification(project, actor) {
     if (relations.requirementsAuthor && !documentComplete(project, 3, "ARD")) {
       return item(project, "ARD 요구 정의 작성", "AI Agent와 함께 요구 정의서를 작성하고, 내용을 확인한 후 G2 승인을 요청해 주세요.", 3, "danger");
     }
-    return null;
+    return currentGateNotification(project,actor,relations,'G2');
   }
 
   if (step === 4) return currentGateNotification(project, actor, relations, "G2");

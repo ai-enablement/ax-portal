@@ -5,6 +5,7 @@ import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
 import {withAutomaticFeaTrack} from '../shared/project-classification.mjs';
 import {canManageAssessment,assessmentWriteRequested} from '../shared/document-role-policy.mjs';
 import {applyDeadlineChange} from '../shared/project-deadline.mjs';
+import {ardPartiesApproved} from '../shared/final-document.mjs';
 export class WorkflowError extends Error {constructor(status,message){super(message);this.status=status;}}
 const deny=(message,status=400)=>{throw new WorkflowError(status,message);};
 const serverKeys=['workflowApprovals','workflowApprovalHistory','workflowTrack','workflowVersion','lowRoute','uatRecord','intakeReview','feaAuthor','markdownDocuments','fastTrack','ardLite','nativeAgentArtifacts','developerAssignmentHistory'];
@@ -208,16 +209,19 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   if(changes.g2Approval)deny('새 승인 화면에서 본인의 승인 역할을 선택해 주세요.');
   if(changes.gateVote){
     const {gate,role,decision,reason}=changes.gateVote;
-    if(GATE_STEPS[gate]!==step||gate==='G1'||isLowRoute(previous))deny('현재 승인 대기 중인 게이트에서만 승인할 수 있습니다.');
+    const ardParty=gate==='G2'&&['requester','owner'].includes(role);
+    if((ardParty?![3,4].includes(step):GATE_STEPS[gate]!==step)||gate==='G1'||isLowRoute(previous))deny('현재 승인 대기 중인 게이트에서만 승인할 수 있습니다.');
     if(!requiredApprovers(gate,merged).includes(role)||!eligibleRole(role,actor,project,merged))deny('이 승인 역할의 담당자가 아닙니다.',403);
     if(merged.workflowApprovals?.[gate]?.[role]?.decision==='APPROVED')deny('이미 해당 역할의 판정이 완료되었습니다. 보완 후 새 승인 라운드에서 처리해 주세요.');
+    if(gate==='G2'&&role==='team_leader'&&!ardPartiesApproved(merged))deny('요구자와 Project Owner가 요구 정의서에 먼저 승인해야 합니다.');
     if(!['APPROVED','REWORK'].includes(decision))deny('유효한 승인 결과가 필요합니다.');
     if(decision==='REWORK'&&!String(reason||'').trim())deny('보완 사유를 입력해 주세요.');
-    const gaps=gateGaps(gate,merged);
+    const gaps=ardParty?(documentComplete(merged,3,'ARD')?[]:['ARD 작성 최종본 완료']):gateGaps(gate,merged);
     if(decision==='APPROVED'&&gaps.length)deny(gaps.join(' · '));
     merged.workflowApprovals[gate]||={};
     merged.workflowApprovals[gate][role]={decision,reason:String(reason||''),actorId:String(actor.id),actorName:actor.display_name,at:now};
-    if(allApproved(gate,merged))merged.journeyStep=step+1;
+    if(ardParty&&step===3&&ardPartiesApproved(merged))merged.journeyStep=4;
+    else if(allApproved(gate,merged))merged.journeyStep=step+1;
   }
   if(changes.lowRouteAction){
     if(!isLowRoute(previous)||step!==9||!author)deny('하 트랙 운영 등록 담당자만 처리할 수 있습니다.',403);
@@ -249,6 +253,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     if([4,6,8].includes(step)&&!allApproved(Object.keys(GATE_STEPS).find(k=>GATE_STEPS[k]===step),merged))deny('필수 승인자 전원의 승인이 필요합니다.');
     if(step===2&&(!['GO','CONDITIONAL'].includes(merged.g1Resolution?.decision)||!merged.developerIds?.length))deny('팀장 G1 승인과 Admin 개발 담당자 배정이 필요합니다.');
     if(step===3&&!documentComplete(merged,3,'ARD'))deny('ARD 필수 항목을 완료해 주세요.');
+    if(step===3&&!ardPartiesApproved(merged))deny('요구자와 Project Owner의 ARD 승인이 필요합니다.');
     if(step===5&&(!developmentEvdComplete(merged)||merged.deliveryPhase!=='development'))deny('개발·평가 문서[EVD] .md 파일을 첨부해 주세요.');
     if(step===7&&!regularizedJump&&(!releaseEvdComplete(merged)||!String(merged.gateChecks?.G4?.evidence||'').trim()))deny('배포·확산 EVD 후속 버전과 파일럿 결과 근거를 기록해 주세요.');
   }

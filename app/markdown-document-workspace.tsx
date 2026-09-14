@@ -16,10 +16,11 @@ function inlineText(value:string) {
   return pieces.map((piece,index)=>piece.startsWith('`')&&piece.endsWith('`')?<code key={index}>{piece.slice(1,-1)}</code>:piece.startsWith('**')&&piece.endsWith('**')?<strong key={index}>{piece.slice(2,-2)}</strong>:piece);
 }
 
-function MarkdownView({value}:{value:string}) {
+export function MarkdownView({value}:{value:string}) {
   const lines=value.replace(/\r\n/g,'\n').split('\n'); const nodes=[]; let i=0;
   while(i<lines.length){
     const line=lines[i];
+    if(/^\s*<!--.*-->\s*$/.test(line)){i++;continue;}
     if(line.startsWith('```')){const language=line.slice(3).trim();const body=[];i++;while(i<lines.length&&!lines[i].startsWith('```'))body.push(lines[i++]);i++;nodes.push(<pre key={nodes.length} data-language={language}><code>{body.join('\n')}</code></pre>);continue;}
     const heading=line.match(/^(#{1,6})\s+(.+)$/);if(heading){const level=heading[1].length;nodes.push(createElement(`h${level}`,{key:nodes.length},inlineText(heading[2])));i++;continue;}
     if(line.includes('|')&&i+1<lines.length&&/^\s*\|?\s*:?-+/.test(lines[i+1])){const rows=[];const cells=(text:string)=>text.replace(/^\s*\||\|\s*$/g,'').split('|').map(v=>v.trim());rows.push(cells(line));i+=2;while(i<lines.length&&lines[i].includes('|'))rows.push(cells(lines[i++]));nodes.push(<div className="md-table-scroll" key={nodes.length}><table><thead><tr>{rows[0].map((c,j)=><th key={j}>{inlineText(c)}</th>)}</tr></thead><tbody>{rows.slice(1).map((r,j)=><tr key={j}>{r.map((c,k)=><td key={k}>{inlineText(c)}</td>)}</tr>)}</tbody></table></div>);continue;}

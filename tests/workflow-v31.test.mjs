@@ -79,8 +79,9 @@ test('G2 requires requester, owner and leader, not developer or admin',()=>{
  assert.throws(()=>run(s,vote('G2','owner'),developer),/담당자/);
  assert.throws(()=>run(s,vote('G2','team_leader'),admin),/담당자/);
  s=run(s,vote('G2','requester'),requester);assert.equal(s.journeyStep,4);
- s=run(s,vote('G2','team_leader'));assert.equal(s.journeyStep,4);
- s=run(s,vote('G2','owner'),owner);assert.equal(s.journeyStep,5);
+ assert.throws(()=>run(s,vote('G2','team_leader')),/요구자/);
+ s=run(s,vote('G2','owner'),owner);assert.equal(s.journeyStep,4);
+ s=run(s,vote('G2','team_leader'));assert.equal(s.journeyStep,5);
  assert.throws(()=>run(s,vote('G2','owner'),owner),/현재/);
 });
 test('same account can occupy two roles but each role requires an explicit vote',()=>{
@@ -103,12 +104,13 @@ test('G4 waits for owner and leader and pilot evidence',()=>{
 });
 test('a rework vote blocks transition until that role approves again',()=>{
  let s=run(gateState(),{gateVote:{gate:'G2',role:'owner',decision:'REWORK',reason:'범위 보완'}},owner);
- s=run(s,vote('G2','requester'),requester);s=run(s,vote('G2','team_leader'));assert.equal(s.journeyStep,4);
- s=run(s,vote('G2','owner'),owner);assert.equal(s.journeyStep,5);
+ s=run(s,vote('G2','requester'),requester);assert.throws(()=>run(s,vote('G2','team_leader')),/먼저/);assert.equal(s.journeyStep,4);
+ s=run(s,vote('G2','owner'),owner);s=run(s,vote('G2','team_leader'));assert.equal(s.journeyStep,5);
 });
 test('team leader can request documented rework at every regular gate',()=>{
  for(const [gate,step] of [['G2',4],['G3',6],['G4',8]]){
-  const s=run(gateState(step),{gateVote:{gate,role:'team_leader',decision:'REWORK',reason:`${gate} 근거 보완`}},leader);
+  const initial=gateState(step);if(gate==='G2')initial.workflowApprovals={G2:{requester:{decision:'APPROVED'},owner:{decision:'APPROVED'}}};
+  const s=run(initial,{gateVote:{gate,role:'team_leader',decision:'REWORK',reason:`${gate} 근거 보완`}},leader);
   assert.equal(s.journeyStep,step);
   assert.equal(s.workflowApprovals[gate].team_leader.decision,'REWORK');
   assert.equal(s.workflowApprovals[gate].team_leader.reason,`${gate} 근거 보완`);

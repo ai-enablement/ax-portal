@@ -4,6 +4,7 @@ import {CaretDown,Check,X} from '@phosphor-icons/react';
 import {JOURNEY_V31,requiredApprovers,ROLE_LABELS,gateSummary,gateGaps,isLowRoute,historicalGateComplete,designDocumentComplete,developmentEvdComplete,releaseEvdComplete} from '../shared/workflow-v31.mjs';
 import {isFastTrack,FAST_TRACK_STATUSES} from '../shared/fast-track.mjs';
 import {isProjectApprover,isProjectParty,isProjectDeveloper} from '../shared/project-actors.mjs';
+import {ardPartiesApproved} from '../shared/final-document.mjs';
 import './workflow-v31.css';
 export function WorkflowJourney({project,selected,onSelect}){
   const low=isLowRoute(project),fast=isFastTrack(project),fastActive=fast&&project.fastTrack?.status!==FAST_TRACK_STATUSES.REJECTED,step=Number(project.journeyStep),phase=project.deliveryPhase||'design';
@@ -23,11 +24,11 @@ function useSave(onSave){const [busy,setBusy]=useState(false),[message,setMessag
 export function WorkflowGate({project,gate,identity,people,onSave}){
   const {busy,message,save}=useSave(onSave),[reason,setReason]=useState(''),[decision,setDecision]=useState('GO'),[developer,setDeveloper]=useState('');
   const role=identity?.appRole,admin=role==='admin',leader=role==='team_leader',email=(identity?.email||'').toLowerCase();
-  const mine=r=>isProjectApprover(project,identity,r);
+  const mine=r=>isProjectApprover(project,identity,r)&&(gate!=='G2'||r==='team_leader');
   const importing=project.historicalImport===true&&!project.historicalImportFinalizedAt;
   const expected={G1:2,G2:4,G3:6,G4:8}[gate],active=!importing&&project.journeyStep===expected,passed=project.journeyStep>expected,importedApproval=historicalGateComplete(gate,project);
   const historicalRecord=project.historicalDocuments?.[expected];
-  const gaps=gateGaps(gate,project);
+  const gaps=[...gateGaps(gate,project),...(gate==='G2'&&!ardPartiesApproved(project)?['요구 정의 화면에서 요구자·Owner 승인']:[])];
   const decided=r=>project.workflowApprovals?.[gate]?.[r]?.decision==='APPROVED'||(gate==='G1'&&r==='team_leader'&&['GO','CONDITIONAL'].includes(project.g1Resolution?.decision));
   const reworkVotes=Object.entries(project.workflowApprovals?.[gate]||{}).filter(([,vote])=>['REWORK','REJECTED'].includes(vote?.decision));
   const dropped=gate==='G1'&&project.g1Resolution?.decision==='DROP';

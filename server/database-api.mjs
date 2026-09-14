@@ -1,5 +1,6 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
 import {draftProjectCode} from './project-numbering.mjs';
+import {persistArdApprovalDocument} from './ard-approval-document.mjs';
 import {changeProjectDevelopers,sameDeveloperIds} from './developer-assignment.mjs';
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
 import { mergeStoredStandardDocuments, persistStandardDocuments } from "./standard-documents.mjs";
@@ -1280,6 +1281,7 @@ export async function updateOperationalProject(projectCode, body, identity, tran
     }
     try {Object.assign(merged,applyWorkflow(previousState,changes,merged,actor,project));}
     catch(error){if(error instanceof WorkflowError)return {status:error.status,body:{error:error.message}};throw error;}
+    if(changes.gateVote?.gate==='G2')await persistArdApprovalDocument(client,project,merged,actor);
     if(changes.feaDraft||changes.feaCompleted)merged.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
     delete merged.historicalContactUpdate;
     if(contactUpdates)await linkHistoricalContacts(client,project,merged,contactUpdates,actor.id);

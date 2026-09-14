@@ -40,8 +40,9 @@ test('finalized historical imports resume actual external document and approval 
  const imported={...base,historicalImport:true,historicalImportFinalizedAt:'2026-09-09'};
  for(const appRole of ['bts','bp_solution'])assert.deepEqual(buildWorkNotifications([imported],{id:'21',appRole}),[]);
  for(const appRole of ['admin','team_leader'])assert.equal(buildWorkNotifications([imported],{id:'31',appRole})[0].title,'ARD 요구 정의 작성');
- const g2={...imported,journeyStep:4};
- for(const actor of [{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'31',appRole:'team_leader'}])assert.equal(buildWorkNotifications([g2],actor)[0].title,'G2 승인 요청');
+ const g2={...imported,journeyStep:4,nativeAgentArtifacts:{ARD:{status:'complete',version:1}}};
+ for(const actor of [{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'}])assert.equal(buildWorkNotifications([g2],actor)[0].title,'ARD 요구 정의 승인');
+ assert.equal(buildWorkNotifications([g2],{id:'31',appRole:'team_leader'}).length,0);
  assert.deepEqual(buildWorkNotifications([g2],{id:'99',appRole:'general_user'}),[]);
 });
 
@@ -66,8 +67,8 @@ test('INT belongs to requester for new projects and finalized historical imports
 
 test('G1 through G4 notify pending configured approval roles, never an unrelated admin',()=>{
  const actors=[{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'21',appRole:'team_member'},{id:'31',appRole:'team_leader'},{id:'41',appRole:'team_member'},{id:'1',appRole:'admin'}];
- for(const [gate,journeyStep,expected] of [['G1',2,['31']],['G2',4,['11','12','31']],['G3',6,['31','41']],['G4',8,['12','31']]]){
-  const p={...base,journeyStep,workflowTrack:'HIGH',securityReviewerId:'41',uatRecord:{completed:true}};
+ for(const [gate,journeyStep,expected] of [['G1',2,['31']],['G2',4,['11','12']],['G3',6,['31','41']],['G4',8,['12','31']]]){
+  const p={...base,journeyStep,nativeAgentArtifacts:{ARD:{status:'complete',version:1}},workflowTrack:'HIGH',securityReviewerId:'41',uatRecord:{completed:true}};
   assert.deepEqual(actors.filter(a=>buildWorkNotifications([p],a).length).map(a=>a.id),expected);
   p.g1Resolution={decision:'GO'};
   p.workflowApprovals={[gate]:Object.fromEntries(['requester','owner','team_leader','security_reviewer'].map(r=>[r,{decision:'APPROVED'}]))};
@@ -120,9 +121,9 @@ test('G3 still notifies requester until UAT is recorded',()=>{
  assert.equal(buildWorkNotifications([{...project,uatRecord:{completed:true}}],actor).length,0);
 });
 test('one account with multiple G2 roles keeps an alert until every role has voted',()=>{
- const project={...base,journeyStep:4,ownerId:'11',projectOwnerEmail:base.requesterEmail,workflowApprovals:{G2:{requester:{decision:'APPROVED'}}}};
+ const project={...base,journeyStep:4,nativeAgentArtifacts:{ARD:{status:'complete',version:1}},ownerId:'11',projectOwnerEmail:base.requesterEmail,workflowApprovals:{G2:{requester:{decision:'APPROVED'}}}};
  const actor={id:'11',appRole:'general_user'};
- assert.equal(buildWorkNotifications([project],actor)[0].title,'G2 승인 요청');
+ assert.equal(buildWorkNotifications([project],actor)[0].title,'ARD 요구 정의 승인');
  project.workflowApprovals.G2.owner={decision:'APPROVED'};
  assert.equal(buildWorkNotifications([project],actor).length,0);
 });
@@ -139,13 +140,14 @@ test("leader receives the current ARD action and developers do not", () => {
 test("only the pending G2 approver sees an approval action", () => {
   const project = {
     ...base,
+    nativeAgentArtifacts:{ARD:{status:'complete',version:1}},
     journeyStep: 4,
     workflowApprovals: { G2: { requester: { decision: "APPROVED" } } },
   };
   assert.equal(buildWorkNotifications([project], { id: "11", appRole: "general_user", email: "requester@changshininc.com" }).length, 0);
   const owner = buildWorkNotifications([project], { id: "12", appRole: "general_user", email: "owner@changshininc.com" });
   assert.equal(owner.length, 1);
-  assert.equal(owner[0].title, "G2 승인 요청");
+  assert.equal(owner[0].title, "ARD 요구 정의 승인");
 });
 
 test("a rework decision routes the assigned author directly to the preceding document", () => {

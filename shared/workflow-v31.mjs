@@ -88,7 +88,7 @@ export function eligibleRole(role,actor,project,state){
   return false;
 }
 export function gateBasis(gate,state){
-  return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],state.nativeAgentArtifacts?.ARD,projectTrack(state),state.committedDate]:
+  return JSON.stringify(gate==='G2'?[state.historicalDocuments?.[3],state.nativeAgentArtifacts?.ARD?{status:state.nativeAgentArtifacts.ARD.status,contentVersion:state.nativeAgentArtifacts.ARD.contentVersion||state.nativeAgentArtifacts.ARD.version}:null,projectTrack(state)]:
     gate==='G3'?[state.historicalDocuments?.[5],state.markdownDocuments?.DES?.phases?.design,state.markdownDocuments?.EVD?.phases?.development_evaluation,state.gateChecks?.G3,state.securityReviewerId,state.uatRecord]:
     gate==='G4'?[state.historicalDocuments?.[7],state.markdownDocuments?.EVD?.phases?.deployment_rollout,state.markdownDocuments?.UG?.phases?.deployment_rollout,state.gateChecks?.G4]:[state.intakeAnswers,state.intakeDetails,state.feaDraft,state.feaCompleted,state.nativeAgentArtifacts?.INT,state.nativeAgentArtifacts?.FEA]);
 }

@@ -5,6 +5,7 @@ import {resolvePortalIdentity} from '../server/auth.mjs';
 import {createOperationalProject,updateOperationalProject} from '../server/database-api.mjs';
 import {nativeAgentRequest} from '../server/native-agent.mjs';
 import {assignCompletedIntNumber} from '../server/project-numbering.mjs';
+import {persistArdApprovalDocument} from '../server/ard-approval-document.mjs';
 
 test('real DB: minimal registration, duplicate retry, native INT initialization and save, rolled back', {
   skip: process.env.PORTAL_MINIMAL_DB_TEST !== '1' || !process.env.PORTAL_AGENT_PYTHON,
@@ -70,6 +71,22 @@ test('real DB: minimal registration, duplicate retry, native INT initialization 
     assert.equal(persisted.date,'2026-10-08');assert.equal(persisted.history.length,2);
     assert.equal(persisted.history[1].previousDate,'2026-10-01');
     assert.equal((await client.query("select count(*)::int as n from agent_portal.audit_logs where project_id=$1 and action_code='PROJECT_DEADLINE_CHANGED'",[row.id])).rows[0].n,2);
+    // Final ARD and all approval snapshots are transactional and preserve the source.
+    const signed={historicalDocuments:{3:{documents:{ARD:{fields:{'overview.oneLine':'검증 원문 보존'}}}}},workflowApprovals:{G2:{}}};
+    for(const role of ['requester','owner','team_leader']){
+      signed.workflowApprovals.G2[role]={decision:'APPROVED',actorName:actor.display_name,at:new Date().toISOString()};
+      await persistArdApprovalDocument(client,{id:row.id,project_code:code},signed,actor);
+    }
+    const snapshots=(await client.query("select markdown,version_number from agent_portal.native_agent_documents where project_id=$1 and document_type='ARD' order by version_number",[row.id])).rows;
+    assert.equal(snapshots.length,3);
+    snapshots.forEach((snapshot,index)=>{
+      assert.match(snapshot.markdown,/검증 원문 보존/);
+      assert.match(snapshot.markdown,/작성 최종본/);
+      assert.equal(snapshot.markdown.split('승인 완료').length-1,index+1);
+      assert.equal(snapshot.markdown.split('## 승인 현황').length,2);
+    });
+    assert.equal(signed.nativeAgentArtifacts.ARD.contentVersion,1);
+    assert.equal((await client.query('select payload from agent_portal.native_agent_sessions where project_id=$1',[row.id])).rows[0].payload.ard_md,snapshots[2].markdown);
   } finally {
     await client.query('rollback');
     if(code)assert.equal((await client.query('select count(*)::int as n from agent_portal.projects where project_code=$1',[code])).rows[0].n,0);

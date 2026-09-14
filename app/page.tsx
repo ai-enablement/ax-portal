@@ -15,6 +15,7 @@ import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
 import ProjectDeadline from './project-deadline';
+import ArdReview from './ard-review';
 import {projectCodeLabel} from '../shared/project-code.mjs';
 import {canOpenCostMonitoring} from '../shared/navigation-policy.mjs';
 import DeveloperAssignment from './developer-assignment';
@@ -7534,7 +7535,7 @@ function UserDashboard({
               description={`${userJourney[effectiveJourneyStep].title} 단계를 완료하면 다음 단계의 작성과 승인이 활성화됩니다.`}
             />
           ) : current.source === 'database' && [0,1,3].includes(selectedJourney) ? (
-            <NativeAgentWorkspace key={`${current.no}:${selectedJourney}:${role}`} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined} projectNo={current.no} document={selectedJourney===0?'INT':selectedJourney===1?'FEA':'ARD'} onCompleted={(projectCode) => { window.location.href='/?workProject='+encodeURIComponent(projectCode||current.no); }} />
+            <><NativeAgentWorkspace key={`${current.no}:${selectedJourney}:${role}`} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined} projectNo={current.no} document={selectedJourney===0?'INT':selectedJourney===1?'FEA':'ARD'} onCompleted={(projectCode) => { window.location.href='/?workProject='+encodeURIComponent(projectCode||current.no); }} />{selectedJourney===3&&<ArdReview project={current} identity={identity} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}</>
           ) : (current.historicalImport || current.source === "database") && [5, 7].includes(selectedJourney) ? (
             <MarkdownDocumentWorkspace
               key={`${deferredDocumentKey}:markdown:${selectedDeliveryPhase}`}

@@ -16,7 +16,7 @@ const roleActors=[
 const roleProjects=[
  {no:'2026-033',name:'Calendar',journeyStep:2,historicalImport:true,historicalImportFinalizedAt:'2026-09-08',feaCompleted:true,requesterId:'11',developerIds:['21'],feaAuthor:{id:'2'}},
  {no:'2026-050',name:'Requirements project',journeyStep:3,requesterId:'11',ownerId:'12',developerIds:['21']},
- {no:'2026-051',name:'Approval project',journeyStep:4,requesterId:'11',ownerId:'12',developerIds:['21']},
+ {no:'2026-051',name:'Approval project',journeyStep:4,nativeAgentArtifacts:{ARD:{status:'complete',version:1}},requesterId:'11',ownerId:'12',developerIds:['21']},
  {no:'2026-052',name:'FEA project',journeyStep:1,requesterId:'13',developerIds:['22']},
  {no:'2026-053',name:'Design project',journeyStep:5,deliveryPhase:'design',requesterId:'13',developerIds:['22']},
 ].map(p=>({...p,source:'database'}));
@@ -31,7 +31,7 @@ test('live mail isolates each recipient, project, role, title, body and project 
   return {rows:[],rowCount:0};
  }};
  await scanWorkMail(client,liveEnv,async()=>({status:200,body:{projects:roleProjects}}));
- const expected=[['1','2026-033','G1 착수 판정'],['1','2026-051','G2 승인 요청'],['11','2026-051','G2 승인 요청'],['12','2026-051','G2 승인 요청'],['1','2026-052','타당성 평가서 작성'],['2','2026-052','타당성 평가서 작성'],['1','2026-050','ARD 요구 정의 작성'],['2','2026-050','ARD 요구 정의 작성'],['22','2026-053','설계 작성 완료']];
+ const expected=[['1','2026-033','G1 착수 판정'],['11','2026-051','ARD 요구 정의 승인'],['12','2026-051','ARD 요구 정의 승인'],['1','2026-052','타당성 평가서 작성'],['2','2026-052','타당성 평가서 작성'],['1','2026-050','ARD 요구 정의 작성'],['2','2026-050','ARD 요구 정의 작성'],['22','2026-053','설계 작성 완료']];
  assert.equal(queued.length,expected.length);
  for(const [actorId,no,title] of expected){
   const actor=roleActors.find(a=>a.id===actorId),project=roleProjects.find(p=>p.no===no);
@@ -44,7 +44,7 @@ test('live mail isolates each recipient, project, role, title, body and project 
   for(const other of roleProjects.filter(p=>p.no!==no))assert.ok(!match.payload.htmlBody.includes(other.no));
   if(no!=='2026-052')assert.ok(!match.payload.htmlBody.includes('FEA 작성을 완료'));
  }
- assert.ok(queued.find(q=>q.actorId==='1'&&q.payload.subject.includes('2026-051')).payload.htmlBody.includes('담당 역할: AI 활성화팀장'));
+ assert.ok(!queued.find(q=>q.actorId==='1'&&q.payload.subject.includes('2026-051')));
  assert.ok(queued.find(q=>q.actorId==='12').payload.htmlBody.includes('담당 역할: Project Owner'));
  assert.ok(queued.find(q=>q.actorId==='1'&&q.payload.subject.includes('2026-050')).payload.htmlBody.includes('AI Agent와 함께 요구 정의서를 작성'));
 });
