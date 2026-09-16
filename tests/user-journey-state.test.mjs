@@ -44,11 +44,11 @@ test("historical intake retains requester fields while new intake uses the login
   assert.ok(page.includes("resolvedRequester"));
 });
 
-test("assigns intake categories by role and keeps general users on individual intake", () => {
+test("assigns intake categories by role and leaves general user intake pending G1 classification", () => {
   for (const category of ["개별 접수", "아이디어톤", "D2B", "RPA(기존 과제)", "기타"])
     assert.ok(page.includes(category));
   assert.ok(page.includes('role === ACCOUNT_ROLES.user'));
-  assert.ok(page.includes('? "개별 접수"'));
+  assert.match(page, /role === ACCOUNT_ROLES.user\s*\? "미정"/);
   assert.ok(page.includes('aria-label="과제 카테고리"'));
   assert.ok(page.includes("category: project.category || \"개별 접수\""));
 });
