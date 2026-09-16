@@ -11416,6 +11416,7 @@ body {
 
 /* Gate evidence, document planning and schedule governance */
 .project-schedule-strip {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 12px;

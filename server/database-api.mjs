@@ -1,5 +1,6 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
 import {draftProjectCode} from './project-numbering.mjs';
+import {categoryChange} from '../shared/project-category.mjs';
 import {persistArdApprovalDocument} from './ard-approval-document.mjs';
 import {changeProjectDevelopers,sameDeveloperIds} from './developer-assignment.mjs';
 import { completeHistoricalGateApprovals, persistHistoricalGateApprovals } from "./historical-gate-approvals.mjs";
@@ -27,7 +28,7 @@ const statusToDatabase = {
 };
 
 const portalJourneyStageCodes = ["INT", "FEA", "G1", "ARD", "G2", "DES", "G3", "PILOT", "G4", "OPS"];
-const portalProjectCategories = new Set(["개별 접수", "아이디어톤", "D2B", "RPA(기존 과제)", "기타"]);
+const portalProjectCategories = new Set(["미정", "개별 접수", "아이디어톤", "D2B", "RPA(기존 과제)", "기타"]);
 
 function portalStageCode(journeyStep) {
   const index = Math.max(0, Math.min(portalJourneyStageCodes.length - 1, Number(journeyStep) || 0));
@@ -1058,6 +1059,8 @@ async function syncIntakeConversation(client, projectId, messages, actorId) {
 export async function createOperationalProject(body, identity, transact = withTransaction) {
   const submittedState = assertPortalProjectState(body.project || body);
   sanitizeNewWorkflow(submittedState);
+  delete submittedState.categoryHistory;
+  delete submittedState.categoryChange;
   delete submittedState.historicalImportFinalizedAt;
   delete submittedState.historicalResumeStep;
   delete submittedState.historicalCompletedThrough;
@@ -1116,7 +1119,7 @@ export async function createOperationalProject(body, identity, transact = withTr
     const journeyStep = Math.max(0, Math.min(portalJourneyStageCodes.length - 1, Number(submittedState.journeyStep) || 0));
     const stageCode = portalStageCode(journeyStep);
     const category = actor.app_role === "general_user"
-      ? "개별 접수"
+      ? "미정"
       : portalProjectCategories.has(submittedState.category) ? submittedState.category : "개별 접수";
     const state = completeHistoricalGateApprovals({ ...submittedState, category, no: projectCode, source: "database", receivedDate, createdByUserId: String(actor.id), ...(submittedState.historicalImport ? { historicalBaselineStep: journeyStep } : {}) });
     const project = (await client.query(
@@ -1181,6 +1184,14 @@ export async function updateOperationalProject(projectCode, body, identity, tran
     )).rows[0];
     if (!project) return { status: 404, body: { error: "Project not found." } };
     const previousState = project.runtime_state || {};
+    if('categoryHistory' in changes)return {status:403,body:{error:'카테고리 변경 이력은 서버에서 관리합니다.'}};
+    if('category' in changes&&changes.category!==project.project_category)return {status:403,body:{error:'카테고리 변경 기능을 사용해 주세요.'}};
+    let categoryEntry;
+    if('categoryChange' in changes){
+      if(Object.keys(changes).length!==1)return {status:400,body:{error:'카테고리 변경은 별도로 저장해 주세요.'}};
+      try{categoryEntry=categoryChange(project.project_category||'미정',changes.categoryChange,actor,project.current_stage_code);}
+      catch(error){return {status:error.status||400,body:{error:error.message}};}
+    }
     if(!canManageAssessment(actor.app_role)&&changes.historicalDocuments){
       const visible=redactAssessmentContent(previousState,actor.app_role);
       for(const step of [1,3])if(JSON.stringify(changes.historicalDocuments[step])===JSON.stringify(visible.historicalDocuments?.[step])){
@@ -1269,7 +1280,9 @@ export async function updateOperationalProject(projectCode, body, identity, tran
       const required = changes.feaCompleted ? missingFields(merged) : changes.intakeDraftCompleted ? missingFields(merged,"int.") : [];
       if (required.length) return {status:400,body:{error:`미확보 항목은 완료 처리할 수 없습니다: ${required.map(f=>f.label).join(", ")}`}};
     }
-    if (actor.app_role === "general_user"&&!previousState.historicalImport) merged.category = "개별 접수";
+    merged.category=categoryEntry?.after||project.project_category||'미정';
+    delete merged.categoryChange;
+    if(categoryEntry)merged.categoryHistory=[...(previousState.categoryHistory||[]),categoryEntry];
     if(changes.securityReviewerId){
       const valid=(await client.query("select id from agent_portal.users where id=$1 and is_active=true and app_role<>'general_user'",[changes.securityReviewerId])).rows[0];
       if(!valid)return {status:400,body:{error:"등록된 활성 정보보호 승인자를 선택해 주세요."}};
@@ -1304,6 +1317,9 @@ export async function updateOperationalProject(projectCode, body, identity, tran
        where id=$1`,
       [project.id, String(merged.name).trim(), portalProjectCategories.has(merged.category) ? merged.category : "개별 접수", merged.description || null, databaseProjectStatus(merged.journeyStep, merged), Math.max(0, Math.min(100, Number(merged.progress) || 0)), validIsoDate(merged.requestedDate), merged.nextAction || null],
     );
+    if(categoryEntry){
+      await client.query("insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,after_data) values($1,$2,'PROJECT_CATEGORY_CHANGED','project',$3,$4::jsonb)",[actor.id,project.id,projectCode,JSON.stringify(categoryEntry)]);
+    }
     if(changes.deadlineChange){
       await client.query('update agent_portal.projects set committed_completion_date=$2::date where id=$1',[project.id,merged.committedDate]);
       await client.query("insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,after_data) values($1,$2,'PROJECT_DEADLINE_CHANGED','project',$3,$4::jsonb)",[actor.id,project.id,projectCode,JSON.stringify(merged.deadlineHistory.at(-1))]);

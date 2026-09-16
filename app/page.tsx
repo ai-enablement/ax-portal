@@ -15,6 +15,7 @@ import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
 import ProjectDeadline from './project-deadline';
+import ProjectCategoryEditor from './project-category';
 import ArdReview from './ard-review';
 import HistoricalAdmin from './historical-admin';
 import {projectCodeLabel} from '../shared/project-code.mjs';
@@ -114,7 +115,7 @@ const PROJECT_CATEGORIES = [
   "RPA(기존 과제)",
   "기타",
 ] as const;
-type ProjectCategory = (typeof PROJECT_CATEGORIES)[number];
+type ProjectCategory = (typeof PROJECT_CATEGORIES)[number] | '미정';
 type ProjectRelationship =
   | "REQUESTER"
   | "OWNER"
@@ -1465,7 +1466,7 @@ export default function Home() {
       const historical = Boolean(registration?.historical);
       const category: ProjectCategory =
         role === ACCOUNT_ROLES.user
-          ? "개별 접수"
+          ? "미정"
           : registration?.category || "개별 접수";
       const journeyStep = historical
         ? Math.max(0, Math.min(userJourney.length - 1, registration?.currentJourneyStep ?? 0))
@@ -2917,7 +2918,7 @@ function TeamPortfolioAnalytics({
       };
     })
     .sort((a, b) => b.total - a.total);
-  const categories = PROJECT_CATEGORIES.map((category) => {
+  const categories = ['미정', ...PROJECT_CATEGORIES].map((category) => {
     const items = requirements.filter((item) => item.category === category);
     return {
       category,
@@ -7513,31 +7514,21 @@ function UserDashboard({
                 <b>{g1Status}</b>
               </p>
             </div>
-            <Pill
-              tone={
-                !hasProjects
-                  ? "gray"
-                  : current.scheduleState.includes("지연")
-                  ? "red"
-                  : current.scheduleState.includes("협의")
-                    ? "gray"
-                    : "green"
-              }
-            >
-              {current.scheduleState || "\u00a0"}
-            </Pill>
-            <small>마감일 변경은 AI 활성화팀 팀장 승인 후 반영</small>
+            <div><UserCircle size={17}/><p><small>요구자</small><b>{current.requester||'미등록'}</b></p></div>
+            <div><UserCircle size={17}/><p><small>Project Owner</small><b>{current.projectOwner||current.owner||'미등록'}</b></p></div>
+            <div><UserCircle size={17}/><p><small>개발 담당자</small><b>{current.developerNames?.join(' · ')||'미배정'}</b></p></div>
           </section>
 
           {hasProjects&&current.source==='database'&&<HistoricalAdmin key={`historical-admin:${current.no}`} project={current} admin={(identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)==='admin'} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined}/>}
-          {hasProjects&&current.source==='database'&&<ProjectDeadline key={`project-deadline:${current.no}`} project={current} identity={{...identity,appRole:identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole}} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
+          {hasProjects&&current.source==='database'&&selectedJourney===4&&<ProjectDeadline key={`project-deadline:${current.no}`} project={current} identity={{...identity,appRole:identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole}} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
+          {hasProjects&&current.source==='database'&&Number(current.journeyStep)>=2&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')&&<ProjectCategoryEditor key={`project-category:${current.no}`} project={current} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           <div
             ref={currentStageDetailRef}
             id="current-stage-detail"
             className="current-stage-detail"
             tabIndex={-1}
           >
-          {hasProjects&&current.source==='database'&&<DeveloperAssignment key={`${current.no}:${(current.developerIds||[]).join(',')}`} project={current} people={teamAccounts} admin={Number(current.journeyStep)===4&&selectedJourney===4&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')} onSave={(change: Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
+          {hasProjects&&current.source==='database'&&selectedJourney===4&&<DeveloperAssignment key={`${current.no}:${(current.developerIds||[]).join(',')}`} project={current} people={teamAccounts} admin={Number(current.journeyStep)===4&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')} onSave={(change: Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           {!hasProjects ? (
             <EmptyDataPage
               title="선택된 Agent 과제가 없습니다."
@@ -15449,7 +15440,7 @@ function RequestWizard({
         ownerMode: isHistorical ? ownerMode : 'OTHER',
         projectOwnerEmail: isHistorical ? resolvedOwnerEmail : normalizeContactEmail(projectOwnerEmail),
         requesterEmail: resolvedRequesterEmail,
-        category: role === ACCOUNT_ROLES.user ? "개별 접수" : projectCategory,
+        category: role === ACCOUNT_ROLES.user ? "미정" : projectCategory,
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
         currentDeliveryPhase: historicalJourneyStep >= 5 ? historicalDeliveryPhase : undefined,
@@ -15496,7 +15487,7 @@ function RequestWizard({
             <small>
               {isAiTeam
                 ? "과제의 접수 경로와 유형을 선택하세요."
-                : "일반 User가 요청한 과제는 개별 접수로 자동 등록됩니다."}
+                : "카테고리는 접수 후 G1 착수 승인에서 팀장 또는 Admin이 지정합니다."}
             </small>
           </div>
           {isAiTeam ? (
@@ -15512,7 +15503,7 @@ function RequestWizard({
               ))}
             </select>
           ) : (
-            <Pill tone="blue">개별 접수</Pill>
+            <Pill tone="gray">미정 · G1에서 지정</Pill>
           )}
         </div>
         {isAiTeam && (

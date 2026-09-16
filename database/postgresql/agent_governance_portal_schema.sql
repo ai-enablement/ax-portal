@@ -113,7 +113,7 @@ create table if not exists projects (
     check (project_code ~ '^[0-9]{4}-[0-9]{3,}$' or project_code ~ '^DRAFT-[a-f0-9]{32}$'),
   project_name text not null,
   project_category text not null default '개별 접수'
-    check (project_category in ('개별 접수', '아이디어톤', 'D2B', 'RPA(기존 과제)', '기타')),
+    check (project_category in ('미정', '개별 접수', '아이디어톤', 'D2B', 'RPA(기존 과제)', '기타')),
   project_summary text,
   requester_id bigint not null references users(id) on delete restrict,
   owner_id bigint references users(id) on delete restrict,
