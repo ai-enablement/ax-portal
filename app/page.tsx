@@ -1700,6 +1700,22 @@ export default function Home() {
                   <ArrowRight size={13} weight="bold" />
                 </button>
               )}
+              {group.label === "SERVICE & CONTROL" && (
+                <button
+                  type="button"
+                  className="nav-external-link"
+                  aria-label="RPA Restart (새 탭에서 열기)"
+                  onClick={() => window.open(
+                    "https://rpa-restart-ckemcudeddc9dcen.koreacentral-01.azurewebsites.net/",
+                    "_blank",
+                    "noopener,noreferrer",
+                  )}
+                >
+                  <span className="nav-icon"><ArrowsClockwise size={16} aria-hidden="true" /></span>
+                  <span className="nav-copy">RPA Restart</span>
+                  <ArrowRight size={13} weight="bold" />
+                </button>
+              )}
             </div>
           ))}
         </nav>
