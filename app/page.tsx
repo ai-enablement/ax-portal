@@ -6,6 +6,7 @@ import "./operations-documents.css";
 import "./team-dashboard-compact.css";
 import "./team-dashboard-readability.css";
 import "./status-badges.css";
+import "./project-management-layout.css";
 import {isImportInProgress, canBackfillDocument, needsImportCompletionRepair} from "../shared/historical-import-policy.mjs";
 import {selectedProjectNumber,currentWorkflowTarget,savedProjectView} from "../shared/project-selection.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -7519,16 +7520,20 @@ function UserDashboard({
             <div><UserCircle size={17}/><p><small>개발 담당자</small><b>{current.developerNames?.join(' · ')||'미배정'}</b></p></div>
           </section>
 
-          {hasProjects&&current.source==='database'&&<HistoricalAdmin key={`historical-admin:${current.no}`} project={current} admin={(identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)==='admin'} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined}/>}
-          {hasProjects&&current.source==='database'&&selectedJourney===4&&<ProjectDeadline key={`project-deadline:${current.no}`} project={current} identity={{...identity,appRole:identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole}} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
+          <div className="project-management-row project-management-meta">
           {hasProjects&&current.source==='database'&&Number(current.journeyStep)>=2&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')&&<ProjectCategoryEditor key={`project-category:${current.no}`} project={current} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
+          {hasProjects&&current.source==='database'&&<HistoricalAdmin key={`historical-admin:${current.no}`} project={current} admin={(identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)==='admin'} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined}/>}
+          </div>
           <div
             ref={currentStageDetailRef}
             id="current-stage-detail"
             className="current-stage-detail"
             tabIndex={-1}
           >
+          <div className="project-management-row project-management-g2">
+          {hasProjects&&current.source==='database'&&selectedJourney===4&&<ProjectDeadline key={`project-deadline:${current.no}`} project={current} identity={{...identity,appRole:identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole}} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           {hasProjects&&current.source==='database'&&selectedJourney===4&&<DeveloperAssignment key={`${current.no}:${(current.developerIds||[]).join(',')}`} project={current} people={teamAccounts} admin={Number(current.journeyStep)===4&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')} onSave={(change: Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
+          </div>
           {!hasProjects ? (
             <EmptyDataPage
               title="선택된 Agent 과제가 없습니다."

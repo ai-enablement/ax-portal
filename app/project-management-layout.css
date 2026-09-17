@@ -1,0 +1,35 @@
+/* Keep management summaries compact without shrinking document editing space. */
+.project-management-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+  margin: 16px 0;
+}
+.project-management-row:empty { display: none; }
+.project-management-row > .developer-card,
+.project-management-row > .workflow-v31-panel {
+  margin: 0;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.project-management-row .developer-card-header { padding: 16px 18px; flex-wrap: wrap; }
+.project-management-row .developer-card-heading { flex: 1 1 180px; }
+.project-management-row .developer-edit-button { flex-shrink: 0; }
+.project-management-meta .developer-card-heading p { font-size: 13px; line-height: 1.6; }
+.project-management-meta > .historical-admin-card:has(.developer-editor),
+.project-management-meta > .historical-admin-card:has(.developer-history-list) {
+  grid-column: 1 / -1;
+}
+.project-management-g2 .workflow-v31-panel { padding: 16px 18px; border-radius: 10px; }
+.project-management-g2 .workflow-v31-panel > header { flex-wrap: wrap; gap: 10px; }
+.project-management-g2 .workflow-v31-panel h3 { font-size: 16px; }
+.project-management-g2 .developer-editor-columns { grid-template-columns: 1fr; gap: 18px; }
+.project-management-g2 .developer-editor footer { flex-wrap: wrap; }
+.project-management-g2 .deadline-editor { display: grid; grid-template-columns: 1fr; min-width: 0; }
+.project-management-row :where(input, select, textarea) { max-width: 100%; box-sizing: border-box; }
+.project-management-row .project-category-editor label { min-width: 0; flex: 1 1 180px; }
+@media (max-width: 1000px) {
+  .project-management-row { grid-template-columns: minmax(0, 1fr); }
+}
