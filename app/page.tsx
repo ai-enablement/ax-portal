@@ -650,6 +650,7 @@ type GalleryDraft = {
 };
 
 type GalleryApplication = {
+  submittedBy?: string;
   id: string;
   source: GallerySource;
   projectNo?: string;
@@ -7454,7 +7455,7 @@ function UserDashboard({
             </button>}
           </section>}
           {current.source === "database" && current.fastTrack?.requested && <FastTrackPanel key={current.no+":fast-track"} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
-          <WorkflowJourney project={current} selected={selectedJourney} onSelect={(step: number, phase?: "design" | "development") => {setSelectedJourney(step);if(phase)setSelectedDeliveryPhase(phase);}} />
+          {hasProjects && <WorkflowJourney project={current} selected={selectedJourney} onSelect={(step: number, phase?: "design" | "development") => {setSelectedJourney(step);if(phase)setSelectedDeliveryPhase(phase);}} />}
           {current.source === "database" && selectedJourney === effectiveJourneyStep && <WorkflowControls key={current.no + ":" + JSON.stringify([current.journeyStep,current.deliveryPhase,current.gateChecks,current.uatRecord,current.lowRoute])} project={current} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />}
 
           <div className="journey-legend" aria-label="진행 상태 범례">
@@ -14213,6 +14214,7 @@ function Gallery({
   const catalogDetailApplication = applications.find(
     (application) => application.id === catalogDetailId && application.status === "PUBLISHED",
   );
+  const applicationHistory = isTeam ? applications : applications.filter(application => application.submittedBy === String(identity?.userId));
   const pageCount = Math.max(1, Math.ceil(applications.length / 10));
   const currentReviewPage = Math.min(reviewPage, pageCount - 1);
   const reviewQueue = applications.slice(currentReviewPage * 10, (currentReviewPage + 1) * 10);
@@ -14337,7 +14339,7 @@ function Gallery({
         (application) => application.id === editingApplicationId,
       );
       const adminKeepsPublished =
-        role === ACCOUNT_ROLES.admin && original?.status === "PUBLISHED";
+        isLeader && original?.status === "PUBLISHED";
       onUpdateApplication(editingApplicationId, {
         ...submittedApplication,
         id: editingApplicationId,
@@ -14496,7 +14498,7 @@ function Gallery({
                   <Pill>{a.category}</Pill><h3>{a.name}</h3><p>{a.desc}</p>
                   <div className="agent-stats"><span>★ {a.rating}</span><span>사용자 {a.users}</span><span>등록 완료</span></div>
                   <button className="gallery-open-agent" onClick={(event) => { event.stopPropagation(); openAgent(a.name, a.accessUrl); }}>Agent 보기 <span>→</span></button>
-                  {role === ACCOUNT_ROLES.admin && a.applicationId && (
+                  {isLeader && a.applicationId && (
                     <div className="gallery-admin-actions" onClick={(event) => event.stopPropagation()}>
                       <button
                         onClick={() => {
@@ -14527,21 +14529,21 @@ function Gallery({
         <section className="gallery-applications-panel">
           <header><div><h2>{isTeam ? "Agent 등록 신청" : "내 Agent 등록 신청"}</h2><p>{isTeam ? "본인 제작 또는 대리 등록 신청과 검토 상태를 함께 확인합니다." : "접수부터 보완, 등록 완료까지 진행 상태를 확인합니다."}</p></div></header>
           <div className="gallery-application-list">
-            {applications.length === 0 && (
+            {applicationHistory.length === 0 && (
               <div className="gallery-empty-state">
                 <ClipboardText size={28} weight="duotone" />
                 <b>등록 신청 내역이 없습니다.</b>
                 <span>Agent 올리기를 눌러 첫 등록 신청을 시작할 수 있습니다.</span>
               </div>
             )}
-            {applications.map((application) => (
+            {applicationHistory.map((application) => (
               <article key={application.id}>
                 <div className="application-source"><Pill tone={application.source === "OPERATIONS" ? "green" : "blue"}>{application.source === "OPERATIONS" ? "운영 승인 경로" : "개인 제작 경로"}</Pill><small>{application.id}</small></div>
                 <div><b>{application.name}</b><p>{application.platform} · {application.artifactType} · {application.targetUsers}</p></div>
                 <div><Pill tone={statusTone[application.status]}>{statusLabel[application.status]}</Pill><small>{application.submittedAt}</small></div>
                 {application.reviewerNote && <p className="application-review-note"><WarningCircle size={14} weight="fill" /> {application.reviewerNote}</p>}
                 {application.status === "CHANGES_REQUESTED" && <button className="application-resubmit" onClick={() => startResubmission(application)}>보완 후 재상신</button>}
-                {role === ACCOUNT_ROLES.admin && <div className="gallery-admin-actions"><button onClick={() => startResubmission(application)}><PencilSimple size={14} /> 수정</button><button className="danger" onClick={() => onDeleteApplication(application.id)}><Trash size={14} /> 삭제</button></div>}
+                {isLeader && <div className="gallery-admin-actions"><button onClick={() => startResubmission(application)}><PencilSimple size={14} /> 수정</button><button className="danger" onClick={() => onDeleteApplication(application.id)}><Trash size={14} /> 삭제</button></div>}
               </article>
             ))}
           </div>
@@ -14600,8 +14602,8 @@ function Gallery({
                 <div className="gallery-published-lock"><CheckCircle size={17} weight="fill" /><span><b>최종 승인된 Agent입니다.</b><small>Admin은 내용 수정과 삭제만 할 수 있으며, 보완 요청이나 재상신 상태로 되돌릴 수 없습니다.</small></span></div>
               )}
               <footer>
-                {role === ACCOUNT_ROLES.admin && <button onClick={() => startResubmission(selectedApplication)}><PencilSimple size={14} /> Agent 수정</button>}
-                {role === ACCOUNT_ROLES.admin && <button className="danger" onClick={() => onDeleteApplication(selectedApplication.id)}><Trash size={14} /> Agent 삭제</button>}
+                {isLeader && <button onClick={() => startResubmission(selectedApplication)}><PencilSimple size={14} /> Agent 수정</button>}
+                {isLeader && <button className="danger" onClick={() => onDeleteApplication(selectedApplication.id)}><Trash size={14} /> Agent 삭제</button>}
                 {selectedApplication.status !== "PUBLISHED" && <button onClick={requestGalleryChanges}>보완 요청</button>}
                 {selectedApplication.status !== "PUBLISHED" && !isLeader && <button className="secondary" onClick={() => review("RECOMMENDED", "팀장에게 등록 권고를 전달했습니다.", "동료 검토 완료 · 최종 등록 권고")}>검토 완료 · 등록 권고</button>}
                 {selectedApplication.status !== "PUBLISHED" && isLeader && <button className="primary" onClick={() => review("PUBLISHED", "최종 승인되어 Agent Gallery에 등록되었습니다.", "AI 활성화팀장 최종 등록 승인")}>최종 승인 · Gallery 등록</button>}
@@ -15288,7 +15290,7 @@ function ProjectOwnerField({ mode, onModeChange, requester, owner, onOwnerChange
         <span>Owner MS 계정 이메일 · {optionalEmail ? "선택" : "필수"}</span>
         <input type="email" value={email} readOnly={mode === "SELF" && !selfEmailEditable} onChange={(event) => onEmailChange(event.target.value)} placeholder={mode === "SELF" ? "요구자 이메일을 먼저 입력해 주세요." : "name@company.com"} aria-label="Project Owner MS 계정 이메일" aria-invalid={Boolean(email && !isContactEmail(email))} required={!optionalEmail} />
         <small>{email && !isContactEmail(email) ? "이메일 형식을 확인해 주세요." : mode === "SELF" ? selfEmailEditable ? "이 값을 수정하면 요구자 MS 계정 이메일에도 동일하게 반영됩니다." : "요구자 메일이 자동 반영됩니다. 다른 메일을 쓰려면 ‘다른 Owner 지정’을 선택하세요." : "오너의 MS 로그인 계정과 연결됩니다. 이름과 메일이 같은 담당자인지 확인해 주세요."}</small>
-        <small>승인·작성 요청 알림을 위한 연락처입니다. 현재 메일·Teams 알림은 발송하지 않습니다.{optionalEmail ? " 이관 건은 미입력 상태로 저장할 수 있습니다." : ""}</small>
+        <small>승인·작성 요청 알림을 위한 연락처입니다. 해당 단계에 도달하면 포털 알림과 설정된 메일 알림에 사용됩니다.{optionalEmail ? " 이관 건은 미입력 상태로 저장할 수 있습니다." : ""}</small>
       </label>
     </fieldset>
   );
@@ -15383,7 +15385,7 @@ function RequestWizard({
           .join(" · ")
       : ""
     : identity?.email ? `${identity.displayName || "요구자"} · ${requesterDepartment.trim() || "부서 미입력"} · ${identity.email}` : "";
-  const requesterOwnerLabel = isAiTeam
+  const requesterOwnerLabel = !isHistorical ? identity?.displayName || "" : isAiTeam
     ? requesterName.trim() && requesterDepartment.trim()
       ? `${requesterName.trim()} · ${requesterDepartment.trim()}`
       : ""
@@ -15391,12 +15393,12 @@ function RequestWizard({
   const resolvedProjectOwner =
     ownerMode === "SELF" ? requesterOwnerLabel : projectOwner.trim();
   const resolvedRequesterEmail = normalizeContactEmail(isHistorical ? requesterEmail : identity?.email);
-  const ownerEmailInput = ownerMode === "SELF" ? (isAiTeam ? requesterEmail : identity?.email || "") : projectOwnerEmail;
+  const ownerEmailInput = ownerMode === "SELF" ? (isHistorical && isAiTeam ? requesterEmail : identity?.email || "") : projectOwnerEmail;
   const resolvedOwnerEmail = normalizeContactEmail(ownerEmailInput);
   const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim();
-  const canSubmit = !isHistorical ? Boolean(manualTitle.trim() && projectOwner.trim() && isContactEmail(normalizeContactEmail(projectOwnerEmail)) && identity?.displayName && isContactEmail(resolvedRequesterEmail) && !submitted && (!fastTrackRequested || (fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()))) : Boolean(
+  const canSubmit = !isHistorical ? Boolean(manualTitle.trim() && resolvedProjectOwner && isContactEmail(resolvedOwnerEmail) && identity?.displayName && isContactEmail(resolvedRequesterEmail) && !submitted && (!fastTrackRequested || (fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()))) : Boolean(
     manualTitle.trim() && receivedDate &&
       (!requiresHistoricalG1Record ||
         (historicalDeveloperIds.length > 0 &&
@@ -15410,8 +15412,8 @@ function RequestWizard({
       !submitted,
   );
   const registrationGaps = !isHistorical ? [
-    ...(!projectOwner.trim()?['Project Owner 이름']:[]),
-    ...(!isContactEmail(normalizeContactEmail(projectOwnerEmail))?['Project Owner MS 이메일']:[]),
+    ...(!resolvedProjectOwner?['Project Owner 이름']:[]),
+    ...(!isContactEmail(resolvedOwnerEmail)?['Project Owner MS 이메일']:[]),
     ...(!manualTitle.trim() ? ["Agent 과제명"] : []),
     ...(!identity?.displayName || !isContactEmail(resolvedRequesterEmail) ? ["로그인한 MS 계정 이름·이메일"] : []),
     ...(fastTrackRequested && !(fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()) ? ["Fast Track 외부 기한 유형·날짜·사유"] : []),
@@ -15434,7 +15436,7 @@ function RequestWizard({
     const saved = await onSubmit(
       isHistorical ? [...answers] : [],
       requestTitle,
-      isHistorical ? resolvedProjectOwner : projectOwner.trim(),
+      resolvedProjectOwner,
       resolvedRequester,
       {
         historical: isHistorical,
@@ -15442,8 +15444,8 @@ function RequestWizard({
         intakeDetails: {...intakeDetails,department:requesterDepartment.trim()},
         feaDraft: isHistorical ? historicalFea : undefined,
         intakeDraftCompleted: false,
-        ownerMode: isHistorical ? ownerMode : 'OTHER',
-        projectOwnerEmail: isHistorical ? resolvedOwnerEmail : normalizeContactEmail(projectOwnerEmail),
+        ownerMode,
+        projectOwnerEmail: resolvedOwnerEmail,
         requesterEmail: resolvedRequesterEmail,
         category: role === ACCOUNT_ROLES.user ? "미정" : projectCategory,
         receivedDate,
@@ -15580,13 +15582,7 @@ function RequestWizard({
               <strong>요구자 <small>MS 로그인 계정 자동 연결</small></strong>
               <dl><div><dt>이름</dt><dd>{identity?.displayName || "로그인 정보를 확인해 주세요"}</dd></div><div><dt>이메일</dt><dd>{identity?.email || "로그인이 필요합니다"}</dd></div></dl>
             </section>
-            <section className="new-request-identity" aria-label="Project Owner 승인 담당자">
-              <strong>Project Owner <small>승인 담당자 · 필수</small></strong>
-              <div className="new-request-owner-fields">
-                <label className="new-request-name"><span>이름</span><input value={projectOwner} onChange={e=>setProjectOwner(e.target.value)} placeholder="Project Owner 이름" required maxLength={100}/></label>
-                <label className="new-request-name"><span>MS 계정 이메일</span><input type="email" value={projectOwnerEmail} onChange={e=>setProjectOwnerEmail(e.target.value)} placeholder="name@changshininc.com" required/></label>
-              </div><p className="new-request-validation">해당 계정에 Owner 승인 권한이 연결되며, 승인 단계에 도달하면 업무 알림과 메일이 발송됩니다.</p>
-            </section>
+            <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={ownerEmailInput} onEmailChange={setProjectOwnerEmail} optionalEmail={false} name="new-project-owner-mode" />
             <p className="new-request-hint"><ChatsCircle size={20} /><span>업무 내용은 등록 후 작성합니다.<small>생성된 과제의 요구 접수 화면으로 이동해 INT 양식과 AI 인터뷰를 이어갑니다.</small></span></p>
             {registrationError && <p role="alert" className="new-request-error">{registrationError}</p>}
             {registrationGaps.length > 0 && <p role="status" className="new-request-validation">등록 전 확인: {registrationGaps.join(" · ")}</p>}

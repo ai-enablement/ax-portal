@@ -11,6 +11,12 @@ export function legacyArdMarkdown(state){
  return `# ARD 요구사항 정의서 · 기존 저장 문서\n\n${sections}`;
 }
 const cell=value=>String(value||'—').replaceAll('|','\\|').replace(/\r?\n/g,' ');
+export function withIntContacts(markdown,state){
+ const marker='<!-- PORTAL-INT-CONTACTS -->';
+ const text=String(markdown||'').split(marker)[0].trim();
+ const rows=[['요구자',state.requesterName||state.requester,state.requesterEmail],['Project Owner',state.projectOwner,state.projectOwnerEmail]];
+ return text+'\n\n'+marker+'\n## 요구자 및 Project Owner\n\n| 역할 | 이름 | MS 계정 이메일 |\n|---|---|---|\n'+rows.map(([role,name,email])=>'| '+role+' | '+cell(name)+' | '+cell(email)+' |').join('\n')+'\n';
+}
 export const ardPartiesApproved=state=>['requester','owner'].every(role=>state.workflowApprovals?.G2?.[role]?.decision==='APPROVED');
 export function finalDocument(markdown,code,author,at){
  let text=String(markdown||'').split(marker)[0].trim();

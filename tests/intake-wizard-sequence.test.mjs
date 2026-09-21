@@ -29,7 +29,7 @@ test('registration explains blockers, retains raw email while typing, and labels
  assert.match(page,/등록 전 확인:.*registrationGaps/);
  assert.match(page,/finally \{setSubmitted\(false\);\}/);
  assert.match(page,/isHistorical \|\| !fastTrackRequested/);
- assert.equal((page.match(/email=\{ownerEmailInput\}/g)||[]).length,1);
+ assert.equal((page.match(/email=\{ownerEmailInput\}/g)||[]).length,2);
  assert.match(page,/aria-label="Agent 과제명"/);
  assert.doesNotMatch(page,/희망 완료일|희망 시점|희망 요청일/);
  assert.match(css,/\.chat-wizard \.wizard-form-actions > span \{[\s\S]*?font-size: 15px !important/);

@@ -25,7 +25,7 @@ test("persists intake and only advances completed INT to FEA waiting", () => {
 });
 
 test("historical registration retains its accessible Owner picker", () => {
-  assert.equal((page.match(/<ProjectOwnerField mode=/g) || []).length, 1);
+  assert.equal((page.match(/<ProjectOwnerField mode=/g) || []).length, 2);
   assert.ok(page.includes('name={name} checked={mode === "SELF"}'));
   assert.ok(page.includes('name={name} checked={mode === "OTHER"}'));
   assert.ok(page.includes('onOwnerChange(event.target.value)'));

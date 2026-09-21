@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {isProjectCode} from '../shared/project-code.mjs';
 import {assignCompletedIntNumber} from './project-numbering.mjs';
-import {finalDocument,withArdApprovals,legacyArdMarkdown} from '../shared/final-document.mjs';
+import {finalDocument,withArdApprovals,legacyArdMarkdown,withIntContacts} from '../shared/final-document.mjs';
 import {documentComplete} from '../shared/workflow-v31.mjs';
 import {getPool,withTransaction} from './db/pool.mjs';
 import {documentAccess} from './document-files.mjs';
@@ -135,6 +135,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
   if(path==='/portal/complete'){
    const key=document.toLowerCase()+'_md';
    project[key]=finalDocument(project[key],document,ctx.actor.display_name,new Date().toISOString());
+   if(document==='INT')project[key]=withIntContacts(project[key],latest.state);
    if(document==='ARD')project[key]=withArdApprovals(project[key],latest.state);
   }
   if(/\/(finalize|generate)$/.test(path))project._portal_generated_from={...project._portal_generated_from,[document]:nativeFormFingerprint(project[{INT:'int_data',FEA:'fea_form',ARD:'ard_form'}[document]]||{})};
