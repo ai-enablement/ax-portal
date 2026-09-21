@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import {kstDate} from '../shared/portal-time.mjs';
 
 test('registration handler opens the exact server-assigned project in INT, not the prior project',async()=>{
  const page=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
@@ -10,7 +11,7 @@ test('registration handler opens the exact server-assigned project in INT, not t
  const javascript=ts.transpileModule(page.slice(start,end)+'\nglobalThis.submit = submitAgentRequest;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
  for(const role of ['general_user','admin','team_leader']){
   let target='2026-033',view='home',stored=[],payload;
-  const ctx=vm.createContext({role,ACCOUNT_ROLES:{user:'general_user'},teamAccounts:[],userJourney:Array.from({length:10},()=>({kind:'stage',title:'요구 접수'})),crypto,
+  const ctx=vm.createContext({kstDate,role,ACCOUNT_ROLES:{user:'general_user'},teamAccounts:[],userJourney:Array.from({length:10},()=>({kind:'stage',title:'요구 접수'})),crypto,
    fetch:async(_url,options)=>{payload=JSON.parse(options.body);return {ok:true,json:async()=>({project:{...payload.project,no:'2026-999',source:'database'}})};},
    setSubmittedProjects:fn=>{stored=fn([]);},setWorkflowTarget:value=>{target=value;},setView:value=>{view=value;},setDeletedProjectNos(){},setProjectOverrides(){},notify(){},window:{localStorage:{removeItem(){}}}});
   vm.runInContext(javascript,ctx);

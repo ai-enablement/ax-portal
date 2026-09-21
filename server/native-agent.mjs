@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {isProjectCode} from '../shared/project-code.mjs';
 import {assignCompletedIntNumber} from './project-numbering.mjs';
 import {finalDocument,withArdApprovals,legacyArdMarkdown,withIntContacts} from '../shared/final-document.mjs';
@@ -22,7 +23,7 @@ export function seedNativeProject(code,state){
  const ard=legacyArd?Object.fromEntries(Object.entries(map).filter(([,key])=>typeof legacyArd[key]==='string'&&legacyArd[key]).map(([key,old])=>[key,legacyArd[old]])):null;
  if(ard)ard.autonomy_level=String(legacyArd['autonomy.level']||'').match(/^L[0-4]/)?.[0]||'';
  return {project_no:code,agent_name:state.name||'',status:'접수중',history:[],reask:{},
-  int_data:{project_no:code,requester_name:state.requesterName||state.requester||'',requester_dept:state.requesterDepartment||'',received_at:state.receivedDate||new Date().toISOString().slice(0,10),problem:a[0]||'',who:d.performer||a[1]||'',frequency:d.countPerMonth??f.countPerMonth??'',minutes:d.asIsMinutes??f.asIsMinutes??'',people:d.people??f.people??'',as_is:d.currentProcess||'',systems:a[2]||'',risk:d.failureImpact||a[3]||'',when:a[4]||state.requestedDate||'',why_urgent:d.timingReason||''},
+  int_data:{project_no:code,requester_name:state.requesterName||state.requester||'',requester_dept:state.requesterDepartment||'',received_at:state.receivedDate||kstDate(),problem:a[0]||'',who:d.performer||a[1]||'',frequency:d.countPerMonth??f.countPerMonth??'',minutes:d.asIsMinutes??f.asIsMinutes??'',people:d.people??f.people??'',as_is:d.currentProcess||'',systems:a[2]||'',risk:d.failureImpact||a[3]||'',when:a[4]||state.requestedDate||'',why_urgent:d.timingReason||''},
   ...(ard?{ard_form:ard}:{}),
   ...(Object.keys(f).length?{fea_form:{summary:f.summary||'',alt_process:f.alternatives?.[0]||'',alt_system:f.alternatives?.[1]||'',alt_macro:f.alternatives?.[2]||'',alt_llm:f.alternatives?.[3]||'',alt_conclusion:f.conclusion||'',roi_saving:f.expectedEffect||'',autonomy:f.autonomy||'',write_exec:f.writeExec,sensitive:f.sensitive,identifying:f.businessIdentity,damage_financial:f.damageFinancial,scope:{PERSONAL:'개인',TEAM:'팀',DEPT:'부서',MULTI_DEPT:'3개부서이상',COMPANY:'전사'}[f.scope]||f.scope||'',damage_desc:f.maximumDamage||''}}:{})};
 }

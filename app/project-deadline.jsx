@@ -1,4 +1,5 @@
 "use client";
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {useState} from 'react';
 import {validDeadline} from '../shared/project-deadline.mjs';
 import './workflow-v31.css';
@@ -16,6 +17,6 @@ export default function ProjectDeadline({project,identity,onSave}){
  {canEdit&&<button type="button" disabled={busy} onClick={()=>{setDate(current);setOpen(!open);}}>{current?'마감일 변경':'마감일 확정'}</button>}
  {canEdit&&open&&<div className="deadline-editor"><label>프로젝트 마감일<input type="date" value={date} disabled={busy} onChange={e=>setDate(e.target.value)}/></label><label>확정·변경 사유<textarea value={reason} disabled={busy} onChange={e=>setReason(e.target.value)} placeholder="일정 협의 내용 또는 변경이 필요한 이유"/></label><button type="button" disabled={busy||!validDeadline(date)||date===current||!reason.trim()} onClick={save}>{busy?'저장 중…':'마감일 저장'}</button></div>}
  <p>AI 활성화팀 팀장만 확정·변경할 수 있으며 변경 이력이 남습니다.</p>
- {(project.deadlineHistory||[]).length>0&&<details><summary>마감일 변경 이력 ({project.deadlineHistory.length})</summary>{[...project.deadlineHistory].reverse().map((item,i)=><div className="workflow-v31-vote" key={i}><div><b>{item.previousDate||'미확정'} → {item.date}</b><p>{item.reason}</p><small>{item.actorName} · {new Date(item.at).toLocaleString('ko-KR')}</small></div></div>)}</details>}
+ {(project.deadlineHistory||[]).length>0&&<details><summary>마감일 변경 이력 ({project.deadlineHistory.length})</summary>{[...project.deadlineHistory].reverse().map((item,i)=><div className="workflow-v31-vote" key={i}><div><b>{item.previousDate||'미확정'} → {item.date}</b><p>{item.reason}</p><small>{item.actorName} · {formatKst(item.at)}</small></div></div>)}</details>}
  <p role="status">{message}</p></section>;
 }

@@ -1,4 +1,5 @@
 "use client";
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 
 import "./release-documents.css";
 import "./new-request-entry.css";
@@ -27,7 +28,7 @@ import { intakeRequired, intakeSectionRequired, feaRequired } from '../shared/in
 import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
 import FastTrackPanel from './fast-track-panel';
 import {isLowRoute} from '../shared/workflow-v31.mjs';
-import {FAST_TRACK_EXTERNAL_FACTORS} from '../shared/fast-track.mjs';
+import {FAST_TRACK_EXTERNAL_FACTORS,canRequestFastTrack} from '../shared/fast-track.mjs';
 import {buildWorkNotifications, filterProjectList} from '../shared/work-notifications.mjs';
 import {homeProjectList,projectListFilters,PROJECT_LIST_SORTS,projectNumberBadge} from '../shared/project-list.mjs';
 import {isContactEmail, normalizeContactEmail} from "../shared/project-contacts.mjs";
@@ -1464,7 +1465,7 @@ export default function Home() {
       };
     },
   ): Promise<boolean> => {
-    const registrationReceivedDate = registration?.receivedDate || new Date().toISOString().slice(0, 10);
+    const registrationReceivedDate = registration?.receivedDate || kstDate();
       const historical = Boolean(registration?.historical);
       const category: ProjectCategory =
         role === ACCOUNT_ROLES.user
@@ -15151,7 +15152,7 @@ function Governance({
         {tab === "감사 로그" && (
           <div className="admin-content governance-history">
             <header><ClipboardText size={28} weight="duotone" /><div><b>계정 역할 변경 이력</b><span>변경자와 변경 시각을 DB에 보관합니다.</span></div></header>
-            {roleHistory.length ? roleHistory.map((item) => <div key={item.id}><span><b>{item.userName}</b><small>{item.email}</small></span><span>{roleLabel(item.previousRole || "미등록")} → <b>{roleLabel(item.newRole)}</b></span><span><b>{item.changedBy || "시스템"}</b><small>{item.reason || "역할 변경"}</small></span><time>{new Date(item.changedAt).toLocaleString("ko-KR")}</time></div>) : <p>아직 기록된 역할 변경이 없습니다.</p>}
+            {roleHistory.length ? roleHistory.map((item) => <div key={item.id}><span><b>{item.userName}</b><small>{item.email}</small></span><span>{roleLabel(item.previousRole || "미등록")} → <b>{roleLabel(item.newRole)}</b></span><span><b>{item.changedBy || "시스템"}</b><small>{item.reason || "역할 변경"}</small></span><time>{formatKst(item.changedAt)}</time></div>) : <p>아직 기록된 역할 변경이 없습니다.</p>}
           </div>
         )}
       </section>
@@ -15363,6 +15364,7 @@ function RequestWizard({
   const [ownerMode, setOwnerMode] = useState<"SELF" | "OTHER">("SELF");
   const [projectOwner, setProjectOwner] = useState("");
   const [projectOwnerEmail, setProjectOwnerEmail] = useState("");
+  const canApplyFastTrack = canRequestFastTrack(identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : identity?.appRole);
   const [fastTrackRequested, setFastTrackRequested] = useState(false);
   const [fastTrackExternalFactor, setFastTrackExternalFactor] = useState("");
   const [fastTrackExternalDeadline, setFastTrackExternalDeadline] = useState("");
@@ -15455,7 +15457,7 @@ function RequestWizard({
         clientRequestId: submissionRequestId.current,
         g1Decision: requiresHistoricalG1Record ? historicalG1Decision : undefined,
         g1Reason: requiresHistoricalG1Record ? historicalG1Reason.trim() : undefined,
-        fastTrackRequest: !isHistorical && fastTrackRequested ? {
+        fastTrackRequest: !isHistorical && canApplyFastTrack && fastTrackRequested ? {
           requested: true,
           externalFactor: fastTrackExternalFactor,
           externalDeadline: fastTrackExternalDeadline,
@@ -15537,7 +15539,7 @@ function RequestWizard({
             </button>
           </div>
         )}
-        {!isHistorical && (
+        {!isHistorical && canApplyFastTrack && (
           <section className={`fast-track-request ${fastTrackRequested ? "selected" : ""}`}>
             <label className="fast-track-request-toggle">
               <input

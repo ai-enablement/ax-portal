@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import { TextDecoder } from 'node:util';
 import { getPool, withTransaction } from './db/pool.mjs';
 import { documentAccess } from './document-files.mjs';
@@ -140,7 +141,7 @@ export async function loadCompletedNativeDocuments(client,projectId,state) {
 export function buildCumulativeMarkdown(project, state, phase, versions=[], nativeDocuments=[], includeAssessments=true) {
   const phaseTitle={design:'설계',development_evaluation:'개발·평가',deployment_rollout:'배포·확산'}[phase];
   if(!phaseTitle)throw new Error('유효한 누적 문서 단계가 아닙니다.');
-  const lines=[`# ${project.project_name} · ${phaseTitle} 단계 누적 이력`,'',`- 과제 번호: ${project.project_code}`,`- 생성 시각: ${new Date().toISOString()}`,`- 현재 단계: ${project.current_stage_code||'미확인'}`,''];
+  const lines=[`# ${project.project_name} · ${phaseTitle} 단계 누적 이력`,'',`- 과제 번호: ${project.project_code}`,`- 생성 시각: ${formatKst(new Date())}`,`- 현재 단계: ${project.current_stage_code||'미확인'}`,''];
   const refs=completedNativeReferences(state);
   for(const code of ['INT','FEA','ARD']){
     if(!includeAssessments&&restrictedDocument(code)){lines.push(`## ${code}`,'','접근 제한: 팀장·Admin만 문서 원문을 조회할 수 있습니다.','');continue;}
@@ -148,7 +149,7 @@ export function buildCumulativeMarkdown(project, state, phase, versions=[], nati
     if(ref){
       const doc=nativeDocuments.find(d=>d.document_type===code&&String(d.id)===ref.id&&Number(d.version_number)===ref.version_number);
       if(!doc)throw new Error(`${code} 작성 완료 원본이 없습니다.`);
-      lines.push(`## ${code} 작성 완료 원문 · v${doc.version_number}`,'',`- 파일명: ${doc.original_name}`,`- 작성자: ${doc.author_name||'미확인'}`,`- 완료 시각: ${state.nativeAgentArtifacts[code].at||'미확인'}`,`- SHA-256: ${doc.content_sha256}`,'',doc.markdown,'');
+      lines.push(`## ${code} 작성 완료 원문 · v${doc.version_number}`,'',`- 파일명: ${doc.original_name}`,`- 작성자: ${doc.author_name||'미확인'}`,`- 완료 시각: ${formatKst(state.nativeAgentArtifacts[code].at)}`,`- SHA-256: ${doc.content_sha256}`,'',doc.markdown,'');
     }else if(state.nativeAgentArtifacts?.[code]){
       lines.push(`## ${code}`,'','작성 완료된 원본이 없습니다. 작성 중인 초안은 포함하지 않습니다.','');
     }else if(code==='ARD')appendStandardDocument(lines,state,'ARD',3);
@@ -158,7 +159,7 @@ export function buildCumulativeMarkdown(project, state, phase, versions=[], nati
     }
   }
   appendApprovals(lines,state,phase==='deployment_rollout'?['G1','G2','G3']:['G1','G2']);
-  if(versions.length){lines.push('## 첨부 Markdown 문서 원본 이력','');for(const version of versions){lines.push(`### ${version.document_type} v${version.version_number} · ${version.lifecycle_phase}`,'',`- 파일명: ${version.original_name}`,`- 작성자: ${version.author_name}`,`- 첨부일: ${new Date(version.created_at).toISOString()}`,`- SHA-256: ${version.checksum_sha256}`,'',version.content_markdown,'');}}
+  if(versions.length){lines.push('## 첨부 Markdown 문서 원본 이력','');for(const version of versions){lines.push(`### ${version.document_type} v${version.version_number} · ${version.lifecycle_phase}`,'',`- 파일명: ${version.original_name}`,`- 작성자: ${version.author_name}`,`- 첨부일: ${formatKst(version.created_at)}`,`- SHA-256: ${version.checksum_sha256}`,'',version.content_markdown,'');}}
   return `${lines.join('\n').trim()}\n`;
 }
 

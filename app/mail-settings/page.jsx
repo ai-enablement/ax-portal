@@ -1,4 +1,5 @@
 'use client';
+import {formatKst,kstDate} from '../../shared/portal-time.mjs';
 import {useState,useEffect} from 'react';
 export default function MailSettings(){
   const [state,setState]=useState(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
@@ -12,7 +13,7 @@ export default function MailSettings(){
     const load=()=>refresh().catch(()=>setMessage('연결을 확인해 주세요.'));
     load();const timer=setInterval(load,60_000);return()=>clearInterval(timer);
   },[]);
-  const time=value=>value?new Date(value).toLocaleString('ko-KR'):'기록 없음';
+  const time=value=>value?formatKst(value):'기록 없음';
   const stages={project_lookup:'담당 과제 조회',notification_calculation:'알림 계산',queue_write:'큐 저장',recipient_revalidation:'발송 전 담당자 확인',payload_write:'메일 내용 갱신',flow_delivery:'Flow 연결·전송',flow_request:'Flow HTTP 호출',flow_receipt:'발송 응답 확인',cycle_database:'작업 시작·DB 처리'};
   async function test(){
     if(!window.confirm('현재 로그인한 Admin 본인에게 테스트 메일 1건을 보냅니다. 진행할까요?'))return;

@@ -1,4 +1,5 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {draftProjectCode} from './project-numbering.mjs';
 import {categoryChange} from '../shared/project-category.mjs';
 import {persistArdApprovalDocument} from './ard-approval-document.mjs';
@@ -10,6 +11,7 @@ import {missingFields, AGENT_FIELDS} from "../shared/intake-agent.mjs";
 import {completionGaps,persistIntakeFeaV3} from './intake-standard.mjs';
 import {intakeRequired} from '../shared/intake-standard.mjs';
 import {applyWorkflow,persistWorkflowApprovals,WorkflowError,sanitizeNewWorkflow} from './workflow-v31.mjs';
+import {assertFastTrackApplicant} from '../shared/fast-track.mjs';
 import {isLowRoute,displayStage} from '../shared/workflow-v31.mjs';
 import {ProjectContactError, registrationContacts, resolveContactUser, validateHistoricalContactUpdate, linkHistoricalContacts} from "./project-contacts.mjs";
 import {emailFromPartyLabel} from '../shared/project-contacts.mjs';
@@ -802,7 +804,7 @@ function portalProjectFromRow(row) {
   const runtime = mergeStoredStandardDocuments(snapshot, row.standardDocuments);
   const journeyStep = portalJourneyStep(row.stageCode);
   const developers = Array.isArray(row.developers) ? row.developers : [];
-  const receivedDate = row.createdAt ? new Date(row.createdAt).toISOString().slice(0, 10) : "";
+  const receivedDate = row.createdAt ? kstDate(row.createdAt) : "";
   return {
     ...runtime,
     feaAuthor:row.feaAuthor||runtime.feaAuthor,
@@ -814,7 +816,7 @@ function portalProjectFromRow(row) {
     stage: displayStage({...runtime,journeyStep}),
     progress: Number(row.progressPercent || 0),
     nextAction: row.nextAction || runtime.nextAction || "다음 작업 확인 필요",
-    requestedDate: row.requestedCompletionDate ? new Date(row.requestedCompletionDate).toISOString().slice(0, 10) : runtime.requestedDate || "",
+    requestedDate: row.requestedCompletionDate ? kstDate(row.requestedCompletionDate) : runtime.requestedDate || "",
     receivedDate: runtime.receivedDate || receivedDate,
     owner: runtime.owner || row.ownerName || row.requesterName,
     requester: runtime.requester || row.requesterName,
@@ -827,7 +829,7 @@ function portalProjectFromRow(row) {
     developerIds: developers.map((developer) => String(developer.id)),
     developerNames: developers.map((developer) => developer.name),
     handler: developers.length ? developers.map((developer) => developer.name).join(" · ") : "담당자 배정 필요",
-    updated: row.updatedAt ? new Date(row.updatedAt).toISOString().slice(0, 10) : receivedDate,
+    updated: row.updatedAt ? kstDate(row.updatedAt) : receivedDate,
     source: "database",
   };
 }
@@ -1070,6 +1072,7 @@ export async function createOperationalProject(body, identity, transact = withTr
   return transact(async (client) => {
     const actor = await findUser(client, identity);
     if (!actor || !actor.is_active) return { status: 403, body: { error: "Project creation permission is required." } };
+    assertFastTrackApplicant(submittedState, actor.app_role);
     if (submittedState.historicalImport && actor.app_role === "general_user") {
       return { status: 403, body: { error: "Historical project import requires an AI delivery role." } };
     }
@@ -1110,7 +1113,7 @@ export async function createOperationalProject(body, identity, transact = withTr
     if (actor.app_role === "general_user") submittedState.requester = [actor.display_name,submittedState.intakeDetails?.department,actor.email].filter(Boolean).join(' · ');
     Object.assign(submittedState, contacts);
     const catalog = await ensurePortalCatalog(client);
-    const receivedDate = validIsoDate(submittedState.receivedDate) || new Date().toISOString().slice(0, 10);
+    const receivedDate = validIsoDate(submittedState.receivedDate) || kstDate();
     const year = Number(receivedDate.slice(0, 4));
     const projectCode = submittedState.historicalImport
       ? (await client.query(`select agent_portal.next_project_code($1) as code`, [year])).rows[0].code
@@ -1454,7 +1457,7 @@ async function listTeamWorkload(identity) {
     progress: Number(project.progress || 0),
     nextAction: project.nextAction || "다음 작업 확인 필요",
     dueDate: project.dueDate
-      ? new Date(project.dueDate).toISOString().slice(0, 10)
+      ? kstDate(project.dueDate)
       : "",
     received: new Date(project.createdAt).toLocaleDateString("ko-KR", {
       month: "2-digit",

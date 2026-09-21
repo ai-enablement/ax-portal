@@ -15,6 +15,18 @@ export async function GET(request,context){
  var PORTAL_CODE=${JSON.stringify(code)}, PORTAL_DOC=${JSON.stringify(doc)}, PORTAL_REVISION=0, PORTAL_ROLE=${JSON.stringify(role)};
  var portalFetch=window.fetch.bind(window), portalQueue=Promise.resolve();
  var portalReadOnly=false;
+ function portalKst(value){var date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',hour12:false})+' KST':value;}
+ window.addEventListener('DOMContentLoaded',function(){
+  var root=document.querySelector('.app'),queued=false,lastHeight=0;
+  function resize(){
+   queued=false;
+   document.querySelectorAll('.app textarea').forEach(function(el){if(!el.getClientRects().length)return;el.style.height='auto';el.style.height=el.scrollHeight+'px';});
+   var height=Math.ceil(root.getBoundingClientRect().height)+24;
+   if(height!==lastHeight){lastHeight=height;window.parent.postMessage({type:'native-agent-height',project:PORTAL_CODE,height:height},location.origin);}
+  }
+  function schedule(){if(!queued){queued=true;requestAnimationFrame(resize);}}
+  if(root){new ResizeObserver(schedule).observe(root);new MutationObserver(schedule).observe(root,{childList:true,subtree:true,characterData:true});document.addEventListener('input',schedule);schedule();}
+ });
  function enforceReadOnly(){if(!portalReadOnly)return;document.querySelectorAll('input,textarea,select,button').forEach(function(el){if(!el.matches('[data-export],#noticeOk,#noticeX,#docX,#docDlMd,#docDlDoc'))el.disabled=true;});}
  new MutationObserver(enforceReadOnly).observe(document.documentElement,{childList:true,subtree:true});
  window.fetch=function(url,options){
@@ -34,8 +46,13 @@ export async function GET(request,context){
  .hero,.tabs,#btnNew,#btnNew2,#btnSettings,#feaPick,#ardPick,#btnGoFea {display:none!important;}
  body{background:#fff!important;} .app{max-width:none!important;padding:10px!important;}
  input,textarea,select,button{font-size:14px!important;}
+ html,body{height:auto!important;min-height:0!important;overflow:hidden!important;}
+ .app .form-scroll,.app .chat,.app .doc{height:auto!important;max-height:none!important;overflow:visible!important;}
+ .app textarea{max-height:none!important;overflow:hidden!important;resize:none!important;}
  </style>`;
  html=html.replace('<script>',init+'<script>');
+ html=html.replace('function mdToHtml(md){', "function mdToHtml(md){md=String(md||'').replace(/\\b\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})\\b/g,portalKst);");
+ html=html.replace("(a.at||'').replace('T',' ').replace('+00:00','')","portalKst(a.at)");
  html=html.replace("var no = $('#feaPick').value;","var no = PORTAL_CODE;");
  html=html.replace("var no = $('#ardPick').value;","var no = PORTAL_CODE;");
  html=html.replace("goTab(p.fea_form && Object.keys(p.fea_form).length ? 'fea' : 'intake');","goTab({INT:'intake',FEA:'fea',ARD:'ard'}[PORTAL_DOC]);");

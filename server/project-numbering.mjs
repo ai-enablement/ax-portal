@@ -1,4 +1,5 @@
 import {randomUUID,createHash} from 'node:crypto';
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {isDraftProjectCode} from '../shared/project-code.mjs';
 export const draftProjectCode = () => 'DRAFT-'+randomUUID().replaceAll('-','');
 export function replaceProjectCode(value,previous,next){
@@ -10,7 +11,7 @@ export function replaceProjectCode(value,previous,next){
 // Caller holds the project row lock. Allocation and all reference changes commit together.
 export async function assignCompletedIntNumber(client,projectId,code,state,payload,actorId){
  if(!isDraftProjectCode(code))return {code,state,payload};
- const year=Number(new Date().toISOString().slice(0,4));
+ const year=Number(kstDate().slice(0,4));
  const next=(await client.query('select agent_portal.next_project_code($1) as code',[year])).rows[0].code;
  await client.query('update agent_portal.projects set project_code=$2,submitted_at=now(),updated_at=now() where id=$1',[projectId,next]);
  const documents=(await client.query('select id,markdown,original_name from agent_portal.native_agent_documents where project_id=$1',[projectId])).rows;

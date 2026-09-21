@@ -1,3 +1,11 @@
+export const canRequestFastTrack = role => ['admin', 'team_leader'].includes(role);
+
+export function assertFastTrackApplicant(state, role) {
+  if (state?.fastTrack?.requested && !canRequestFastTrack(role)) {
+    throw Object.assign(new Error('Fast Track 신청은 Admin과 AI 활성화팀 팀장만 가능합니다.'), {status: 403});
+  }
+}
+
 export const FAST_TRACK_EXTERNAL_FACTORS = [
   { value: "AUDIT", label: "감사 대응" },
   { value: "REGULATION", label: "법규·제도 시행일" },

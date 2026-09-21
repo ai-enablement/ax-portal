@@ -1,4 +1,5 @@
 'use client';
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {useState} from 'react';
 import {Archive,CaretDown,UploadSimple} from '@phosphor-icons/react';
 import './developer-assignment.css';
@@ -34,6 +35,6 @@ export default function HistoricalAdmin({project,admin,devRole}){
  </div><div className="developer-reason"><label htmlFor={id+'-reason'}>변경 사유 <span>필수</span></label><textarea id={id+'-reason'} value={reason} disabled={busy} maxLength={2000} onChange={e=>setReason(e.target.value)} placeholder="기존 문서 반영 또는 단계 조정 사유를 입력해 주세요."/><small>변경 전·후 상태, 처리자와 시각이 이력에 남습니다.</small></div></div>
  <footer><p role="status">{error||'기존 문서·승인은 이력에 보존되며 현재 승인은 초기화됩니다.'}</p><div><button type="button" className="developer-cancel" disabled={busy} onClick={()=>setEditing(false)}>닫기</button><button type="button" className="developer-save" disabled={busy||!reason.trim()||(tab==='replace'?!selected.length:!target)} onClick={()=>save(tab)}>{busy?'저장 중…':tab==='replace'?selected.length+'개 문서 일괄 대체':'선택 단계로 이관'}</button></div></footer>
  </div>}
- <div className="historical-admin-history"><button type="button" aria-expanded={historyOpen} aria-controls={id+'-history'} onClick={()=>setHistoryOpen(x=>!x)}>변경 이력 <span>{history.length}</span><CaretDown size={14}/></button>{historyOpen&&<div id={id+'-history'} className="developer-history-list">{history.length?history.slice().reverse().map((x,i)=><article key={i}><header><time>{new Date(x.at).toLocaleString('ko-KR')}</time><span>{x.actorName}</span></header><p>{x.action==='replace'?(x.documents||[x]).map(item=>item.document+' v'+item.previousVersion+' → v'+item.version).join(' · '):'단계 '+x.previousStep+' → '+x.step}</p><p>{x.reason}</p></article>):<p>아직 변경 이력이 없습니다.</p>}</div>}</div>
+ <div className="historical-admin-history"><button type="button" aria-expanded={historyOpen} aria-controls={id+'-history'} onClick={()=>setHistoryOpen(x=>!x)}>변경 이력 <span>{history.length}</span><CaretDown size={14}/></button>{historyOpen&&<div id={id+'-history'} className="developer-history-list">{history.length?history.slice().reverse().map((x,i)=><article key={i}><header><time>{formatKst(x.at)}</time><span>{x.actorName}</span></header><p>{x.action==='replace'?(x.documents||[x]).map(item=>item.document+' v'+item.previousVersion+' → v'+item.version).join(' · '):'단계 '+x.previousStep+' → '+x.step}</p><p>{x.reason}</p></article>):<p>아직 변경 이력이 없습니다.</p>}</div>}</div>
  </section>;
 }

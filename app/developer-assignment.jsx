@@ -1,4 +1,5 @@
 'use client';
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {useState} from 'react';
 import {UsersThree,PencilSimple,CaretDown,ClockCounterClockwise,ArrowRight} from '@phosphor-icons/react';
 import './developer-assignment.css';
@@ -18,6 +19,6 @@ export default function DeveloperAssignment({project,people,admin,onSave}){
    <div className="developer-reason"><label htmlFor={`developer-reason-${project.no}`}>변경 사유 <span>필수</span></label><textarea id={`developer-reason-${project.no}`} aria-label="개발 담당자 변경 사유" placeholder="예: 담당 업무 조정에 따라 개발 및 후속 관리를 인수인계합니다." maxLength={2000} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)}/><small>변경 전·후 담당자, 변경 시각과 함께 이력에 저장됩니다.</small></div></div>
    <footer><p role="status">{message||'변경 내용은 저장 후 적용됩니다.'}</p><div><button type="button" className="developer-cancel" disabled={busy} onClick={()=>{setSelected((project.developerIds||[]).map(String));setReason('');setEditing(false);}}>취소</button><button type="button" className="developer-save" disabled={busy||!selected.length||!reason.trim()} onClick={save}>{busy?'저장 중…':'변경 사항 저장'}<ArrowRight size={16}/></button></div></footer>
   </div>}
-  <details className="developer-history"><summary><ClockCounterClockwise size={17}/><span>담당자 변경 이력</span><span className="developer-history-count">{history.length}</span><CaretDown size={14}/></summary>{history.length?<div className="developer-history-list">{history.slice().reverse().map((entry,i)=><article key={i}><header><time>{new Date(entry.at).toLocaleString('ko-KR')}</time><span>변경자 · {entry.actorName||entry.actorId}</span></header><p className="developer-history-transition">{names(entry.before)} <ArrowRight size={16}/> {names(entry.after)}</p><p>{entry.reason}</p></article>)}</div>:<p className="developer-history-empty">아직 기록된 변경 이력이 없습니다. 앞으로 저장하는 변경부터 표시됩니다.</p>}</details>
+  <details className="developer-history"><summary><ClockCounterClockwise size={17}/><span>담당자 변경 이력</span><span className="developer-history-count">{history.length}</span><CaretDown size={14}/></summary>{history.length?<div className="developer-history-list">{history.slice().reverse().map((entry,i)=><article key={i}><header><time>{formatKst(entry.at)}</time><span>변경자 · {entry.actorName||entry.actorId}</span></header><p className="developer-history-transition">{names(entry.before)} <ArrowRight size={16}/> {names(entry.after)}</p><p>{entry.reason}</p></article>)}</div>:<p className="developer-history-empty">아직 기록된 변경 이력이 없습니다. 앞으로 저장하는 변경부터 표시됩니다.</p>}</details>
  </section>;
 }

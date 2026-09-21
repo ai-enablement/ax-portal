@@ -21,7 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, Response
@@ -146,7 +146,7 @@ def _now():
 
 
 def _today():
-    return date.today().isoformat()
+    return datetime.now(timezone(timedelta(hours=9))).date().isoformat()
 
 
 # ════════════════════════════════════════════════════════════════════════════
