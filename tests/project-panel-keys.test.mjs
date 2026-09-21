@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 
+test('category editor is visible only when viewing G1, retaining leader/admin and stage prerequisites',()=>{
+ const source=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
+ const line=source.split('\n').find(line=>line.includes('&&<ProjectCategoryEditor'));
+ const guard=line.trim().slice(1).split('&&<ProjectCategoryEditor')[0];
+ const visible=Function('hasProjects','current','selectedJourney','identity','role','ACCOUNT_APP_ROLES',`return (${guard})`);
+ for(let selected=0;selected<=9;selected++)for(const appRole of ['admin','team_leader','general_user','team_member']){
+  assert.equal(visible(true,{source:'database',journeyStep:4},selected,{appRole},'',{}),selected===2&&['admin','team_leader'].includes(appRole));
+ }
+ assert.equal(visible(true,{source:'database',journeyStep:1},2,{appRole:'admin'},'',{}),false);
+});
+
 test('management cards share paired rows with responsive and expanded import layouts',()=>{
  const source=readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
  const file=ts.createSourceFile('page.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);

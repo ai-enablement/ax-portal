@@ -18,8 +18,23 @@ export async function GET(request,context){
  function portalKst(value){var date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',hour12:false})+' KST':value;}
  window.addEventListener('DOMContentLoaded',function(){
   var root=document.querySelector('.app'),queued=false,lastHeight=0;
+  function addFolds(){
+   root.querySelectorAll('.card > .card-head,.fsec > h4').forEach(function(head){
+    if(head.querySelector('[data-portal-fold]'))return;
+    var section=head.parentElement,button=document.createElement('button');
+    button.type='button';button.className='portal-fold';button.setAttribute('data-portal-fold','');
+    var label=(head.querySelector('h2')||head).textContent.trim();
+    button.setAttribute('aria-expanded','true');button.setAttribute('aria-label',label+' 접기');button.textContent='접기 ▴';
+    button.addEventListener('click',function(){
+     var folded=section.classList.toggle('portal-folded');
+     button.setAttribute('aria-expanded',String(!folded));button.setAttribute('aria-label',label+(folded?' 펼치기':' 접기'));button.textContent=folded?'펼치기 ▾':'접기 ▴';schedule();
+    });
+    head.appendChild(button);
+   });
+  }
   function resize(){
    queued=false;
+   addFolds();
    document.querySelectorAll('.app textarea').forEach(function(el){if(!el.getClientRects().length)return;el.style.height='auto';el.style.height=el.scrollHeight+'px';});
    var height=Math.ceil(root.getBoundingClientRect().height)+24;
    if(height!==lastHeight){lastHeight=height;window.parent.postMessage({type:'native-agent-height',project:PORTAL_CODE,height:height},location.origin);}
@@ -27,7 +42,7 @@ export async function GET(request,context){
   function schedule(){if(!queued){queued=true;requestAnimationFrame(resize);}}
   if(root){new ResizeObserver(schedule).observe(root);new MutationObserver(schedule).observe(root,{childList:true,subtree:true,characterData:true});document.addEventListener('input',schedule);schedule();}
  });
- function enforceReadOnly(){if(!portalReadOnly)return;document.querySelectorAll('input,textarea,select,button').forEach(function(el){if(!el.matches('[data-export],#noticeOk,#noticeX,#docX,#docDlMd,#docDlDoc'))el.disabled=true;});}
+ function enforceReadOnly(){if(!portalReadOnly)return;document.querySelectorAll('input,textarea,select,button').forEach(function(el){if(!el.matches('[data-portal-fold],[data-export],#noticeOk,#noticeX,#docX,#docDlMd,#docDlDoc'))el.disabled=true;});}
  new MutationObserver(enforceReadOnly).observe(document.documentElement,{childList:true,subtree:true});
  window.fetch=function(url,options){
   if(url==='/ping')return Promise.resolve(new Response('{}',{status:200}));
@@ -49,7 +64,14 @@ export async function GET(request,context){
  html,body{height:auto!important;min-height:0!important;overflow:hidden!important;}
  .app .form-scroll,.app .chat,.app .doc{height:auto!important;max-height:none!important;overflow:visible!important;}
  .app textarea{max-height:none!important;overflow:hidden!important;resize:none!important;}
+ .app .split{align-items:start;}
+ .app .portal-fold{margin-left:auto;flex-shrink:0;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--muted);padding:4px 8px;font-size:12px!important;cursor:pointer;}
+ .app .portal-fold:hover{background:var(--line-2);color:var(--navy);}
+ .app .portal-fold:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+ .app .card.portal-folded > :not(.card-head),.app .fsec.portal-folded > :not(h4){display:none!important;}
+ .app .card.portal-folded > .card-head{margin-bottom:0;}
  </style>`;
+ html=html.replace('<main class="main">','<main class="main app">');
  html=html.replace('<script>',init+'<script>');
  html=html.replace('function mdToHtml(md){', "function mdToHtml(md){md=String(md||'').replace(/\\b\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})\\b/g,portalKst);");
  html=html.replace("(a.at||'').replace('T',' ').replace('+00:00','')","portalKst(a.at)");

@@ -2486,7 +2486,7 @@ def api_intake_finalize():
     data["project_no"] = d["project_no"]
 
     md = R.render_doc(R.INT_SPEC, data, {
-        "doc_no": R.make_doc_no(*_split_no(d["project_no"]), "INT"),
+        "doc_no": f"{d['project_no']}-INT",
         "agent_name": d.get("agent_name") or "",
         "created_at": _today(),
         "standard": f"{_STD_CACHE.get('version', '?')} ({_STD_CACHE.get('date', '?')})",
@@ -2595,7 +2595,7 @@ def api_fea_generate():
                "assess": R.assess_fea(form)})
 
     md = R.render_doc(R.FEA_SPEC, fea_data, {
-        "doc_no": R.make_doc_no(*_split_no(d["project_no"]), "FEA"),
+        "doc_no": f"{d['project_no']}-FEA",
         "agent_name": d.get("agent_name") or "",
         "created_at": _today(),
         "standard": f"{_STD_CACHE.get('version', '?')} ({_STD_CACHE.get('date', '?')})",

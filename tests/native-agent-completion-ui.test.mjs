@@ -4,6 +4,24 @@ import vm from 'node:vm';
 import {GET} from '../app/api/native-agent/[code]/workspace/route.js';
 import {verifyAndComplete,nativeDocumentPolicy} from '../server/native-agent.mjs';
 
+test('embedded workspace has a real measured root and accessible collapsible cards even in read-only mode',async()=>{
+ const response=await GET(new Request('http://localhost/api/native-agent/2026-046/workspace?document=FEA',{headers:{'x-ms-client-principal-name':'test@example.com'}}),{params:Promise.resolve({code:'2026-046'})});
+ const html=await response.text();
+ assert.match(html,/<main class="main app">/);
+ for(const [,script] of html.replace(/<!--[\s\S]*?-->/g,'').matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(script);
+ assert.ok(html.includes("'.card > .card-head,.fsec > h4'"));
+ assert.ok(html.includes("'[data-portal-fold],[data-export]"));
+ const buttons=[],head={textContent:'에이전트 판정 권고',querySelector:()=>null,appendChild:b=>buttons.push(b)};
+ let folded=false,scheduled=0;
+ head.parentElement={classList:{toggle(){folded=!folded;return folded;}}};
+ const ctx=vm.createContext({root:{querySelectorAll:()=>[head]},document:{createElement:()=>({setAttribute(k,v){this[k]=v;},addEventListener(k,v){this[k]=v;}})},schedule(){scheduled++;}});
+ const start=html.indexOf('function addFolds()'),end=html.indexOf('function resize()',start);
+ vm.runInContext(html.slice(start,end),ctx);ctx.addFolds();
+ assert.equal(buttons[0]['aria-expanded'],'true');
+ buttons[0].click();assert.equal(buttons[0]['aria-expanded'],'false');assert.equal(buttons[0].textContent,'펼치기 ▾');
+ buttons[0].click();assert.equal(buttons[0]['aria-expanded'],'true');assert.equal(scheduled,2);
+});
+
 test('verify buttons await completion and remain disabled after success',async()=>{
  for(const document of ['INT','FEA','ARD']){
   const response=await GET(new Request(`http://localhost/api/native-agent/2026-033/workspace?document=${document}`,{headers:{'x-ms-client-principal-name':'test@example.com'}}),{params:Promise.resolve({code:'2026-033'})});

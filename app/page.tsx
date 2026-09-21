@@ -7523,7 +7523,7 @@ function UserDashboard({
           </section>
 
           <div className="project-management-row project-management-meta">
-          {hasProjects&&current.source==='database'&&Number(current.journeyStep)>=2&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')&&<ProjectCategoryEditor key={`project-category:${current.no}`} project={current} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
+          {hasProjects&&current.source==='database'&&selectedJourney===2&&Number(current.journeyStep)>=2&&['admin','team_leader'].includes((identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)||'')&&<ProjectCategoryEditor key={`project-category:${current.no}`} project={current} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           {hasProjects&&current.source==='database'&&<HistoricalAdmin key={`historical-admin:${current.no}`} project={current} admin={(identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:identity?.appRole)==='admin'} devRole={identity?.canSwitchRole?ACCOUNT_APP_ROLES[role]:undefined}/>}
           </div>
           <div

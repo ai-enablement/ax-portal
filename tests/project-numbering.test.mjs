@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {draftProjectCode,assignCompletedIntNumber,replaceProjectCode} from '../server/project-numbering.mjs';
+import {draftProjectCode,assignCompletedIntNumber,replaceProjectCode,repairIntDocumentNumber} from '../server/project-numbering.mjs';
 import {isProjectCode,projectCodeLabel} from '../shared/project-code.mjs';
 import {allowedNativePath} from '../server/native-agent.mjs';
 test('draft IDs are unique, non-sequential and accepted by the native INT workspace',()=>{
@@ -12,6 +12,12 @@ test('draft IDs are unique, non-sequential and accepted by the native INT worksp
 test('existing and historical numbers are never reassigned',async()=>{
  const result=await assignCompletedIntNumber({query:()=>{throw Error('must not allocate');}},1,'2026-033',{}, {},1);
  assert.equal(result.code,'2026-033');
+});
+
+test('legacy INT placeholder title is repaired without rewriting content or valid document numbers',()=>{
+ const md='# 에이전트 요구 접수서 (2026-000-INT)\n\n예시 2026-000-INT\n# 에이전트 요구 접수서 (2026-033-INT)';
+ assert.equal(repairIntDocumentNumber(md,'2026-046'),md.replace('(2026-000-INT)','(2026-046-INT)'));
+ assert.equal(repairIntDocumentNumber(md,draftProjectCode()),md);
 });
 test('completion allocates once and renames document and session references',async()=>{
  const code=draftProjectCode(),calls=[];
