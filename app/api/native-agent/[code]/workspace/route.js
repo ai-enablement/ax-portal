@@ -16,6 +16,11 @@ export async function GET(request,context){
  var portalFetch=window.fetch.bind(window), portalQueue=Promise.resolve();
  var portalReadOnly=false;
  function portalKst(value){var date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',hour12:false})+' KST':value;}
+ function offerPortalCompletion(result){
+  if(!result.portalCompleted)return;
+  portalReadOnly=true;enforceReadOnly();
+  window.parent.postMessage({type:'native-agent-completed',project:PORTAL_CODE,projectCode:result.projectCode||PORTAL_CODE},location.origin);
+ }
  window.addEventListener('DOMContentLoaded',function(){
   var root=document.querySelector('.app'),queued=false,lastHeight=0;
   function addFolds(){
@@ -52,6 +57,7 @@ export async function GET(request,context){
    return portalFetch(endpoint,method==='GET'?{headers:headers}:{method:'POST',headers:Object.assign(headers,{'Content-Type':'application/json'}),body:JSON.stringify({document:PORTAL_DOC,path:url,method:method,data:JSON.parse(opts.body||'{}'),revision:PORTAL_REVISION})}).then(function(r){
     if(r.headers.has('x-agent-revision'))PORTAL_REVISION=Number(r.headers.get('x-agent-revision'));
     if(r.ok){portalReadOnly=r.headers.get('x-agent-can-edit')==='false';enforceReadOnly();window.parent.postMessage({type:'native-agent-saved',project:PORTAL_CODE,revision:PORTAL_REVISION},location.origin);}
+    if(r.ok&&url==='/portal/finish')return r.clone().json().then(function(data){offerPortalCompletion(data);return r;});
     return r;
    });};
   var pending=portalQueue.then(run);portalQueue=pending.then(function(){},function(){});return pending;
@@ -79,17 +85,12 @@ export async function GET(request,context){
  html=html.replace("var no = $('#ardPick').value;","var no = PORTAL_CODE;");
  html=html.replace("goTab(p.fea_form && Object.keys(p.fea_form).length ? 'fea' : 'intake');","goTab({INT:'intake',FEA:'fea',ARD:'ard'}[PORTAL_DOC]);");
  html=html.replace('boot().then(function(){ loadDocs(); });','boot().then(function(){ openProject(PORTAL_CODE); });');
- // The explicit verify button awaits validation, generation, persistence and
- // completion as one request. No second confirmation or detached promise.
- for(const stage of ['intake','fea','ard'])html=html.replaceAll("post('/api/"+stage+"/verify',", "post('/portal/verify-complete',");
- html=html.replaceAll('toast(r.done ?', 'offerPortalCompletion(r); toast(r.done ?');
- for(const id of ['btnVerify','btnFeaVerify','btnArdVerify'])html=html.replaceAll("$('#"+id+"').disabled = false;", "$('#"+id+"').disabled = portalReadOnly;");
- html=html.replace('  /* ═══════════════ 검증 (좌 → 우) ═══════════════ */', `
-  function offerPortalCompletion(result){
-    if(!result.portalCompleted)return;
-    portalReadOnly=true;enforceReadOnly();
-    window.parent.postMessage({type:'native-agent-completed',project:PORTAL_CODE,projectCode:result.projectCode||PORTAL_CODE},location.origin);
-  }
-  /* ═══════════════ 검증 (좌 → 우) ═══════════════ */`);
+ // Interview/repeat only collect information. Explicit completion cards persist
+ // the final document and advance through the portal's own permission checks.
+ for(const operation of ['/api/intake/finalize','/api/fea/complete','/api/ard/generate'])html=html.replaceAll("post('"+operation+"',", "post('/portal/finish',");
+ for(const id of ['btnVerify','btnFeaVerify','btnArdVerify','btnIntComplete','btnArdComplete','btnSend','btnFeaSend','btnArdSend'])html=html.replaceAll("$('#"+id+"').disabled = false;", "$('#"+id+"').disabled = portalReadOnly;");
+ html=html.replaceAll('b.disabled = false;', 'b.disabled = portalReadOnly;');
+ html=html.replace("var card = box.closest('.card');", "var card = box.closest('.card');if(card){card.querySelectorAll('.portal-folded > h4 [data-portal-fold]').forEach(function(b){b.click();});if(card.classList.contains('portal-folded'))card.querySelector('.card-head [data-portal-fold]').click();}");
+ html=html.replaceAll('3자 서명(7번)은 G2 에서 사람이 합니다.','요구자·Project Owner는 요구 정의 화면에서 승인하고, 팀장은 G2에서 개발 착수를 승인합니다.');
  return new Response(html,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'private, no-store','content-security-policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'"}});
 }

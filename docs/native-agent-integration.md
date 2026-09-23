@@ -1,8 +1,9 @@
 # Original INT / FEA / ARD integration
 
-Source: https://github.com/torebang/intake-feasibility-agent at e4d1e180fa30fe25c5ae77bb9b7123e1bd6f9a30 (snapshot imported 2026-09-10).
+Source: https://github.com/torebang/intake-feasibility-agent at 140584cd21a961bdb5e85533384e7ad88575d55c (upstream update integrated 2026-09-23; prior snapshot e4d1e180fa30fe25c5ae77bb9b7123e1bd6f9a30).
 The Python app, rules and HTML are retained under `server/vendor/intake-agent`.
-Only standalone filesystem directory creation is disabled in embedded mode.
+Portal overrides disable standalone filesystem directory creation in embedded mode,
+retain draft project IDs, use exact assigned document numbers, and display KST dates.
 `portal_bridge.py` replaces filesystem persistence, identity and Azure HTTP transport (portal v1 endpoint), not interviews, prompts or document renderers.
 
 ## Runtime prerequisites
@@ -24,7 +25,11 @@ The build uses Webpack: verified standalone tracing includes the vendor engine w
 - INT, FEA and ARD screens are bound to the currently selected project and document stage.
 - Session/form/chat snapshots are project-scoped JSONB; generated Markdown is immutable text with SHA-256, version, author and timestamp.
 - Optimistic revisions reject overlapping writes. LLM execution occurs outside database transactions.
-- Original document generation does not grant approvals. Explicit completion checks original readiness, then reaches FEA/G1/G2 respectively. Existing G1/G2 approver checks remain separate.
+- Interview/verify/repeat actions never complete portal stages. The upstream completion cards call `/portal/finish`, which awaits document generation and then the existing readiness/revision checks in `/portal/complete`.
+- Explicit completion reaches FEA, G1, or ARD requester/Owner approval respectively. ARD party approvals still precede team-leader G2 approval; generation never grants approval.
+- FEA Go/Conditional Go/Drop is the document author's assessment, not a G1 vote. Only team leader/Admin may write FEA/ARD; existing gate role checks remain separate. The upstream FEA form now has five sections; approval metadata remains portal-managed.
+- Upstream `finished` may mean interview retry limits were reached. It does not bypass portal required-field checks or mark an incomplete document complete (except the existing authorized historical-backfill policy).
+- Existing JSONB sessions remain compatible; new retry/completion fields are optional. No schema migration or rewrite of saved final versions is required.
 - Fast Track INT completion does not skip ARD-Lite/GF.
 - Old structured documents are not removed. Initial INT/FEA and matching ARD values are seeded from existing portal fields; nonmatching old fields remain in the original records.
 - Historical backfill keeps its original completion boundary, accepts missing fields and never moves an already completed stage backwards.

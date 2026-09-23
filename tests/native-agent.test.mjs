@@ -27,6 +27,11 @@ test('INT/FEA/ARD author roles and historical boundary retain portal permissions
 test('native adapter restricts project, document and administrative routes',()=>{
  assert.equal(allowedNativePath('/api/fea/draft','POST','2026-033','FEA'),true);
  assert.equal(allowedNativePath('/api/ard/draft','POST','2026-033','FEA'),false);
+ for(const [doc,stage] of [['INT','intake'],['FEA','fea'],['ARD','ard']]){
+  assert.equal(allowedNativePath(`/api/${stage}/repeat`,'POST','2026-033',doc),true);
+  assert.equal(allowedNativePath('/portal/finish','POST','2026-033',doc),true);
+ }
+ assert.equal(allowedNativePath('/api/fea/complete','POST','2026-033','INT'),false);
  assert.equal(allowedNativePath('/api/projects/2026-044','GET','2026-033','INT'),false);
  for(const p of ['/api/settings','/api/projects','/api/projects/2026-033/restore'])assert.equal(allowedNativePath(p,'POST','2026-033','INT'),false);
  assert.equal(allowedNativePath('/api/projects/2026-033','DELETE','2026-033','INT'),false);
@@ -47,10 +52,30 @@ test('original Python engine bootstrap, INT generation, FEA and ARD retain sourc
  let project={project_no:'2099-001',agent_name:'Integration test',history:[],int_data:{project_no:'2099-001',requester_name:'Test',requester_dept:'QA',problem:'회의실 예약 가능 시간을 여러 일정표에서 대조합니다.',who:'팀 일정 담당자',as_is:'일정표를 열어 빈 시간을 확인합니다.',risk:'일정이 중복되어 회의가 지연됩니다.',when:'다음 달',frequency:'20',minutes:'10',people:'1'}};
  const env={...process.env,AZURE_OPENAI_API_KEY:'',AZURE_OPENAI_ENDPOINT:'',AZURE_OPENAI_DEPLOYMENT:''};
  const call=async(path,body={})=>{const r=await runNativeAgent({project,path,body,method:path==='/api/bootstrap'?'GET':'POST',actor:'Test'}, {env});assert.equal(r.status,200,JSON.stringify(r.body));project=r.project;return r.body;};
- const b=await call('/api/bootstrap');assert.equal(b.form.length,5);assert.equal(b.fea_form.length,6);assert.equal(b.ard_form.length,7);
+ const b=await call('/api/bootstrap');assert.equal(b.form.length,5);assert.equal(b.fea_form.length,5);assert.equal(b.ard_form.length,7);
  const int=await call('/api/intake/finalize');assert.match(int.markdown,/2099-001-INT/);
  const fea=await call('/api/fea/draft');assert.ok(fea.form);assert.ok(project.fea_form);
  await call('/api/fea/generate',{form:{...project.fea_form,summary:'회의실 일정 확인 자동화',alt_process:'규정 변경만으로 일정 대조를 해결할 수 없습니다.',alt_system:'기존 시스템에는 통합 조회가 없습니다.',alt_macro:'여러 일정 시스템을 연결해야 합니다.',alt_llm:'실시간 일정 조회가 필요합니다.',alt_conclusion:'일정 통합 조회가 필요합니다.',roi_saving:'일정 조회 시간 단축',write_exec:false,sensitive:false,scope:'팀',damage_financial:false,autonomy:'L1',needs_judgment:true,has_rule_flow:true,damage_desc:'회의 일정 지연'}});
  const ard=await call('/api/ard/draft');assert.ok(ard.form);assert.ok(project.ard_form);
  const doc=await call('/api/ard/generate');assert.match(doc.markdown,/2099-001-ARD/);
+ const selected=await call('/api/fea/complete',{decision:'Drop',form:project.fea_form});
+ assert.equal(selected.decision,'Drop');assert.equal(project.fea_form.decision,'Drop');
+ assert.equal(project.workflowApprovals,undefined);assert.equal(project.g1Resolution,undefined);
+ const invalid=await runNativeAgent({project,path:'/api/fea/complete',body:{decision:'APPROVED'},method:'POST',actor:'Test'},{env});
+ assert.equal(invalid.status,400);
+});
+
+test('updated interview repeat preserves existing content and finished cannot bypass portal readiness',{skip:!process.env.PORTAL_AGENT_PYTHON},async()=>{
+ const env={...process.env,AZURE_OPENAI_API_KEY:'',AZURE_OPENAI_ENDPOINT:'',AZURE_OPENAI_DEPLOYMENT:''};
+ let project={project_no:'DRAFT-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',agent_name:'Repeat compatibility',history:[],int_data:{requester_name:'QA',problem:'기존에 저장한 업무 문제'},fea_form:{summary:'기존 요약'},ard_form:{one_line:'기존 정의'}};
+ for(const [kind,stage,field,key] of [['INT','intake','int_data','problem'],['FEA','fea','fea_form','summary'],['ARD','ard','ard_form','one_line']]){
+  const before=project[field][key];
+  const repeated=await runNativeAgent({project,path:`/api/${stage}/repeat`,body:{form:project[field]},method:'POST',actor:'Test'},{env});
+  assert.equal(repeated.status,200);project=repeated.project;
+  assert.equal(project[field][key],before);assert.equal(project.project_no,'DRAFT-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+  const completed=await runNativeAgent({project:{...project,int_done:true,fea_done:true,ard_done:true},path:'/portal/complete',body:{document:kind},method:'POST',actor:'Test'},{env});
+  assert.equal(completed.status,400,`${kind} must retain portal required-field checks`);
+ }
+ const generated=await runNativeAgent({project,path:'/api/intake/finalize',body:{},method:'POST',actor:'Test'},{env});
+ assert.equal(generated.status,200);assert.match(generated.body.markdown,/DRAFT-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-INT/);
 });

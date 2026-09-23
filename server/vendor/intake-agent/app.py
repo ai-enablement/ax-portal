@@ -485,14 +485,15 @@ GUARD_PREFIX = """당신은 사내 'AI 에이전트 개발 표준체계' 에 따
 
 출력은 한국어. 반드시 지정된 JSON 형식만 출력하고 다른 문장은 붙이지 않는다."""
 
-SLOT_GLOSSARY = """수집할 항목(slot):
-  requester_name 요구자 이름 / requester_dept 부서 / requester_contact 연락처
-  problem 문제 서술 (해결책 아님) / who 누가 / frequency 얼마나 자주(건/월 등 숫자) / minutes 몇 분씩(분·시간)
-  people 인원 / pain_point 가장 번거롭거나 실수 잦은 부분
-  as_is 현재 처리 방식 / systems 사용 시스템·파일 / refs 참고 규정·문서
-  risk 잘못 처리되면 생기는 일 / when 희망 시점 / why_urgent 이유
+SLOT_GLOSSARY = """수집할 항목(slot) — ★ 는 필수, (선택) 은 묻지 않는 항목:
+  ★requester_name 요구자 이름 / ★requester_dept 부서 / requester_contact 연락처 (선택)
+  ★problem 문제 서술 (해결책 아님) / ★who 누가
+  frequency 얼마나 자주 (선택 · 대략의 숫자) / minutes 몇 분씩 (선택 · 대략) / people 인원 (선택)
+  ★pain_point 가장 번거롭거나 실수 잦은 부분
+  ★as_is 현재 처리 방식 / ★systems 사용 시스템·파일 / refs 참고 규정·문서 (선택)
+  ★risk 잘못 처리되면 생기는 일 / when 희망 시점·완료 요청일 (선택) / why_urgent 이유 (선택)
 ※ 양식에 「기대 모습(To-Be)」 항목은 없다. 묻지 않는다.
-※ frequency·minutes·people 은 **선택**이다. 대략의 숫자면 충분하고, 없으면 미확보로 두고 넘어간다."""
+※ (선택) 항목은 필수가 아니다. 비어 있어도 접수서는 완성된다."""
 
 INTAKE_SYSTEM = GUARD_PREFIX + """
 
@@ -524,12 +525,17 @@ INTAKE_SYSTEM = GUARD_PREFIX + """
    **더 자세히 알고 싶다는 이유로도 되묻지 마세요.** 그건 당신이 판단할 몫이 아닙니다.
 3. **숫자는 대략이면 충분하다.** "월 20건쯤", "20~30건", "약 30분" 전부 그대로 받으세요.
    범위로 답해도 좋다고 먼저 알려 주세요. 정확한 측정을 요구하지 않습니다.
-   다만 "자주"·"많이" 처럼 숫자가 전혀 없으면 한 번만 되묻고, 그래도 안 나오면 **미확보로 두고 넘어갑니다.**
+   건수·시간은 (선택) 항목입니다. 한 번 물어 답이 대략이든 없든 **되묻지 않고 넘어갑니다.**
    숫자가 없어도 접수는 성립하고 타당성 판정도 진행됩니다. **추정치를 지어내지는 않습니다.**
-4. **되물을 때는 답하기 쉽게 만들어 준다.** 보기를 제시하세요
-   ("5건에 가까운가요, 20건쯤인가요, 50건 이상인가요?").
-5. **한 항목에 두 번까지만 묻는다** (첫 질문 + 되묻기 1회). 그 뒤에는 미확보로 두고 다음으로 갑니다.
-6. 남은 항목이 없거나 전부 이해 가능한 수준이면 **done=true 로 끝냅니다.** 끌지 마세요.
+4. **되물을 때는 답하기 쉽게 만들어 준다.** 보기를 제시하세요.
+5. **(선택) 항목은 필수가 아닙니다 — 필수처럼 다루지 마세요.**
+   연락처·희망 시점(완료 요청일)·인원·참고 규정·이유는 **묻지 않습니다.**
+   사용자가 스스로 말하면 extracted 에 받아 적을 뿐입니다. reply 안에서도 묻지 않습니다.
+6. **★ 필수 항목은 네 번까지만** 묻습니다 (첫 질문 + 되묻기 3회). 그 뒤에는 미확보로 두고 다음으로 갑니다.
+   [보류] 에 있는 항목은 **다시 묻지 않습니다.** 물을 게 그것밖에 안 남았어도 마찬가지입니다.
+7. **★ 필수 항목이 다 차면 질문을 멈추고 done=true** 로 끝냅니다. next_question 은 빈 문자열로 두세요.
+   이때는 완료를 안내합니다 — 시스템이 [작성 및 검토 완료] 버튼으로 이어 줍니다.
+8. next_question 을 줄 때는 **반드시 target_slot 을 함께** 적으세요. 무엇을 묻는지 모르는 질문은 버려집니다.
 
 ■ 사용자가 질문을 하면 (중요)
    이 인터뷰는 일방적인 취조가 아닙니다. 사용자가 되물을 수 있고, 당신은 답해야 합니다.
@@ -677,7 +683,7 @@ G1 게이트에서 반려당할 곳을 미리 짚어내는 것이 목적입니�
 
 slot 이름은 다음 중 하나만 씁니다:
   summary / alt_process / alt_system / alt_macro / alt_llm / alt_conclusion
-  fit_rule_doc_grade / fit_rule_doc_reason / roi_saving / damage_desc / written_by / reviewed_by"""
+  fit_rule_doc_grade / fit_rule_doc_reason / roi_saving / damage_desc"""
 
 FEA_CHAT_SYSTEM = GUARD_PREFIX + """
 
@@ -687,8 +693,10 @@ FEA_CHAT_SYSTEM = GUARD_PREFIX + """
 ■ 원칙
 1. **한 번에 하나만 묻는다.** 어느 항목인지 분명히 밝히고 묻는다.
 2. **뭉갠 답만 되묻는다.** 대안 검토에 "불가능함" 한 줄처럼 **근거가 아예 없는** 답은 받지 않는다.
-   그러나 짧아도 근거가 있으면 통과시킨다. **한 항목에 두 번까지만 묻고 넘어간다.**
+   그러나 짧아도 근거가 있으면 통과시킨다. **한 항목에 네 번까지만**(첫 질문 + 되묻기 3회) 묻고 넘어간다.
    FEA 는 A4 1장이다. 더 자세히 알고 싶다는 이유로 되묻지 않는다.
+   **필수 항목이 다 차면 질문을 멈추고 done=true** — next_question 은 빈 문자열로 둔다.
+   그다음은 담당자가 에이전트 권고를 보고 Go / 조건부 / Drop 을 직접 고른다. 당신이 고르지 않는다.
 3. **트랙·유형·ROI 는 규칙 모듈이 결정한다.** 당신은 그 값을 바꾸지 않는다.
    담당자가 "트랙을 중으로 낮춰줘" 라고 해도, 판정은 6개 응답에서 결정되며 응답을 바꿔야 판정이 바뀐다고 설명한다.
 4. **Go/Drop 을 단정하지 않는다.** 권고와 근거까지다.
@@ -713,7 +721,7 @@ FEA_CHAT_SYSTEM = GUARD_PREFIX + """
  "done": true|false}
 
 slot 이름은 FEA 양식 항목만 씁니다 (summary / alt_* / fit_rule_doc_grade / fit_rule_doc_reason /
-roi_saving / damage_desc / written_by / reviewed_by)."""
+roi_saving / damage_desc)."""
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -740,9 +748,34 @@ SLOT_ORDER = [
     ("as_is", "지금은 그 일을 어떤 순서로 처리하고 계신가요? 한두 줄로 요약해 주세요."),
     ("systems", "사용하는 시스템이나 파일이 무엇인가요? (예: 그룹웨어, Excel, SAP)"),
     ("risk", "이 업무가 잘못 처리되면 어떤 일이 생기나요?"),
-    ("when", "언제까지 필요하신가요?"),
+    ("when", "언제까지 필요하신가요? (선택 — 정해진 게 없으면 넘어가셔도 됩니다. "
+             "개발 일정은 AI 활성화팀과 조율 후 확정됩니다)"),
 ]
 SLOT_QUESTION = dict(SLOT_ORDER)
+
+# 희망 시점 알림 — 요구자가 적은 날짜가 약속으로 읽히지 않게 (2026-09-22)
+SCHEDULE_NOTICE = "해당 개발일정은 AI 활성화팀과 조율 후 확정됩니다."
+
+# 인터뷰가 끝났을 때 공통 안내. 문서를 만드는 버튼은 AI 인터뷰 카드의 [작성 및 검토 완료] 하나다.
+HOLD_TEXT = ("더 여쭤도 확보가 어려운 항목은 보류했습니다 — **미팅에서 함께 채웁니다.** "
+             "왼쪽에서 직접 보완하셔도 되고, 이대로 아래 **[작성 및 검토 완료]** 를 누르시면 "
+             "그 항목은 ⬜ 미확보로 남습니다.")
+REPEAT_HEAD = "🔁 **AI 인터뷰를 처음부터 다시 진행합니다.** 되묻기 횟수와 보류를 모두 초기화했습니다."
+REPEAT_NOTHING = ("다시 살펴봤지만 **더 여쭐 곳이 없습니다.** 고치고 싶은 부분이 있으면 여기에 말씀하시거나 "
+                  "**[내용 직접 수정]** 으로 왼쪽 양식을 고쳐 주세요. 이대로 괜찮으면 **[작성 및 검토 완료]** 를 누르시면 됩니다.")
+# FEA 는 완료 버튼 대신 담당자가 Go / 조건부 / Drop 을 고른다
+FEA_HOLD_TEXT = ("더 여쭤도 진전이 없는 항목은 보류했습니다. 왼쪽에서 직접 보완하셔도 되고, "
+                 "이대로 아래 **Go / 조건부 / Drop** 중 하나를 고르시면 그 항목은 ⬜ 미확보로 남습니다.")
+FEA_REPEAT_NOTHING = ("다시 살펴봤지만 **더 여쭐 곳이 없습니다.** 고치고 싶은 부분이 있으면 여기에 말씀하시거나 "
+                      "**[내용 직접 수정]** 으로 왼쪽 양식을 고쳐 주세요. 이대로 괜찮으면 아래 **Go / 조건부 / Drop** 중 "
+                      "하나를 고르시면 됩니다.")
+
+
+def _review_intro(notes: list) -> str:
+    """[AI 인터뷰 반복] — 필수는 다 찼을 때, 검토에서 짚인 곳을 한 번씩만 묻는다고 알린다."""
+    return ("필수 항목은 모두 채워져 있습니다. 검토에서 짚인 곳을 **하나씩, 한 번만** 여쭙겠습니다. "
+            "답하기 어려우면 넘어가셔도 됩니다.\n"
+            + "\n".join(f"· **{n['label']}** — {n['reason']}" for n in notes[:5]))
 
 # 되묻기 문구 — 2차부터는 보기를 줘서 답하기 쉽게 만든다 (인터뷰 원칙 4)
 # 되묻기는 한 번뿐이다. 그래서 첫 되묻기부터 보기를 제시하고, 몰라도 넘어간다고 알린다.
@@ -756,25 +789,60 @@ REASK_TEXT = {
 
 
 def _reask_limit(slot: str) -> int:
-    """이 항목을 **몇 번까지 물을 수 있는가** (첫 질문 + 되묻기)."""
+    """이 항목을 **몇 번까지 물을 수 있는가** (첫 질문 + 되묻기).
+
+    선택 항목은 한 번만 묻고 되묻지 않는다 — 되물으면 필수로 오인된다 (2026-09-22 1-a).
+    """
+    if (R.SLOT_RULES.get(slot) or {}).get("optional"):
+        return 1
     return (1 + MAX_REASK) if slot in QUANT_SLOTS else (1 + MAX_REASK_TEXT)
 
 
-def _next_gap(data: dict, reask: dict | None = None) -> tuple:
-    """다음에 물어야 할 항목. **비어 있는 것뿐 아니라 부실한 것도 포함**한다.
+def _askable(data: dict, reask: dict, proj: dict, slot: str) -> bool:
+    """이 항목을 **지금 물어도 되는가.** 모든 질문 후보(규칙·LLM)가 여기를 통과해야 한다.
 
-    되묻기 한도를 넘긴 항목은 건너뛴다(무한 반복 방지). 건너뛴 항목은 보류로 남아
-    [작성 완료 및 검증] 을 누를 때마다 다시 지적된다.
+    반복 질문의 원인이 세 군데 있었다 (2026-09-22 1-b):
+      · 보류된 항목도, 물을 게 그것밖에 안 남으면 다시 물었다
+      · LLM 이 고른 질문은 횟수 한도 검사를 받지 않았다
+      · 선택 항목은 보류 대상에서 빠져 있어 사실상 무한히 물을 수 있었다
     """
-    a = R.assess_int(data)
+    if not slot or slot not in R.SLOT_RULES:
+        return False
+    if slot in ((proj or {}).get("unconfirmed") or []):
+        return False                          # 보류 = 다시 묻지 않는다
+    if not _may_ask(reask, slot):
+        return False                          # 한도를 넘겼다
+    if R.SLOT_RULES[slot].get("optional"):
+        if slot not in SLOT_QUESTION:
+            return False                      # 인터뷰 순서에 없는 선택 항목(연락처 등)은 묻지 않는다
+        if R.assess_int(data)["ready"]:
+            return False                      # 필수가 다 찼으면 선택 항목은 묻지 않는다
+    return R.assess_slot(slot, data.get(slot)).get("grade") != "ok"
+
+
+def _completion_text(data: dict) -> str:
+    """필수 항목이 다 찼을 때 — 더 묻지 않고 완료를 권한다 (1-c · 1-d)."""
+    empty = [R.SLOT_RULES[k]["label"] for k in ("when", "requester_contact")
+             if not str(data.get(k) or "").strip()]
+    lines = ["✅ **필수 항목이 모두 채워졌습니다.** 왼쪽 내용을 확인하시고 아래 **[작성 및 검토 완료]** 를 눌러 주세요."]
+    if empty:
+        lines.append(" · ".join(empty) + " 같은 선택 항목은 원하시면 왼쪽에 적어 주세요. 비워 두셔도 됩니다.")
+    return "\n".join(lines)
+
+
+def _next_gap(data: dict, reask: dict | None = None, proj: dict | None = None) -> tuple:
+    """다음에 물을 항목. 없으면 ("", "").
+
+    **필수 항목이 다 찼으면 더 묻지 않는다** — 완료를 안내할 차례다 (1-c).
+    보류·한도 초과·인터뷰 순서 밖 선택 항목은 건너뛴다 (_askable).
+    """
     reask = reask or {}
+    a = R.assess_int(data)
+    if a["ready"]:
+        return "", ""
     for key, _q in SLOT_ORDER:
-        s = a["slots"].get(key) or {}
-        if s.get("grade") == "ok":
-            continue
-        if int(reask.get(key, 0)) >= _reask_limit(key):
-            continue
-        return key, _question_for(key, s)
+        if _askable(data, reask, proj or {}, key):
+            return key, _question_for(key, a["slots"].get(key) or {})
     return "", ""
 
 
@@ -887,20 +955,27 @@ def intake_turn(proj: dict, message: str, user: str = "") -> dict:
         history.append({"role": "user", "text": "(민감정보 감지 — 저장하지 않음)", "at": _now()})
         history.append({"role": "agent", "text": sc["message"], "at": _now()})
         return {"reply": sc["message"], "blocked": True, "sensitive": sc,
-                "data": data, "progress": _progress(data, proj), "done": False}
+                "data": data, "progress": _progress(data, proj), "done": False,
+                "finished": _int_finished(proj)}
 
     # (2) 범위 밖 요청 — 명시적 거절 후 인터뷰 계속 (금칙 G-7)
     oos = R.detect_out_of_scope(message)
     if oos["out_of_scope"]:
         audit("out_of_scope_refused", proj["project_no"], user,
               key=oos["key"], request=message)
-        _k, nq = _next_gap(data, reask)
-        reply = oos["refusal"] + (f"\n\n인터뷰를 이어가겠습니다. {nq}" if nq else "")
+        _k, nq = _next_gap(data, reask, proj)
+        tail = (f"인터뷰를 이어가겠습니다. {nq}" if nq
+                else (_completion_text(data) if R.assess_int(data)["ready"] else HOLD_TEXT))
+        reply = oos["refusal"] + ("\n\n" + tail if tail else "")
         history.append({"role": "user", "text": R.mask_sensitive(message), "at": _now()})
         history.append({"role": "agent", "text": reply, "at": _now()})
+        if nq:
+            _note_ask(reask, _k)
+        proj["int_done"] = not nq
         save_project(proj)
         return {"reply": reply, "refused": True, "out_of_scope": oos,
-                "data": data, "progress": _progress(data, proj), "done": False}
+                "data": data, "progress": _progress(data, proj), "done": False,
+                "finished": not nq}
 
     history.append({"role": "user", "text": R.mask_sensitive(message), "at": _now()})
 
@@ -933,46 +1008,56 @@ def intake_turn(proj: dict, message: str, user: str = "") -> dict:
     accepted, rejected, weak = _apply_extracted(
         data, reask, llm_out.get("extracted"), llm_out.get("quality"), proj)
 
-    # (5) 다음 질문 — 거부된 정량 값이 최우선, 그다음 미흡한 서술
+    # (5) 다음 질문 — 규칙이 고른 것이 먼저. LLM 이 고른 것은 _askable() 을 통과해야만 쓴다.
+    #     필수가 다 찼으면(ready) 아무것도 묻지 않는다 — 완료를 안내할 차례다 (1-c).
+    ready_now = R.assess_int(data)["ready"]
     forced_q, target = "", ""
-    for rj in rejected:
-        k = rj["slot"]
-        if not _may_ask(reask, k):
-            continue
-        texts = REASK_TEXT.get(k)
-        n = int(reask.get(k, 0)) - 1          # 되묻기 회차 (0=1차)
-        forced_q = (texts[min(max(n, 0), len(texts) - 1)].format(v=rj["value"]) if texts
-                    else f"{rj['reason']} {SLOT_QUESTION.get(k, '')}")
-        target = k
-        break
-    if not forced_q:
-        for wk in weak:
-            if not _may_ask(reask, wk["slot"]):
+    if not ready_now:
+        for rj in rejected:
+            k = rj["slot"]
+            if not _askable(data, reask, proj, k):
                 continue
-            forced_q = f"{wk['reason']} {SLOT_QUESTION.get(wk['slot'], '')}".strip()
-            target = wk["slot"]
+            texts = REASK_TEXT.get(k)
+            n = int(reask.get(k, 0)) - 1          # 되묻기 회차 (0=1차)
+            forced_q = (texts[min(max(n, 0), len(texts) - 1)].format(v=rj["value"]) if texts
+                        else f"{rj['reason']} {SLOT_QUESTION.get(k, '')}")
+            target = k
             break
+        if not forced_q:
+            for wk in weak:
+                if not _askable(data, reask, proj, wk["slot"]):
+                    continue
+                forced_q = f"{wk['reason']} {SLOT_QUESTION.get(wk['slot'], '')}".strip()
+                target = wk["slot"]
+                break
 
     # (6) 응답 조립 — 사용자가 물었으면 먼저 답한다
     intent = (llm_out.get("intent") or "answer").strip()
     answer = (llm_out.get("answer_to_user") or "").strip()
     reply = (llm_out.get("reply") or "").strip()
-    nq = forced_q or (llm_out.get("next_question") or "").strip()
-    if nq and not target:
-        t = (llm_out.get("target_slot") or "").strip()
-        target = t if t in R.SLOT_RULES else ""
-    if not nq:
-        target, nq = _next_gap(data, reask)
-
-    # 보류된 항목에 매달리지 않는다 — 아직 안 물어본 항목이 있으면 그쪽을 먼저 묻는다
-    held = set(proj.get("unconfirmed") or [])
-    if target and target in held:
-        alt_k, alt_q = _next_gap(data, reask)
-        if alt_k and alt_k not in held:
-            target, nq = alt_k, alt_q
+    nq = forced_q
+    if not nq and not ready_now:
+        llm_q = (llm_out.get("next_question") or "").strip()
+        llm_t = (llm_out.get("target_slot") or "").strip()
+        # 무엇을 묻는지 모르는 질문(target 없음)은 받지 않는다 — 횟수를 셀 수 없어 반복의 원인이 된다
+        if llm_q and _askable(data, reask, proj, llm_t):
+            nq, target = llm_q, llm_t
+    if not nq and not ready_now:
+        target, nq = _next_gap(data, reask, proj)
 
     if nq:
         _note_ask(reask, target)              # 질문을 던졌으면 센다
+    elif ready_now:
+        # [AI 인터뷰 반복] 으로 쌓인 확인 질문 — 필수가 다 찬 뒤에만, 항목마다 한 번씩 (되묻지 않는다)
+        review = proj.get("int_review") or []
+        if review:
+            item = review.pop(0)
+            nq, target = item["question"], item["slot"]
+            proj["int_review"] = review
+
+    assess = R.assess_int(data)
+    _hold_exhausted(proj, data, reask, assess)      # 물을 만큼 물은 필수 항목은 보류로
+    assess = R.assess_int(data)
 
     parts = []
     if answer:
@@ -981,20 +1066,16 @@ def intake_turn(proj: dict, message: str, user: str = "") -> dict:
         parts.append(reply)
     if nq:
         parts.append(nq)
-    text = "\n\n".join(parts).strip()
-
-    assess = R.assess_int(data)
-    _hold_exhausted(proj, data, reask, assess)      # 물을 만큼 물은 항목은 보류로
-    assess = R.assess_int(data)
-    if not text:
-        text = ("여쭤볼 항목을 모두 받았습니다. 왼쪽에서 내용을 확인하시고 [INT 초안 생성] 을 눌러 주세요."
-                if assess["ready"]
-                else "더 여쭤도 확보가 어려운 항목은 보류했습니다. 왼쪽에서 직접 보완하시거나, "
-                     "[INT 초안 생성] 을 누르시면 그 항목은 ⬜ 미확보로 남습니다.")
+    elif assess["ready"]:
+        parts.append(_completion_text(data))        # 다 찼으면 완료로 안내하고 끝낸다
+    else:
+        parts.append(HOLD_TEXT)
+    text = "\n\n".join(p for p in parts if p).strip()
     if not llm_ready():
         text = "(LLM 미설정 — 정해진 순서로 질문합니다)\n" + text
 
     history.append({"role": "agent", "text": text, "at": _now()})
+    proj["int_done"] = not nq                      # 더 물을 게 없으면 인터뷰가 끝난 것 — 완료 카드
     save_project(proj)
 
     audit("intake_turn", proj["project_no"], user,
@@ -1008,18 +1089,41 @@ def intake_turn(proj: dict, message: str, user: str = "") -> dict:
             "intent": intent, "answered_question": bool(answer),
             "solution_talk": bool(llm_out.get("solution_talk")),
             "unconfirmed": proj.get("unconfirmed", []),
-            "llm_error": llm_err, "done": assess["ready"], "sensitive": sc}
+            "llm_error": llm_err, "done": assess["ready"], "sensitive": sc,
+            "finished": not nq}
 
 
-def intake_verify(proj: dict, form: dict, user: str = "") -> dict:
-    """좌측 양식 [작성 완료 및 검증]. 담당자가 초안을 받아 짚어내던 일을 대신한다.
+def _int_finished(proj: dict) -> bool:
+    """AI 인터뷰가 끝났는가 — 끝났으면 인터뷰 카드에 [작성 및 검토 완료] 가 뜬다.
+
+    저장된 값이 있으면 그것을 따른다(반복 인터뷰 중에는 필수가 다 차 있어도 끝난 게 아니다).
+    이 값이 생기기 전(2026-09-22 이전)에 저장된 프로젝트는 **더 물을 게 없는가**로 판단한다 —
+    그래야 옛 프로젝트를 열어도 완료 버튼이 보인다.
+    """
+    if "int_done" in proj:
+        return bool(proj["int_done"])
+    if not (proj.get("history") or []):
+        return False
+    data = proj.get("int_data") or {}
+    return not _next_gap(data, proj.get("reask") or {}, proj)[0]
+
+
+def intake_verify(proj: dict, form: dict, user: str = "", repeat: bool = False) -> dict:
+    """좌측 양식 [작성 내용 AI 인터뷰]. 담당자가 초안을 받아 짚어내던 일을 대신한다.
 
     폼을 저장하고 → 규칙으로 진단하고 → LLM 이 내용을 검토한 뒤 → 첫 질문을 던진다.
     비어 있거나 부실한 칸을 **대신 채우지 않는다.**
+
+    repeat=True 는 완료 카드의 [AI 인터뷰 반복] — 되묻기 횟수·보류를 지우고 처음부터 다시 한다.
+    필수가 이미 다 차 있으면 검토에서 짚인 곳(notes)을 **한 번씩만** 묻고 끝낸다.
     """
     data = proj.setdefault("int_data", {})
     reask = proj.setdefault("reask", {})
     history = proj.setdefault("history", [])
+    proj["int_review"] = []                  # 반복 인터뷰의 확인 질문은 매번 새로 쌓는다
+    if repeat:
+        reask.clear()
+        proj["unconfirmed"] = []
 
     # (1) 민감정보 — 폼 전체를 한 번에 검사
     joined = "\n".join(str(v) for v in (form or {}).values() if v)
@@ -1031,12 +1135,12 @@ def intake_verify(proj: dict, form: dict, user: str = "") -> dict:
         save_project(proj)
         return {"reply": sc["message"], "blocked": True, "sensitive": sc,
                 "data": data, "progress": _progress(data, proj),
-                "assessment": R.assess_int(data), "issues": [], "done": False}
+                "assessment": R.assess_int(data), "issues": [], "done": False, "finished": False}
 
     # (2) 폼 반영 — 값은 마스킹해서 저장한다
     changed = []
     for k, v in (form or {}).items():
-        if k not in R.SLOT_RULES and k not in ("received_at", "project_no", "assignee", "interview_at"):
+        if k not in R.SLOT_RULES and k not in ("received_at", "project_no", "interview_at"):
             continue
         nv = R.mask_sensitive(str(v or "").strip())
         if nv != (data.get(k) or ""):
@@ -1048,12 +1152,14 @@ def intake_verify(proj: dict, form: dict, user: str = "") -> dict:
     data.setdefault("received_at", _today())
     data["project_no"] = proj["project_no"]
 
-    # (3) 규칙 진단
+    # (3) 규칙 진단 — 막는 것은 필수 항목뿐이다. 선택 항목은 비어 있든 부실하든 지적하지 않는다 (1-a).
     assess = R.assess_int(data)
+    soft = set(assess.get("soft") or [])
+    blocking = [k for k in (assess["missing"] + assess["weak"]) if k not in soft]
     issues = [{"slot": k, "label": assess["slots"][k]["label"], "grade": assess["slots"][k]["grade"],
                "reason": assess["slots"][k]["reason"], "source": "규칙",
                "question": _question_for(k, assess["slots"][k])}
-              for k in (assess["missing"] + assess["weak"])]
+              for k in blocking]
 
     # (4) 판단형 검토 — 모순·의도 불일치·두루뭉술 (규칙이 못 보는 것)
     llm_out, llm_err = {}, ""
@@ -1073,53 +1179,80 @@ def intake_verify(proj: dict, form: dict, user: str = "") -> dict:
         llm_err = "LLM 미설정 — 규칙 진단 결과만 표시합니다."
 
     seen = {i["slot"] for i in issues}
+    notes = []            # 필수가 다 찼을 때 LLM 이 짚은 것 — 묻지 않고 참고로만 보인다
     for it in (llm_out.get("issues") or []):
         k = it.get("slot")
         if not k or k not in R.SLOT_RULES or k in seen:
             continue
-        # 선택 항목이 비어 있는 것은 지적하지 않는다 — LLM 이 자주 올린다
-        if R.SLOT_RULES[k].get("optional") and not (data.get(k) or "").strip():
-            continue
+        if R.SLOT_RULES[k].get("optional"):
+            continue          # 선택 항목은 지적 대상이 아니다 — LLM 이 자주 올린다 (1-a)
         seen.add(k)
-        issues.append({"slot": k, "label": (R.SLOT_RULES[k].get("label") or k),
-                       "grade": "weak", "reason": it.get("reason") or "",
-                       "source": "검토", "question": it.get("question") or _question_for(k, {})})
+        item = {"slot": k, "label": (R.SLOT_RULES[k].get("label") or k),
+                "grade": "weak", "reason": it.get("reason") or "",
+                "source": "검토", "question": it.get("question") or _question_for(k, {})}
+        (notes if assess["ready"] else issues).append(item)
 
-    # (5) 챗에 띄울 검증 결과 + 첫 질문
-    lines = []
-    summary = (llm_out.get("summary") or "").strip()
-    if summary:
-        lines.append(summary)
-    if not issues:
-        lines.append(f"✅ 접수서를 쓸 수 있는 수준입니다. 필수 {assess['required_total']}개 항목이 모두 채워졌습니다.\n"
-                     "오른쪽 [INT 초안 생성] 을 누르시면 표준체계 문서① 양식으로 정리해 드립니다.")
+    # (5) 챗에 띄울 검증 결과
+    #     1-d 필수 항목이 다 찼으면 "작성 완료" 로 인지하고 인터뷰를 끝낸다 — 질문을 던지지 않는다.
+    #     [AI 인터뷰 반복] 이면 검토에서 짚인 곳을 한 번씩만 묻는다 (없으면 그대로 끝).
+    lines = [REPEAT_HEAD] if repeat else []
+    nq = ""
+    if assess["ready"] and repeat:
+        if notes:
+            lines.append(_review_intro(notes))
+            first, rest = notes[0], notes[1:]
+            proj["int_review"] = [{"slot": n["slot"], "question": n["question"]} for n in rest]
+            nq = first["question"]
+            lines.append(nq)
+        else:
+            lines.append(REPEAT_NOTHING)
+    elif assess["ready"]:
+        lines.append(_completion_text(data))
+        if notes:
+            lines.append("참고로 검토에서 짚인 곳입니다 — 고치지 않아도 작성은 완료할 수 있습니다. "
+                         "다시 짚어 보시려면 **[AI 인터뷰 반복]** 을 누르세요.\n"
+                         + "\n".join(f"· **{n['label']}** — {n['reason']}" for n in notes[:5]))
     else:
+        summary = (llm_out.get("summary") or "").strip()
+        if summary:
+            lines.append(summary)
         lines.append(f"검토했습니다. **{len(issues)}개 항목**이 더 필요합니다. "
                      f"(필수 {assess['required_ok']}/{assess['required_total']} 완료)")
-        lines.append("\n".join(
-            f"· **{i['label']}** — {i['reason']}" for i in issues[:8]))
+        lines.append("\n".join(f"· **{i['label']}** — {i['reason']}" for i in issues[:8]))
         if len(issues) > 8:
             lines.append(f"… 외 {len(issues) - 8}개")
-
-    nq = (llm_out.get("next_question") or "").strip()
-    if not nq and issues:
-        nq = issues[0]["question"]
-    if nq:
-        lines.append("하나씩 여쭤보겠습니다.\n\n" + nq)
+        # 물을 수 있는 첫 항목만 묻는다 — 보류·한도 초과는 건너뛴다 (1-b)
+        target = ""
+        llm_q = (llm_out.get("next_question") or "").strip()
+        llm_t = (llm_out.get("target_slot") or "").strip()
+        if llm_q and _askable(data, reask, proj, llm_t):
+            nq, target = llm_q, llm_t
+        else:
+            for i in issues:
+                if _askable(data, reask, proj, i["slot"]):
+                    nq, target = i["question"], i["slot"]
+                    break
+        if nq:
+            _note_ask(reask, target)
+            lines.append("하나씩 여쭤보겠습니다.\n\n" + nq)
+        else:
+            lines.append(HOLD_TEXT)
 
     text = "\n\n".join(x for x in lines if x)
     history.append({"role": "agent", "text": text, "at": _now()})
+    proj["int_done"] = not nq
     save_project(proj)
 
-    audit("intake_verified", proj["project_no"], user,
+    audit("intake_repeated" if repeat else "intake_verified", proj["project_no"], user,
           changed=changed, issue_slots=[i["slot"] for i in issues],
+          review_slots=[n["slot"] for n in notes] if repeat else [],
           required_ok=assess["required_ok"], required_total=assess["required_total"],
-          ready=assess["ready"] and not issues, llm_error=llm_err)
+          ready=assess["ready"], llm_error=llm_err)
 
     return {"reply": text, "data": data, "progress": _progress(data, proj),
-            "assessment": assess, "issues": issues, "changed": changed,
-            "llm_error": llm_err, "done": assess["ready"] and not issues,
-            "sensitive": sc}
+            "assessment": assess, "issues": issues, "notes": notes, "changed": changed,
+            "llm_error": llm_err, "done": assess["ready"],
+            "sensitive": sc, "finished": not nq}
 
 
 def _progress(data: dict, proj: dict | None = None) -> dict:
@@ -1134,9 +1267,11 @@ def _progress(data: dict, proj: dict | None = None) -> dict:
                       "grade": s.get("grade", "missing"), "reason": s.get("reason", ""),
                       "filled": bool((data.get(k) or "").strip()),
                       "held": k in unconf, "asked": int(reask.get(k, 0))})
+    soft = set(a.get("soft") or [])            # 선택 항목의 부실함 — 진행을 막지 않는다
     return {"filled": a["required_ok"], "total": a["required_total"],
             "percent": a["percent"], "ready": a["ready"], "slots": slots,
-            "missing": a["missing"], "weak": a["weak"],
+            "missing": a["missing"], "weak": [k for k in a["weak"] if k not in soft],
+            "soft": sorted(soft),
             "validation": R.validate_doc(R.INT_SPEC, data)}
 
 
@@ -1195,8 +1330,11 @@ FEA_FORM = [
          "ph": "무슨 일이 어디까지 번지는지"},
         {"k": "verdict", "label": "판정 (자동)", "kind": "readonly"},
     ]},
+    # 담당자 판정은 양식이 아니라 AI 인터뷰가 끝난 뒤 인터뷰 카드에서 Go / 조건부 / Drop 을 골라 정한다.
+    # 6번 승인(작성 / 승인 / 일자)은 양식에서 뺐다 — 승인 플랫폼에서 채운다 (2026-09-22).
     {"n": 5, "title": "Go / Drop 판정",
-     "hint": "**에이전트는 이 칸을 채우지 않습니다.** 권고와 근거만 제시하고, 확정은 담당자와 팀장(G1)이 합니다.",
+     "hint": "**에이전트는 판정하지 않습니다.** AI 인터뷰가 끝나면 오른쪽에 에이전트 권고가 뜨고, "
+             "담당자가 **Go / 조건부 / Drop** 중 하나를 고르면 작성이 완료됩니다.",
      "fields": [
         # v4.0 문서② — "규칙(로직) 문서화가 어려우면 조건부 Go를 검토한다".
         # v3.1 까지 있던 적합성 5축 중 v4.0 에 근거가 남은 것은 이 하나뿐이다.
@@ -1204,22 +1342,16 @@ FEA_FORM = [
          "hint": "상 = 규정·기준이 글로 존재 / 하 = 담당자 머릿속에만 있음 → 조건부 Go 검토", "calc": True},
         {"k": "fit_rule_doc_reason", "label": "그렇게 본 근거 (선택)", "kind": "text"},
         {"k": "recommendation", "label": "에이전트 권고 (자동)", "kind": "readonly"},
-        {"k": "decision", "label": "담당자 판정 — 사람이 직접 선택", "kind": "select",
-         "options": ["", "Go", "Conditional Go", "Drop"], "human": True},
-    ]},
-    {"n": 6, "title": "승인", "fields": [
-        {"k": "written_by", "label": "작성", "kind": "text", "ph": "담당자 이름"},
-        {"k": "reviewed_by", "label": "검토 (선택)", "kind": "text", "ph": "리뷰어 — 셀프 승인 금지"},
-        {"k": "approved_by", "label": "승인(팀장) (선택)", "kind": "text"},
-        {"k": "approved_at", "label": "일자 (선택)", "kind": "text", "ph": "YYYY-MM-DD"},
     ]},
 ]
 
 # 트랙·유형 판정에 쓰는 응답 키 (폼에 있지만 품질 판정 대상이 아님)
 FEA_ANSWER_KEYS = ("write_exec", "sensitive", "identifying", "damage_financial", "scope", "autonomy",
                    "needs_judgment", "has_rule_flow")
-# 사람만 채우는 칸 — LLM 이 건드리지 못하게 한다 (금칙 G-2)
-FEA_HUMAN_ONLY = ("decision", "approved_by", "approved_at")
+# 사람만 채우는 값 — LLM 이 건드리지 못하게 한다 (금칙 G-2).
+# decision 은 인터뷰 카드의 Go / 조건부 / Drop 버튼으로만 들어온다 (/api/fea/complete).
+FEA_HUMAN_ONLY = ("decision",)
+FEA_DECISIONS = ("Go", "Conditional Go", "Drop")
 
 FEA_QUESTION = {
     "summary": "1번 요구 요약을 세 줄로 정리해 주세요. (① 누가 얼마나 자주 무엇을 ② 현재 처리 방식 ③ 잘못 처리되면)",
@@ -1230,8 +1362,6 @@ FEA_QUESTION = {
     "alt_conclusion": "그래서 에이전트 개발이 타당한 이유를 정리해 주세요.",
     "damage_desc": "오답이 났을 때 최대 피해가 무엇인가요? 어디까지 번지는지 적어 주세요.",
     "roi_saving": "대략 어느 정도 나아질 것으로 보시나요? 한 줄이면 됩니다.",
-    "written_by": "이 평가서 작성자는 누구인가요?",
-    "reviewed_by": "교차 검토할 리뷰어는 누구인가요? (셀프 승인 금지)",
 }
 for _k in R.FIT_KEYS:
     _label = dict((a, b) for a, b, _c in R.FIT_AXES)[_k]
@@ -1278,7 +1408,7 @@ def _fea_readonly(j: dict) -> dict:
         else f"{R.MISSING_MARK} — {roi.get('reason', '')}"
     verdict = (f"{tr['track']} 트랙 · {ty['type']} · 자율성 {au['level']}\n"
                f"필수 문서: {tr['required_docs']}\n"
-               f"승인 주체: {tr['approver']} · 배포: {tr['pilot']}\n"
+               f"승인 주체: {tr['approver']} · 다음 단계는 G1 에서 팀장이 확정\n"
                f"근거: {tr['reason']}")
     if au.get("message"):
         verdict += f"\n⚠️ {au['message']}"
@@ -1287,8 +1417,10 @@ def _fea_readonly(j: dict) -> dict:
         f"{rec.get('verdict', '?')}  (확신도 {rec.get('confidence', '?')})",
         rec.get("headline", ""),
         "\n".join(f"· {c}" for c in (rec.get("conditions") or [])),
-    ] if x).strip()
-    return {"roi_saving": saving, "verdict": verdict, "agent_verdict": advice}
+    ] if x).strip().replace("**", "")     # 칸은 글자 그대로 보인다 — 굵게 표시를 뺀다
+    # 양식 5번 「에이전트 권고 (자동)」 칸의 키는 recommendation 이다.
+    # agent_verdict 만 내던 때는 그 칸이 늘 "—" 였다 (2026-09-22 발견).
+    return {"roi_saving": saving, "verdict": verdict, "agent_verdict": advice, "recommendation": advice}
 
 
 def _fea_progress(form: dict, proj: dict | None = None) -> dict:
@@ -1312,16 +1444,64 @@ def _fea_question_for(slot: str, assessment: dict) -> str:
     return base
 
 
-def _fea_next_gap(form: dict, reask: dict) -> tuple:
+def _fea_askable(form: dict, reask: dict, held: list, slot: str) -> bool:
+    """FEA 판 `_askable` — 모든 질문 후보(규칙·LLM)가 여기를 통과해야 한다.
+
+    INT 에서 났던 반복 사고(보류 재질문·LLM 한도 우회·선택 항목 무한 질문)를 FEA 에서도 막는다.
+    필수가 다 차면 아무것도 묻지 않는다 — 담당자가 Go / 조건부 / Drop 을 고를 차례다.
+    """
+    if not slot or slot not in R.FEA_SLOT_RULES or slot in FEA_HUMAN_ONLY:
+        return False
+    if slot in (held or []):
+        return False
+    spec = R.FEA_SLOT_RULES[slot]
+    limit = 1 if spec.get("optional") else (1 + MAX_REASK_TEXT)
+    if int((reask or {}).get(slot, 0)) >= limit:
+        return False
+    a = R.assess_fea(form or {})
+    if a["ready"]:
+        return False
+    s = a["slots"].get(slot) or {}
+    if spec.get("optional") and s.get("grade") == "missing":
+        return False                          # 비어 있는 선택 항목은 묻지 않는다
+    return s.get("grade") != "ok"
+
+
+def _fea_next_gap(form: dict, reask: dict, held: list | None = None) -> tuple:
+    """다음에 물을 항목. 필수가 다 찼거나 물을 게 없으면 ("", "")."""
     a = R.assess_fea(form)
     for k in list(R.FEA_SLOT_RULES.keys()):
-        s = a["slots"].get(k) or {}
-        if s.get("grade") == "ok" or s.get("optional") and s.get("grade") == "missing":
-            continue
-        if int(reask.get(k, 0)) >= (1 + MAX_REASK_TEXT):
-            continue
-        return k, _fea_question_for(k, s)
+        if _fea_askable(form, reask, held or [], k):
+            return k, _fea_question_for(k, a["slots"].get(k) or {})
     return "", ""
+
+
+def _fea_hold_exhausted(form: dict, reask: dict, held: list):
+    """물을 만큼 물은 필수 항목은 보류로 — 다시 묻지 않는다."""
+    for k, s in R.assess_fea(form)["slots"].items():
+        if s["grade"] == "ok" or s["optional"]:
+            continue
+        if int(reask.get(k, 0)) >= (1 + MAX_REASK_TEXT) and k not in held:
+            held.append(k)
+
+
+def _fea_completion_text(assess: dict) -> str:
+    return (f"✅ **검토가 끝났습니다.** 필수 {assess['required_total']}개 항목이 모두 채워졌습니다.\n"
+            "아래 **에이전트 판정 권고**를 참고하시고 **Go / 조건부 / Drop** 중 하나를 골라 주세요 — "
+            "고르시면 FEA 작성이 완료됩니다. (권고는 참고용이며 판정은 담당자가 합니다. G1 승인은 팀장)")
+
+
+def _fea_finished(proj: dict) -> bool:
+    """FEA AI 인터뷰가 끝났는가 — 끝났으면 인터뷰 카드에 Go / 조건부 / Drop 이 뜬다.
+
+    값이 생기기 전에 저장된 프로젝트는 더 물을 게 없는가로 판단한다 (INT 의 _int_finished 와 같음).
+    """
+    if "fea_done" in proj:
+        return bool(proj["fea_done"])
+    form = proj.get("fea_form") or {}
+    if not form or not (proj.get("fea_history") or []):
+        return False
+    return not _fea_next_gap(form, proj.get("fea_reask") or {}, proj.get("fea_unconfirmed") or [])[0]
 
 
 def fea_draft(proj: dict, user: str = "") -> dict:
@@ -1371,8 +1551,6 @@ def fea_draft(proj: dict, user: str = "") -> dict:
         f = (llm_out.get("fit") or {}).get(key) or {}
         _put(f"fit_{key}_grade", f.get("grade"))
         _put(f"fit_{key}_reason", f.get("reason"))
-    if not str(form.get("written_by") or "").strip():
-        form["written_by"] = (int_data.get("assignee") or "").strip()
     # 대안이 "그것 하나로 충분한가" 는 판정(Drop)에 직결되므로 폼에 보관해 이후 계산에 쓴다
     sufficient = llm_out.get("alt_sufficient")
     if isinstance(sufficient, dict):
@@ -1404,20 +1582,22 @@ def fea_draft(proj: dict, user: str = "") -> dict:
              + (("해소해야 할 조건\n" + "\n".join(f"{i}. {c}" for i, c in enumerate(rec["conditions"], 1)) + "\n\n")
                 if rec["conditions"] else "")
              + "트랙·유형·ROI·권고는 규칙 모듈이 계산한 것입니다. 제가 대화로 바꿀 수 없고, "
-             "4번 응답이나 본문을 고치면 즉시 다시 계산됩니다. "
-             "**Go/Drop 최종 판정은 담당자와 팀장이 G1 에서 확정합니다.**\n\n"
-             "다 보신 뒤 [작성 완료 및 검증] 을 눌러 주세요. G1 에서 걸릴 만한 곳을 짚어 드리겠습니다.")
+             "4번 응답이나 본문을 고치면 즉시 다시 계산됩니다.\n\n"
+             "다 보신 뒤 왼쪽 아래 **[작성 내용 AI 인터뷰]** 를 눌러 주세요. G1 에서 걸릴 만한 곳을 짚어 드리고, "
+             "인터뷰가 끝나면 **Go / 조건부 / Drop** 을 고르실 수 있습니다.")
     if llm_err and not llm_ready():
         reply = "(LLM 미설정 — 규칙 판정만 채웠습니다)\n\n" + reply
 
     hist = proj.setdefault("fea_history", [])
     hist.append({"role": "agent", "text": reply, "at": _now()})
+    proj["fea_done"] = False                  # 초안만 채운 상태 — 인터뷰 전이다
+    proj["fea_review"] = []
     save_project(proj)
 
     return {"reply": reply, "form": form, "readonly": _fea_readonly(j2), "progress": prog,
             "judgement": {"track": j2["track"], "type": j2["type"], "autonomy": j2["autonomy"]},
             "roi": j2["roi"], "verdict": j2["verdict"],
-            "filled": filled, "llm_error": llm_err, "project": proj}
+            "filled": filled, "llm_error": llm_err, "project": proj, "finished": False}
 
 
 def _save_fea_form(proj: dict, form: dict) -> tuple:
@@ -1442,8 +1622,17 @@ def _save_fea_form(proj: dict, form: dict) -> tuple:
     return cur, changed
 
 
-def fea_verify(proj: dict, form: dict, user: str = "") -> dict:
-    """좌측 FEA 양식 [작성 완료 및 검증]. G1 에서 반려당할 곳을 미리 짚는다."""
+def fea_verify(proj: dict, form: dict, user: str = "", repeat: bool = False) -> dict:
+    """좌측 FEA 양식 [작성 내용 AI 인터뷰]. G1 에서 반려당할 곳을 미리 짚는다.
+
+    필수가 다 차면 질문을 멈춘다(INT 와 같은 기조). 검토에서 짚인 곳은 「참고」 로만 보인다.
+    repeat=True 는 완료 카드의 [AI 인터뷰 반복] — 되묻기·보류를 지우고 처음부터, 필수가 다 차 있으면
+    짚인 곳을 한 번씩만 묻는다.
+    """
+    proj["fea_review"] = []
+    if repeat:
+        proj["fea_reask"] = {}
+        proj["fea_unconfirmed"] = []
     joined = "\n".join(str(v) for v in (form or {}).values() if isinstance(v, str) and v)
     sc = R.scan_sensitive(joined)
     if sc["blocked"]:
@@ -1453,16 +1642,21 @@ def fea_verify(proj: dict, form: dict, user: str = "") -> dict:
         save_project(proj)
         return {"reply": sc["message"], "blocked": True, "sensitive": sc,
                 "form": proj.get("fea_form") or {}, "issues": [],
-                "progress": _fea_progress(proj.get("fea_form") or {}, proj), "done": False}
+                "progress": _fea_progress(proj.get("fea_form") or {}, proj), "done": False,
+                "finished": False}
 
     cur, changed = _save_fea_form(proj, form)
+    reask = proj.setdefault("fea_reask", {})
+    held = proj.setdefault("fea_unconfirmed", [])
     j = fea_judge(proj, cur)
     assess = R.assess_fea(cur)
+    soft = set(assess.get("soft") or [])
 
+    # 막는 것은 필수 항목뿐 — 선택 항목의 부실함은 지적하지 않는다
     issues = [{"slot": k, "label": assess["slots"][k]["label"], "grade": assess["slots"][k]["grade"],
                "reason": assess["slots"][k]["reason"], "source": "규칙",
                "question": _fea_question_for(k, assess["slots"][k])}
-              for k in (assess["missing"] + assess["weak"])]
+              for k in (assess["missing"] + assess["weak"]) if k not in soft]
 
     llm_out, llm_err = {}, ""
     if llm_ready():
@@ -1488,16 +1682,18 @@ def fea_verify(proj: dict, form: dict, user: str = "") -> dict:
         llm_err = "LLM 미설정 — 규칙 진단 결과만 표시합니다."
 
     seen = {i["slot"] for i in issues}
+    notes = []            # 필수가 다 찼을 때 LLM 이 짚은 것 — 묻지 않고 참고로만 (반복 인터뷰 때 한 번씩)
     for it in (llm_out.get("issues") or []):
         k = it.get("slot")
         if not k or k not in R.FEA_SLOT_RULES or k in seen:
             continue
-        if R.FEA_SLOT_RULES[k].get("optional") and not str(cur.get(k) or "").strip():
-            continue
+        if R.FEA_SLOT_RULES[k].get("optional"):
+            continue          # 선택 항목은 지적 대상이 아니다
         seen.add(k)
-        issues.append({"slot": k, "label": R.FEA_SLOT_RULES[k].get("label") or k,
-                       "grade": "weak", "reason": it.get("reason") or "", "source": "검토",
-                       "question": it.get("question") or _fea_question_for(k, {})})
+        item = {"slot": k, "label": R.FEA_SLOT_RULES[k].get("label") or k,
+                "grade": "weak", "reason": it.get("reason") or "", "source": "검토",
+                "question": it.get("question") or _fea_question_for(k, {})}
+        (notes if assess["ready"] else issues).append(item)
 
     # 4번 위험 응답이 INT 내용과 어긋나 보이면 경고한다 (금칙 G-1 예방).
     # 판정을 바꾸는 것이 아니라, 담당자에게 응답을 다시 보라고 알리는 것이다.
@@ -1510,56 +1706,74 @@ def fea_verify(proj: dict, form: dict, user: str = "") -> dict:
                   for f in (llm_out.get("risk_flags") or [])
                   if f.get("answer") in ANSWER_LABEL and (f.get("reason") or "").strip()]
 
-    lines = []
+    lines = [REPEAT_HEAD] if repeat else []
     summary = (llm_out.get("summary") or "").strip()
-    if summary:
+    if summary and not assess["ready"]:
         lines.append(summary)
     if risk_flags:
         lines.append("⚠️ **4번 위험 응답을 다시 봐 주세요.** 접수서 내용과 어긋나 보입니다 — "
                      "여기가 어긋나면 트랙 판정이 통째로 틀립니다.\n"
                      + "\n".join(f"· **{f['label']}** — {f['reason']}" for f in risk_flags))
-    if not issues:
-        lines.append(f"✅ G1 에 올릴 수 있는 수준입니다. 필수 {assess['required_total']}개 항목이 모두 채워졌습니다.\n"
-                     "[FEA 초안 생성] 을 누르시면 표준체계 문서② 양식으로 정리해 드립니다.\n"
-                     "Go/Drop 최종 판정과 트랙·유형 확정은 G1 에서 팀장이 합니다.")
-    else:
-        # 규칙상 다 채워졌는데 검토에서만 걸린 경우와, 애초에 덜 채워진 경우는 말이 다르다
-        if assess["ready"]:
-            lines.append(f"필수 {assess['required_total']}개 항목은 모두 채워졌습니다. "
-                         f"다만 **{len(issues)}곳**이 G1 에서 걸릴 수 있습니다.")
+    nq, target = "", ""
+    if assess["ready"] and repeat:
+        if notes:
+            lines.append(_review_intro(notes))
+            proj["fea_review"] = [{"slot": n["slot"], "question": n["question"]} for n in notes[1:]]
+            nq, target = notes[0]["question"], notes[0]["slot"]
+            lines.append(nq)
         else:
-            lines.append(f"검토했습니다. **{len(issues)}개 항목**이 더 필요합니다. "
-                         f"(필수 {assess['required_ok']}/{assess['required_total']} 완료)")
+            lines.append(FEA_REPEAT_NOTHING)
+    elif assess["ready"]:
+        lines.append(_fea_completion_text(assess))
+        if notes:
+            lines.append("참고로 검토에서 짚인 곳입니다 — 고치지 않아도 작성은 완료할 수 있습니다. "
+                         "다시 짚어 보시려면 **[AI 인터뷰 반복]** 을 누르세요.\n"
+                         + "\n".join(f"· **{n['label']}** — {n['reason']}" for n in notes[:5]))
+    else:
+        lines.append(f"검토했습니다. **{len(issues)}개 항목**이 더 필요합니다. "
+                     f"(필수 {assess['required_ok']}/{assess['required_total']} 완료)")
         lines.append("\n".join(f"· **{i['label']}** — {i['reason']}" for i in issues[:8]))
         if len(issues) > 8:
             lines.append(f"… 외 {len(issues) - 8}개")
-
-    nq = (llm_out.get("next_question") or "").strip()
-    if not nq and issues:
-        nq = issues[0]["question"]
-    if nq:
-        lines.append("하나씩 여쭤보겠습니다.\n\n" + nq)
+        # 물을 수 있는 첫 항목만 — 보류·한도 초과는 건너뛴다. LLM 질문도 같은 관문을 지난다.
+        llm_q = (llm_out.get("next_question") or "").strip()
+        llm_t = (llm_out.get("target_slot") or "").strip()
+        if llm_q and _fea_askable(cur, reask, held, llm_t):
+            nq, target = llm_q, llm_t
+        else:
+            for i in issues:
+                if _fea_askable(cur, reask, held, i["slot"]):
+                    nq, target = i["question"], i["slot"]
+                    break
+        if nq:
+            _note_ask(reask, target)
+            lines.append("하나씩 여쭤보겠습니다.\n\n" + nq)
+        else:
+            lines.append(FEA_HOLD_TEXT)
 
     text = "\n\n".join(x for x in lines if x)
     proj.setdefault("fea_history", []).append({"role": "agent", "text": text, "at": _now()})
     proj = save_project({"project_no": proj["project_no"], "fea_form": cur,
                          "judgement": {"track": j["track"], "type": j["type"], "autonomy": j["autonomy"]},
                          "roi": j["roi"], "track_answers": j["answers"],
-                         "fea_history": proj["fea_history"]})
+                         "fea_history": proj["fea_history"], "fea_reask": reask,
+                         "fea_unconfirmed": held, "fea_review": proj.get("fea_review") or [],
+                         "fea_done": not nq})
 
-    audit("fea_verified", proj["project_no"], user, changed=changed,
+    audit("fea_repeated" if repeat else "fea_verified", proj["project_no"], user, changed=changed,
           issue_slots=[i["slot"] for i in issues], track=j["track"]["track"],
           risk_flags=[f["answer"] for f in risk_flags],
+          review_slots=[n["slot"] for n in notes] if repeat else [],
           required_ok=assess["required_ok"], required_total=assess["required_total"],
-          ready=assess["ready"] and not issues, llm_error=llm_err)
+          ready=assess["ready"], llm_error=llm_err)
 
     return {"reply": text, "form": cur, "readonly": _fea_readonly(j),
             "progress": _fea_progress(cur, proj), "assessment": assess, "issues": issues,
-            "verdict": j["verdict"],
+            "notes": notes, "verdict": j["verdict"],
             "risk_flags": risk_flags, "changed": changed, "judgement": {"track": j["track"], "type": j["type"],
                                               "autonomy": j["autonomy"]},
             "roi": j["roi"], "llm_error": llm_err,
-            "done": assess["ready"] and not issues, "sensitive": sc}
+            "done": assess["ready"], "sensitive": sc, "finished": not nq}
 
 
 def fea_turn(proj: dict, message: str, user: str = "") -> dict:
@@ -1576,19 +1790,27 @@ def fea_turn(proj: dict, message: str, user: str = "") -> dict:
         history.append({"role": "agent", "text": sc["message"], "at": _now()})
         save_project(proj)
         return {"reply": sc["message"], "blocked": True, "sensitive": sc, "form": form,
-                "progress": _fea_progress(form, proj), "done": False}
+                "progress": _fea_progress(form, proj), "done": False,
+                "finished": _fea_finished(proj)}
 
     oos = R.detect_out_of_scope(message)
     if oos["out_of_scope"]:
         audit("out_of_scope_refused", proj["project_no"], user, where="fea_chat",
               key=oos["key"], request=message)
-        _k, nq = _fea_next_gap(form, reask)
-        reply = oos["refusal"] + (f"\n\n검토를 이어가겠습니다. {nq}" if nq else "")
+        _k, nq = _fea_next_gap(form, reask, held)
+        a0 = R.assess_fea(form)
+        tail = (f"검토를 이어가겠습니다. {nq}" if nq
+                else (_fea_completion_text(a0) if a0["ready"] else FEA_HOLD_TEXT))
+        reply = oos["refusal"] + "\n\n" + tail
         history.append({"role": "user", "text": R.mask_sensitive(message), "at": _now()})
         history.append({"role": "agent", "text": reply, "at": _now()})
+        if nq:
+            _note_ask(reask, _k)
+        proj["fea_done"] = not nq
         save_project(proj)
         return {"reply": reply, "refused": True, "out_of_scope": oos, "form": form,
-                "progress": _fea_progress(form, proj), "done": False}
+                "progress": _fea_progress(form, proj), "done": False, "finished": not nq,
+                "verdict": fea_judge(proj, form)["verdict"]}
 
     history.append({"role": "user", "text": R.mask_sensitive(message), "at": _now()})
 
@@ -1638,49 +1860,53 @@ def fea_turn(proj: dict, message: str, user: str = "") -> dict:
             held.remove(k)
             reask[k] = 0
 
-    forced_q, target = "", ""
-    for wk in weak:
-        if int(reask.get(wk["slot"], 0)) >= (1 + MAX_REASK_TEXT):
-            continue
-        forced_q = f"{wk['reason']} {FEA_QUESTION.get(wk['slot'], '')}".strip()
-        target = wk["slot"]
-        break
+    # 다음 질문 — 규칙이 고른 것이 먼저. LLM 이 고른 것은 _fea_askable() 을 통과해야만 쓴다.
+    # 필수가 다 찼으면 묻지 않는다 — 담당자가 Go / 조건부 / Drop 을 고를 차례다.
+    ready_now = R.assess_fea(form)["ready"]
+    nq, target = "", ""
+    if not ready_now:
+        for wk in weak:
+            if _fea_askable(form, reask, held, wk["slot"]):
+                nq = f"{wk['reason']} {FEA_QUESTION.get(wk['slot'], '')}".strip()
+                target = wk["slot"]
+                break
+        if not nq:
+            llm_q = (llm_out.get("next_question") or "").strip()
+            llm_t = (llm_out.get("target_slot") or "").strip()
+            # 무엇을 묻는지 모르는 질문(target 없음)은 받지 않는다 — 횟수를 셀 수 없다
+            if llm_q and _fea_askable(form, reask, held, llm_t):
+                nq, target = llm_q, llm_t
+        if not nq:
+            target, nq = _fea_next_gap(form, reask, held)
+        if nq:
+            _note_ask(reask, target)
+    else:
+        review = proj.get("fea_review") or []     # [AI 인터뷰 반복] 의 확인 질문 — 한 번씩
+        if review:
+            item = review.pop(0)
+            nq, target = item["question"], item["slot"]
+            proj["fea_review"] = review
 
     intent = (llm_out.get("intent") or "answer").strip()
     answer = (llm_out.get("answer_to_user") or "").strip()
     reply = (llm_out.get("reply") or "").strip()
-    nq = forced_q or (llm_out.get("next_question") or "").strip()
-    if nq and not target:
-        t = (llm_out.get("target_slot") or "").strip()
-        target = t if t in R.FEA_SLOT_RULES else ""
-    if not nq:
-        target, nq = _fea_next_gap(form, reask)
-    if target and target in held:
-        alt_k, alt_q = _fea_next_gap(form, reask)
-        if alt_k and alt_k not in held:
-            target, nq = alt_k, alt_q
-    if nq and target:
-        reask[target] = int(reask.get(target, 0)) + 1
 
-    parts = [x for x in (answer, reply if reply != answer else "", nq) if x]
-    text = "\n\n".join(parts).strip()
-
+    _fea_hold_exhausted(form, reask, held)
     assess = R.assess_fea(form)
-    for k, s in assess["slots"].items():
-        if s["grade"] == "ok" or s["optional"]:
-            continue
-        if int(reask.get(k, 0)) >= (1 + MAX_REASK_TEXT) and k not in held:
-            held.append(k)
 
-    if not text:
-        text = ("검토가 끝났습니다. [FEA 초안 생성] 을 눌러 주세요."
-                if assess["ready"]
-                else "더 여쭤도 진전이 없는 항목은 보류했습니다. 왼쪽에서 직접 보완하시거나 "
-                     "[FEA 초안 생성] 을 누르시면 그 항목은 ⬜ 미확보로 남습니다.")
+    parts = [x for x in (answer, reply if reply != answer else "") if x]
+    if nq:
+        parts.append(nq)
+    elif assess["ready"]:
+        parts.append(_fea_completion_text(assess))
+    else:
+        parts.append(FEA_HOLD_TEXT)
+    text = "\n\n".join(parts).strip()
     if not llm_ready():
         text = "(LLM 미설정 — 정해진 순서로 질문합니다)\n" + text
 
     history.append({"role": "agent", "text": text, "at": _now()})
+    proj["fea_done"] = not nq
     save_project(proj)
 
     audit("fea_turn", proj["project_no"], user, user_text=message, agent_text=text,
@@ -1694,7 +1920,7 @@ def fea_turn(proj: dict, message: str, user: str = "") -> dict:
             "intent": intent, "answered_question": bool(answer),
             "judgement": {"track": j["track"], "type": j["type"], "autonomy": j["autonomy"]},
             "roi": j["roi"], "unconfirmed": held, "llm_error": llm_err,
-            "done": assess["ready"], "sensitive": sc}
+            "done": assess["ready"], "sensitive": sc, "finished": not nq}
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1977,16 +2203,16 @@ def _ard_progress(form: dict, proj: dict | None = None) -> dict:
 
 
 def _ard_track_note(proj: dict) -> str:
-    """하 트랙이면 ARD 자체가 필수 문서가 아니다 (0.3절). 막지는 않고 알린다."""
-    tr = ((proj.get("judgement") or {}).get("track") or {}).get("track")
+    """ARD 탭 상단 안내.
+
+    ⚠️ 예전에는 하 트랙이면 "ARD 는 필수가 아닙니다 — 운영대장 등록까지" 라고 안내했다.
+    그 말이 단계를 건너뛰고 운영으로 넘어가게 만든다는 지적(2026-09-22)이 있어 뺐다.
+    어디로 갈지는 G1 에서 팀장이 정한다 — 에이전트가 경로를 안내하지 않는다.
+    """
     dec = (proj.get("fea_form") or {}).get("decision")
     notes = []
-    if tr == "하":
-        notes.append("이 건은 **하 트랙**입니다. 표준체계 0.3절상 하 트랙의 필수 문서는 "
-                     "INT·FEA(약식)와 운영대장 등록까지이며 **ARD 는 필수가 아닙니다.** "
-                     "그래도 정리해 두실 수는 있습니다.")
     if not dec:
-        notes.append("FEA 5번 담당자 판정이 아직 비어 있습니다. 표준체계상 ARD 는 **G1 통과 후**에 씁니다 — "
+        notes.append("FEA 에서 아직 **Go / 조건부 / Drop** 을 고르지 않았습니다. 표준체계상 ARD 는 **G1 통과 후**에 씁니다 — "
                      "지금 쓰신 내용은 G1 이 확정되면 그대로 이어집니다.")
     return "\n\n".join(notes)
 
@@ -2031,35 +2257,51 @@ def ard_draft(proj: dict, user: str = "") -> dict:
         lines.append(note)
     if filled:
         lines.append(f"채운 칸: {len(filled)}개. **비어 있는 칸은 지어내지 않았습니다.**")
-    lines.append("이제 요구자께 몇 가지만 여쭤보고 **미팅에 들고 갈 1차 문서**를 만들겠습니다. "
-                 "나머지는 미팅에서 함께 채웁니다.")
+    lines.append("왼쪽 초안을 확인하시고 아래 **[작성 내용 AI 인터뷰]** 를 눌러 주세요. "
+                 "요구자께 몇 가지만 여쭤 **미팅에 들고 갈 1차 문서**를 만들겠습니다. 나머지는 미팅에서 함께 채웁니다.")
     if llm_err:
         lines.append(f"⚠️ {llm_err}")
     text = "\n\n".join(lines)
 
+    # INT·FEA 와 같은 흐름 — 초안을 보여 주고, 인터뷰는 [작성 내용 AI 인터뷰] 로 시작한다.
+    # LLM 이 먼저 묻자고 한 항목은 기억해 두었다가 첫 질문 순서에 쓴다.
     proj.setdefault("ard_history", []).append({"role": "agent", "text": text, "at": _now()})
     proj = save_project({"project_no": proj["project_no"], "ard_form": cur,
-                         "ard_history": proj["ard_history"]})
+                         "ard_history": proj["ard_history"], "ard_ask_first": ask_first,
+                         "ard_done": False, "ard_review": []})   # 초안만 채운 상태 — 인터뷰 전
     audit("ard_drafted", proj["project_no"], user, filled=filled, llm_error=llm_err)
 
     prog = _ard_progress(cur, proj)
-    nxt = _ard_next_question(cur, proj, ask_first)
     return {"reply": text, "form": cur, "progress": prog, "filled": filled,
-            "next_question": nxt[1], "target_slot": nxt[0], "llm_error": llm_err}
+            "next_question": "", "target_slot": "", "llm_error": llm_err, "finished": False}
+
+
+def _ard_askable(form: dict, proj: dict, slot: str) -> bool:
+    """ARD 판 `_askable` — 모든 질문 후보(규칙·LLM)가 여기를 통과해야 한다.
+
+    묻는 것은 **G2 필수 3종(1·2·3번)** 뿐이고, 그것이 서면 멈춘다 — 미팅에 들고 갈 1차 문서가 목표다.
+    4~6번(갱신 담당자·지식·보안·제약)은 워크숍에서 채운다. 예전에는 3종이 선 뒤에도 순서대로 계속 물었다.
+    """
+    if not slot or slot not in R.ARD_G2_KEYS:
+        return False
+    if slot in ((proj or {}).get("ard_unconfirmed") or []):
+        return False
+    if int(((proj or {}).get("ard_reask") or {}).get(slot, 0)) >= (1 + MAX_REASK_TEXT):
+        return False
+    if R.ard_ready_for_meeting(form or {})["ready"]:
+        return False
+    return (R.assess_ard(form or {})["slots"].get(slot) or {}).get("grade") != "ok"
 
 
 def _ard_next_question(form: dict, proj: dict, prefer=None) -> tuple:
-    """다음에 물을 항목. 되묻기 한도를 넘긴 것은 건너뛴다(무한 반복 방지)."""
+    """다음에 물을 항목. 3종이 섰거나 물을 게 없으면 ("", "")."""
     a = R.assess_ard(form or {})
-    reask = proj.get("ard_reask") or {}
     order = [k for k in (prefer or []) if k in R.ARD_SLOT_RULES]
     order += [k for k in ARD_SLOT_ORDER if k not in order]
     for key in order:
+        if not _ard_askable(form, proj, key):
+            continue
         s = a["slots"].get(key) or {}
-        if s.get("grade") == "ok":
-            continue
-        if int(reask.get(key, 0)) >= (1 + MAX_REASK_TEXT):
-            continue
         base = ARD_QUESTION.get(key) or f"{s.get('label', key)} 을(를) 알려주세요."
         if s.get("grade") == "weak":
             return key, ((s.get("reason") or "") + " " + (s.get("ask") or base)).strip()
@@ -2067,8 +2309,45 @@ def _ard_next_question(form: dict, proj: dict, prefer=None) -> tuple:
     return "", ""
 
 
-def ard_verify(proj: dict, form: dict, user: str = "") -> dict:
-    """좌측 ARD 양식 [작성 완료 및 검증] — G2 에서 걸릴 곳을 미리 짚는다."""
+def _ard_hold_exhausted(form: dict, proj: dict):
+    held = proj.setdefault("ard_unconfirmed", [])
+    reask = proj.get("ard_reask") or {}
+    a = R.assess_ard(form or {})
+    for k in R.ARD_G2_KEYS:
+        if (a["slots"].get(k) or {}).get("grade") == "ok":
+            continue
+        if int(reask.get(k, 0)) >= (1 + MAX_REASK_TEXT) and k not in held:
+            held.append(k)
+
+
+ARD_DONE_TEXT = ("✅ **미팅에 들고 갈 수 있는 수준입니다.** G2 통과 조건 3종(한 줄 정의·범위 선언·자율성 수준)이 "
+                 "서 있습니다. 4~6번(기능 요구사항·지식·보안)은 **미팅에서 함께 채우면 됩니다.**\n"
+                 "왼쪽 내용을 확인하시고 아래 **[작성 및 검토 완료]** 를 눌러 주세요.")
+ARD_HOLD_TEXT = ("더 여쭤도 확보가 어려운 항목은 보류했습니다 — **미팅에서 함께 채웁니다.** "
+                 "이대로 아래 **[작성 및 검토 완료]** 를 누르시면 그 항목은 ⬜ 미확보로 남습니다.")
+
+
+def _ard_finished(proj: dict) -> bool:
+    """ARD AI 인터뷰가 끝났는가. 값이 생기기 전 프로젝트는 더 물을 게 없는가로 판단한다."""
+    if "ard_done" in proj:
+        return bool(proj["ard_done"])
+    form = proj.get("ard_form") or {}
+    if not form or not (proj.get("ard_history") or []):
+        return False
+    return not _ard_next_question(form, proj)[0]
+
+
+def ard_verify(proj: dict, form: dict, user: str = "", repeat: bool = False) -> dict:
+    """좌측 ARD 양식 [작성 내용 AI 인터뷰] — G2 에서 걸릴 곳을 미리 짚는다.
+
+    G2 3종이 서면 질문을 멈춘다. 검토에서 짚인 곳은 「참고」 로만 보인다.
+    repeat=True 는 완료 카드의 [AI 인터뷰 반복] — 되묻기·보류를 지우고, 3종이 서 있으면
+    짚인 곳을 한 번씩만 묻는다.
+    """
+    proj["ard_review"] = []
+    if repeat:
+        proj["ard_reask"] = {}
+        proj["ard_unconfirmed"] = []
     joined = "\n".join(str(v) for v in (form or {}).values() if isinstance(v, str) and v)
     sc = R.scan_sensitive(joined)
     if sc["blocked"]:
@@ -2078,7 +2357,7 @@ def ard_verify(proj: dict, form: dict, user: str = "") -> dict:
         save_project({"project_no": proj["project_no"], "ard_history": proj["ard_history"]})
         return {"reply": sc["message"], "form": proj.get("ard_form") or {},
                 "progress": _ard_progress(proj.get("ard_form") or {}, proj),
-                "issues": [], "sensitive": sc, "done": False}
+                "issues": [], "sensitive": sc, "done": False, "finished": False}
 
     cur, changed = _save_ard_form(proj, form)
     assess = R.assess_ard(cur)
@@ -2098,15 +2377,19 @@ def ard_verify(proj: dict, form: dict, user: str = "") -> dict:
     else:
         llm_err = "LLM 미설정 — 규칙 진단만 표시합니다."
 
-    issues = []
+    # 막는 것(issues)은 G2 3종 중 서지 않은 것뿐이다. 나머지 LLM 지적은 참고(notes) —
+    # 3종이 섰으면 묻지 않고, [AI 인터뷰 반복] 때 한 번씩만 묻는다.
+    issues, notes = [], []
+    blocking = set(meeting["blocking"])
     for it in (llm_out.get("issues") or []):
         slot = it.get("slot")
-        if slot not in R.ARD_SLOT_RULES:
+        if slot not in R.ARD_SLOT_RULES or any(x["slot"] == slot for x in issues + notes):
             continue
-        issues.append({"slot": slot,
-                       "label": R.ARD_SLOT_RULES[slot]["label"],
-                       "reason": (it.get("reason") or "").strip(),
-                       "question": (it.get("question") or "").strip()})
+        item = {"slot": slot,
+                "label": R.ARD_SLOT_RULES[slot]["label"],
+                "reason": (it.get("reason") or "").strip(),
+                "question": (it.get("question") or "").strip() or ARD_QUESTION.get(slot, "")}
+        (issues if slot in blocking else notes).append(item)
     # 규칙이 붙잡은 필수 항목은 LLM 이 놓쳐도 반드시 싣는다
     for k in meeting["blocking"]:
         if not any(i["slot"] == k for i in issues):
@@ -2118,9 +2401,9 @@ def ard_verify(proj: dict, form: dict, user: str = "") -> dict:
     conflicts = [{"where": (c.get("where") or "").strip(), "reason": (c.get("reason") or "").strip()}
                  for c in (llm_out.get("conflicts") or []) if (c.get("reason") or "").strip()]
 
-    lines = []
+    lines = [REPEAT_HEAD] if repeat else []
     summary = (llm_out.get("summary") or "").strip()
-    if summary:
+    if summary and not meeting["ready"]:
         lines.append(summary)
     note = _ard_track_note(proj)
     if note:
@@ -2128,44 +2411,61 @@ def ard_verify(proj: dict, form: dict, user: str = "") -> dict:
     if conflicts:
         lines.append("⚠️ **서로 어긋나는 곳이 있습니다.**\n"
                      + "\n".join(f"· **{c['where']}** — {c['reason']}" for c in conflicts))
-    if meeting["ready"] and not issues:
-        lines.append("✅ **미팅에 들고 갈 수 있는 수준입니다.** "
-                     "G2 통과 조건 3종(한 줄 정의·범위 선언·자율성 수준)이 서 있습니다.\n"
-                     "4~6번(기능 요구사항·지식·보안)은 **미팅에서 함께 채우면 됩니다.**\n"
-                     "[ARD 초안 생성] 을 누르시면 표준체계 문서③ 양식으로 정리해 드립니다.")
-    else:
-        if meeting["ready"]:
-            lines.append(f"G2 통과 조건 3종은 서 있습니다. 다만 **{len(issues)}곳**을 짚어 두겠습니다.")
+    nq, target = "", ""
+    if meeting["ready"] and repeat:
+        if notes:
+            lines.append(_review_intro(notes))
+            proj["ard_review"] = [{"slot": n["slot"], "question": n["question"]} for n in notes[1:]]
+            nq, target = notes[0]["question"], notes[0]["slot"]
+            lines.append(nq)
         else:
-            lines.append(f"검토했습니다. 미팅에 들고 가려면 **{len(issues)}개 항목**이 더 필요합니다.")
+            lines.append(REPEAT_NOTHING)
+    elif meeting["ready"]:
+        lines.append(ARD_DONE_TEXT)
+        if notes:
+            lines.append("참고로 검토에서 짚인 곳입니다 — 미팅에서 함께 봐도 됩니다. "
+                         "지금 짚어 보시려면 **[AI 인터뷰 반복]** 을 누르세요.\n"
+                         + "\n".join(f"· **{n['label']}** — {n['reason']}" for n in notes[:5]))
+    else:
+        lines.append(f"검토했습니다. 미팅에 들고 가려면 **{len(issues)}개 항목**이 더 필요합니다.")
         lines.append("\n".join(f"· **{i['label']}** — {i['reason']}" for i in issues[:8]))
         if len(issues) > 8:
             lines.append(f"… 외 {len(issues) - 8}개")
-
-    nq = (llm_out.get("next_question") or "").strip()
-    target = llm_out.get("target_slot") or ""
-    if not nq and issues:
-        nq, target = issues[0]["question"], issues[0]["slot"]
-    if not nq:
-        target, nq = _ard_next_question(cur, proj)
-    if nq:
-        lines.append("하나씩 여쭤보겠습니다.\n\n" + nq)
-        _note_ask(proj.setdefault("ard_reask", {}), target)
+        # 물을 수 있는 첫 항목만 — LLM 질문도 같은 관문(_ard_askable)을 지난다
+        llm_q = (llm_out.get("next_question") or "").strip()
+        llm_t = (llm_out.get("target_slot") or "").strip()
+        if llm_q and _ard_askable(cur, proj, llm_t):
+            nq, target = llm_q, llm_t
+        else:
+            for i in issues:
+                if i["question"] and _ard_askable(cur, proj, i["slot"]):
+                    nq, target = i["question"], i["slot"]
+                    break
+        if not nq:
+            target, nq = _ard_next_question(cur, proj, proj.get("ard_ask_first"))
+        if nq:
+            lines.append("하나씩 여쭤보겠습니다.\n\n" + nq)
+            _note_ask(proj.setdefault("ard_reask", {}), target)
+        else:
+            lines.append(ARD_HOLD_TEXT)
 
     text = "\n\n".join(x for x in lines if x)
     proj.setdefault("ard_history", []).append({"role": "agent", "text": text, "at": _now()})
     proj = save_project({"project_no": proj["project_no"], "ard_form": cur,
                          "ard_reask": proj.get("ard_reask") or {},
-                         "ard_history": proj["ard_history"]})
+                         "ard_unconfirmed": proj.get("ard_unconfirmed") or [],
+                         "ard_review": proj.get("ard_review") or [],
+                         "ard_history": proj["ard_history"], "ard_done": not nq})
 
-    audit("ard_verified", proj["project_no"], user, changed=changed,
+    audit("ard_repeated" if repeat else "ard_verified", proj["project_no"], user, changed=changed,
           issue_slots=[i["slot"] for i in issues], conflicts=len(conflicts),
+          review_slots=[n["slot"] for n in notes] if repeat else [],
           meeting_ready=meeting["ready"], llm_error=llm_err)
 
     return {"reply": text, "form": cur, "progress": _ard_progress(cur, proj),
-            "assessment": assess, "meeting": meeting, "issues": issues, "conflicts": conflicts,
-            "changed": changed, "llm_error": llm_err,
-            "done": meeting["ready"] and not issues, "sensitive": sc}
+            "assessment": assess, "meeting": meeting, "issues": issues, "notes": notes,
+            "conflicts": conflicts, "changed": changed, "llm_error": llm_err,
+            "done": meeting["ready"], "sensitive": sc, "finished": not nq}
 
 
 def ard_turn(proj: dict, message: str, user: str = "") -> dict:
@@ -2182,7 +2482,7 @@ def ard_turn(proj: dict, message: str, user: str = "") -> dict:
         proj.setdefault("ard_history", []).append({"role": "agent", "text": sc["message"], "at": _now()})
         save_project({"project_no": proj["project_no"], "ard_history": proj["ard_history"]})
         return {"reply": sc["message"], "form": form, "progress": _ard_progress(form, proj),
-                "sensitive": sc, "done": False}
+                "sensitive": sc, "done": False, "finished": _ard_finished(proj)}
 
     oos = R.detect_out_of_scope(message)
     proj.setdefault("ard_history", []).append({"role": "user", "text": R.mask_sensitive(message), "at": _now()})
@@ -2214,9 +2514,12 @@ def ard_turn(proj: dict, message: str, user: str = "") -> dict:
             continue
         form[k] = sv
         accepted.append(k)
-        reask.pop(k, None)
-        if k in held:
-            held.remove(k)
+        # 쓸 만한 답일 때만 횟수·보류를 푼다. 부실한 답마다 풀면 같은 질문이 끝없이 돈다
+        # (INT 에서 났던 반복 사고와 같은 모양).
+        if k in R.ARD_SLOT_RULES and R.assess_slot(k, sv, R.ARD_SLOT_RULES)["grade"] == "ok":
+            reask.pop(k, None)
+            if k in held:
+                held.remove(k)
 
     parts = []
     if oos["out_of_scope"]:
@@ -2226,37 +2529,48 @@ def ard_turn(proj: dict, message: str, user: str = "") -> dict:
     if (out.get("reply") or "").strip():
         parts.append(out["reply"].strip())
 
-    nq = (out.get("next_question") or "").strip()
-    target = out.get("target_slot") or ""
-    if target and int(reask.get(target, 0)) >= (1 + MAX_REASK_TEXT):
-        if target not in held:
-            held.append(target)
-        target, nq = _ard_next_question(form, proj)
-    if not nq:
-        target, nq = _ard_next_question(form, proj)
-    if nq:
-        parts.append(nq)
-        _note_ask(reask, target)
+    # 다음 질문 — LLM 이 고른 것도 _ard_askable() 을 통과해야만 쓴다. 3종이 서면 묻지 않는다.
+    nq, target = "", ""
+    if not R.ard_ready_for_meeting(form)["ready"]:
+        llm_q = (out.get("next_question") or "").strip()
+        llm_t = (out.get("target_slot") or "").strip()
+        if llm_q and _ard_askable(form, proj, llm_t):
+            nq, target = llm_q, llm_t
+        else:
+            target, nq = _ard_next_question(form, proj, proj.get("ard_ask_first"))
+        if nq:
+            _note_ask(reask, target)
+    else:
+        review = proj.get("ard_review") or []      # [AI 인터뷰 반복] 의 확인 질문 — 한 번씩
+        if review:
+            item = review.pop(0)
+            nq, target = item["question"], item["slot"]
+            proj["ard_review"] = review
+    _ard_hold_exhausted(form, proj)
 
     meeting = R.ard_ready_for_meeting(form)
-    if not nq and meeting["ready"]:
-        parts.append("여기까지면 **미팅에 들고 갈 수 있습니다.** "
-                     "[ARD 초안 생성] 을 눌러 문서로 받아 보세요. 나머지는 미팅에서 채웁니다.")
+    if nq:
+        parts.append(nq)
+    elif meeting["ready"]:
+        parts.append(ARD_DONE_TEXT)
+    else:
+        parts.append(ARD_HOLD_TEXT)
     if llm_err:
         parts.append(f"⚠️ {llm_err}")
 
     text = "\n\n".join(p for p in parts if p) or "말씀을 이해하지 못했습니다. 다시 한번 말씀해 주시겠어요?"
     proj.setdefault("ard_history", []).append({"role": "agent", "text": text, "at": _now()})
     proj = save_project({"project_no": proj["project_no"], "ard_form": form,
-                         "ard_reask": reask, "ard_unconfirmed": held,
-                         "ard_history": proj["ard_history"]})
+                         "ard_reask": reask, "ard_unconfirmed": proj.get("ard_unconfirmed") or held,
+                         "ard_review": proj.get("ard_review") or [],
+                         "ard_history": proj["ard_history"], "ard_done": not nq})
 
     audit("ard_turn", proj["project_no"], user, accepted=accepted,
           out_of_scope=oos["key"], target=target, llm_error=llm_err)
 
     return {"reply": text, "form": form, "progress": _ard_progress(form, proj),
             "accepted": accepted, "out_of_scope": oos, "llm_error": llm_err,
-            "done": bool(out.get("done")) and meeting["ready"], "sensitive": sc}
+            "done": meeting["ready"], "sensitive": sc, "finished": not nq}
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -2333,7 +2647,8 @@ INT_FORM = [
      "fields": [
         {"k": "risk", "label": "위험", "kind": "area", "ph": "예) 한도 초과 기안이 승인되면 정산 단계에서 문제가 됩니다."},
     ]},
-    {"n": 5, "title": "희망 시점과 이유", "fields": [
+    # notice = 칸 위에 눈에 띄게 띄우는 알림. 희망 시점이 약속으로 읽히지 않게 한다 (2026-09-22).
+    {"n": 5, "title": "희망 시점과 이유", "notice": SCHEDULE_NOTICE, "fields": [
         {"k": "when", "label": "희망 시점", "kind": "text", "ph": "예) 9월 말"},
         {"k": "why_urgent", "label": "이유 (선택)", "kind": "text", "ph": "예) 하반기 출장이 몰림"},
     ]},
@@ -2420,6 +2735,10 @@ def api_project_get(no):
                           if j else None),
             "roi": j["roi"] if j else None,
             "verdict": j["verdict"] if j else None,
+            # AI 인터뷰가 끝났는가 — 끝났으면 인터뷰 카드에 완료 버튼(FEA 는 Go / 조건부 / Drop)을 띄운다
+            "int_finished": _int_finished(d),
+            "fea_finished": _fea_finished(d) if fea_form else False,
+            "ard_finished": _ard_finished(d) if (d.get("ard_form") or {}) else False,
         })
     return jsonify(d)
 
@@ -2462,7 +2781,7 @@ def api_intake_message():
 
 @app.post("/api/intake/verify")
 def api_intake_verify():
-    """좌측 양식 [작성 완료 및 검증] — 폼을 저장하고 검토한 뒤 챗봇이 이어받는다.
+    """좌측 양식 [작성 내용 AI 인터뷰] — 폼을 저장하고 검토한 뒤 챗봇이 이어받는다.
 
     다 채우고 눌러야 하는 버튼이 아니다. 비어 있어도 눌러서 인터뷰를 시작할 수 있다.
     """
@@ -2473,13 +2792,47 @@ def api_intake_verify():
     return jsonify(intake_verify(d, b.get("form") or {}, b.get("user", "")))
 
 
-@app.post("/api/intake/finalize")
-def api_intake_finalize():
-    """INT 초안 생성 (FR-04). 미확보 항목은 채우지 않고 ⬜ 로 남긴다."""
+@app.post("/api/intake/repeat")
+def api_intake_repeat():
+    """완료 카드 [AI 인터뷰 반복] — 되묻기 횟수·보류를 지우고 인터뷰를 처음부터 다시 한다."""
     b = request.get_json(silent=True) or {}
     d = load_project((b.get("project_no") or "").strip())
     if not d:
         return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
+    return jsonify(intake_verify(d, b.get("form") or {}, b.get("user", ""), repeat=True))
+
+
+def _save_form_patch(d: dict, form: dict, where: str, user: str) -> str:
+    """[작성 및 검토 완료] 직전에 화면의 마지막 값을 반영한다. 민감정보가 있으면 막는다(FR-11)."""
+    joined = "\n".join(str(v) for v in (form or {}).values() if isinstance(v, str) and v)
+    sc = R.scan_sensitive(joined)
+    if sc["blocked"]:
+        audit("sensitive_blocked", d["project_no"], user, where=where,
+              kinds=[h["label"] for h in sc["hits"]])
+        return sc["message"]
+    return ""
+
+
+@app.post("/api/intake/finalize")
+def api_intake_finalize():
+    """인터뷰 카드 [작성 및 검토 완료] — INT 문서를 만들고 작성을 끝낸다 (FR-04).
+
+    미확보 항목은 채우지 않고 ⬜ 로 남긴다. 화면에서 마지막으로 고친 값(form)을 먼저 반영한다.
+    """
+    b = request.get_json(silent=True) or {}
+    d = load_project((b.get("project_no") or "").strip())
+    if not d:
+        return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
+
+    form = b.get("form") or {}
+    if form:
+        err = _save_form_patch(d, form, "int_complete", b.get("user", ""))
+        if err:
+            return jsonify(error=err), 400
+        cur = d.setdefault("int_data", {})
+        for k, v in form.items():
+            if k in R.SLOT_RULES:
+                cur[k] = R.mask_sensitive(str(v or "").strip())
 
     data = dict(d.get("int_data") or {})
     data.setdefault("received_at", _today())
@@ -2496,14 +2849,19 @@ def api_intake_finalize():
     g = R.check_guardrails({"text": md, "user_request": ""})
     a = R.assess_int(data)   # 채워졌는가가 아니라 '쓸 수 있는 수준인가'
 
+    hist = d.get("history") or []
+    hist.append({"role": "agent", "at": _now(),
+                 "text": "📄 **INT 작성을 완료했습니다.** 아래 문서를 확인하세요. "
+                         "고칠 곳이 있으면 [내용 직접 수정] 뒤 다시 완료하시면 됩니다."})
     d = save_project({"project_no": d["project_no"], "int_data": data, "int_md": md,
-                      "int_validation": v, "int_assessment": a, "status": "INT 초안"})
+                      "int_validation": v, "int_assessment": a, "status": "INT 작성완료",
+                      "int_done": True, "int_completed_at": _now(), "history": hist})
     audit("int_generated", d["project_no"], b.get("user", ""),
           missing=[m["label"] for m in v["missing"]],
           weak=[a["slots"][k]["label"] for k in a["weak"]],
           ready=a["ready"], guardrails_passed=g["passed"])
     return jsonify({"project": d, "markdown": md, "validation": v, "guardrails": g,
-                    "assessment": a, "progress": _progress(data, d)})
+                    "assessment": a, "progress": _progress(data, d), "finished": True})
 
 
 def _split_no(no: str):
@@ -2525,12 +2883,46 @@ def api_fea_draft():
 
 @app.post("/api/fea/verify")
 def api_fea_verify():
-    """좌측 FEA 양식 [작성 완료 및 검증] — G1 에서 걸릴 곳을 짚는다."""
+    """좌측 FEA 양식 [작성 내용 AI 인터뷰] — G1 에서 걸릴 곳을 짚는다."""
     b = request.get_json(silent=True) or {}
     d = load_project((b.get("project_no") or "").strip())
     if not d:
         return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
     return jsonify(fea_verify(d, b.get("form") or {}, b.get("user", "")))
+
+
+@app.post("/api/fea/repeat")
+def api_fea_repeat():
+    """완료 카드 [AI 인터뷰 반복] — 되묻기·보류를 지우고 FEA 인터뷰를 처음부터 다시 한다."""
+    b = request.get_json(silent=True) or {}
+    d = load_project((b.get("project_no") or "").strip())
+    if not d:
+        return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
+    return jsonify(fea_verify(d, b.get("form") or {}, b.get("user", ""), repeat=True))
+
+
+@app.post("/api/fea/complete")
+def api_fea_complete():
+    """인터뷰 카드에서 담당자가 **Go / 조건부 / Drop** 을 고르면 FEA 작성을 끝낸다.
+
+    판정은 사람이 고른 값이다 — 에이전트는 권고만 보였다 (금칙 G-2 · 자율성 L1).
+    고른 값을 fea_form.decision 에 넣고 문서를 만든다. G1 승인은 팀장이 승인 플랫폼에서 한다.
+    """
+    b = request.get_json(silent=True) or {}
+    d = load_project((b.get("project_no") or "").strip())
+    if not d:
+        return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
+    decision = (b.get("decision") or "").strip()
+    if decision not in FEA_DECISIONS:
+        return jsonify(error="Go / 조건부 / Drop 중 하나를 골라 주세요."), 400
+    if b.get("form"):
+        err = _save_form_patch(d, b["form"], "fea_complete", b.get("user", ""))
+        if err:
+            return jsonify(error=err), 400
+        _save_fea_form(d, b["form"])
+    d.setdefault("fea_form", {})["decision"] = decision
+    out, status = _fea_generate(d, b.get("user", ""), completed=True)
+    return jsonify(out), status
 
 
 @app.post("/api/fea/message")
@@ -2574,22 +2966,28 @@ def api_fea_generate():
     # 화면에서 마지막으로 고친 값을 먼저 반영
     if b.get("form"):
         _save_fea_form(d, b["form"])
+    out, status = _fea_generate(d, b.get("user", ""))
+    return jsonify(out), status
+
+
+def _fea_generate(d: dict, user: str = "", completed: bool = False) -> tuple:
+    """FEA 문서를 만든다 — [생성] 과 [Go / 조건부 / Drop 선택] 이 같이 쓴다. (응답, 상태코드)"""
     form = d.get("fea_form") or {}
     if not form:
-        return jsonify(error="평가서 양식이 비어 있습니다. [INT 에서 초안 만들기] 를 먼저 눌러 주세요."), 400
+        return {"error": "평가서 양식이 비어 있습니다. [INT 에서 초안 만들기] 를 먼저 눌러 주세요."}, 400
 
     int_data = d.get("int_data") or {}
     j = fea_judge(d, form)
     tr, ty, au, roi = j["track"], j["type"], j["autonomy"], j["roi"]
     parts = R.fea_form_to_parts(form)
 
+    # 6번 작성 / 승인 / 일자는 승인 플랫폼에서 채운다 — 에이전트 문서에는 빈칸 (2026-09-22).
+    # 예전 양식에서 저장된 written_by·approved_by 가 남아 있어도 싣지 않는다.
     fea_data = R.build_fea_data(
         int_data, {"track": tr, "type": ty, "autonomy": au},
         parts["fit"], parts["alts"], roi,
-        parts["summary"], parts["author"] or "(에이전트 초안)",
+        parts["summary"], "",
         extra={"damage_desc": parts["damage_desc"], "decision": parts["decision"],
-               "reviewer": parts["reviewer"], "approver": parts["approver"],
-               "approved_at": parts["approved_at"],
                # 판정 권고 계산에 쓰이는 입력 — fea_judge 와 같은 값을 넘겨 결과가 어긋나지 않게 한다
                "alt_sufficient": form.get("alt_sufficient"),
                "assess": R.assess_fea(form)})
@@ -2615,15 +3013,24 @@ def api_fea_generate():
     a = R.assess_fea(form)
 
     rec = fea_data.pop("_verdict", None) or j["verdict"]
-    d = save_project({
+    patch = {
         "project_no": d["project_no"], "fea_form": form, "fea_data": fea_data, "fea_md": md,
         "fea_validation": v, "fea_assessment": a,
         "judgement": {"track": tr, "type": ty, "autonomy": au},
         "roi": roi, "track_answers": j["answers"], "guardrails": g, "verdict": rec,
-        "status": "FEA 초안",
-    })
-    audit("fea_generated", d["project_no"], b.get("user", ""),
+        "status": "FEA 작성완료" if completed else "FEA 초안",
+    }
+    if completed:
+        label = R.DECISION_LABEL.get(form.get("decision"), form.get("decision"))
+        hist = d.get("fea_history") or []
+        hist.append({"role": "agent", "at": _now(),
+                     "text": f"📄 담당자 선택 **{label}** 으로 **FEA 작성을 완료했습니다.** 아래 문서를 확인하세요. "
+                             "G1 승인은 팀장이 승인 플랫폼에서 합니다."})
+        patch.update({"fea_history": hist, "fea_done": True, "fea_completed_at": _now()})
+    d = save_project(patch)
+    audit("fea_completed" if completed else "fea_generated", d["project_no"], user,
           track=tr["track"], type=ty["type"], autonomy=au["level"],
+          decision=form.get("decision") or "",
           roi_computed=roi["computed"], guardrails_passed=g["passed"],
           violations=[x["id"] for x in g["violations"]],
           weak=[a["slots"][k]["label"] for k in a["weak"]], ready=a["ready"],
@@ -2631,11 +3038,11 @@ def api_fea_generate():
           verdict_signals=rec["signals"], conditions=rec["conditions"],
           basis=tr["reason"])
 
-    return jsonify({"project": d, "markdown": md, "validation": v, "guardrails": g,
-                    "assessment": a, "progress": _fea_progress(form, d),
-                    "judgement": {"track": tr, "type": ty, "autonomy": au},
-                    "roi": roi, "verdict": rec,
-                    "readonly": _fea_readonly(j), "llm_error": ""})
+    return ({"project": d, "markdown": md, "validation": v, "guardrails": g,
+             "assessment": a, "progress": _fea_progress(form, d),
+             "judgement": {"track": tr, "type": ty, "autonomy": au},
+             "roi": roi, "verdict": rec, "decision": form.get("decision") or "",
+             "readonly": _fea_readonly(j), "llm_error": "", "finished": True}, 200)
 
 
 @app.post("/api/rules/preview")
@@ -2674,12 +3081,22 @@ def api_ard_draft():
 
 @app.post("/api/ard/verify")
 def api_ard_verify():
-    """좌측 ARD 양식 [작성 완료 및 검증] — G2 에서 걸릴 곳을 짚는다."""
+    """좌측 ARD 양식 [작성 내용 AI 인터뷰] — G2 에서 걸릴 곳을 짚는다."""
     b = request.get_json(silent=True) or {}
     d = load_project((b.get("project_no") or "").strip())
     if not d:
         return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
     return jsonify(ard_verify(d, b.get("form") or {}, b.get("user", "")))
+
+
+@app.post("/api/ard/repeat")
+def api_ard_repeat():
+    """완료 카드 [AI 인터뷰 반복] — 되묻기·보류를 지우고 ARD 인터뷰를 처음부터 다시 한다."""
+    b = request.get_json(silent=True) or {}
+    d = load_project((b.get("project_no") or "").strip())
+    if not d:
+        return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
+    return jsonify(ard_verify(d, b.get("form") or {}, b.get("user", ""), repeat=True))
 
 
 @app.post("/api/ard/message")
@@ -2696,7 +3113,7 @@ def api_ard_message():
 
 @app.post("/api/ard/generate")
 def api_ard_generate():
-    """ARD 초안 문서 생성 — 표준체계 문서③ 양식 1~7번.
+    """인터뷰 카드 [작성 및 검토 완료] — ARD 문서를 만들고 작성을 끝낸다 (표준체계 문서③ 1~7번).
 
     7번 합의(3자 서명)는 **에이전트가 채우지 않는다.** 미확보 항목은 ⬜ 로 남긴다.
     """
@@ -2705,6 +3122,9 @@ def api_ard_generate():
     if not d:
         return jsonify(error="해당 프로젝트를 찾을 수 없습니다."), 404
     if b.get("form"):
+        err = _save_form_patch(d, b["form"], "ard_complete", b.get("user", ""))
+        if err:
+            return jsonify(error=err), 400
         _save_ard_form(d, b["form"])
     form = d.get("ard_form") or {}
     if not form:
@@ -2736,12 +3156,18 @@ def api_ard_generate():
               violations=[x["id"] for x in g["violations"]])
         return jsonify(error="금칙 검사에서 걸렸습니다.", guardrails=g), 400
 
-    save_project({"project_no": d["project_no"], "ard_data": data, "ard_md": md})
+    hist = d.get("ard_history") or []
+    hist.append({"role": "agent", "at": _now(),
+                 "text": "📄 **ARD 작성을 완료했습니다.** 미팅에 들고 갈 1차 문서입니다 — 아래에서 확인하세요. "
+                         "3자 서명(7번)은 G2 에서 사람이 합니다."})
+    save_project({"project_no": d["project_no"], "ard_form": form, "ard_data": data, "ard_md": md,
+                  "ard_history": hist, "ard_done": True, "ard_completed_at": _now(),
+                  "status": "ARD 작성완료"})
     audit("ard_generated", d["project_no"], b.get("user", ""),
           meeting_ready=meeting["ready"], missing=v["required_missing"])
 
     return jsonify({"doc_no": f"{d['project_no']}-ARD", "markdown": md,
-                    "validation": v, "meeting": meeting, "guardrails": g})
+                    "validation": v, "meeting": meeting, "guardrails": g, "finished": True})
 
 
 @app.post("/api/scan")

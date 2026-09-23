@@ -32,7 +32,7 @@ export function allowedNativePath(path,method,code,document){
  if(method==='GET')return ['/portal/access','/portal/final','/portal/history','/api/bootstrap','/api/projects','/api/audit',`/api/projects/${code}`,`/api/projects/${code}?state=1`].includes(path)||/^\/portal\/version\/\d+$/.test(path)||new RegExp(`^/api/export/${code}/${document}\\?fmt=(md|doc)$`).test(path);
  if(method==='PUT')return path===`/api/projects/${code}`;
  if(method!=='POST')return false;
- return ['/portal/verify-complete','/portal/complete','/api/scan','/api/rules/preview'].includes(path)||path.startsWith({INT:'/api/intake/',FEA:'/api/fea/',ARD:'/api/ard/'}[document])&&/\/(message|verify|finalize|draft|judge|generate)$/.test(path);
+ return ['/portal/finish','/portal/verify-complete','/portal/complete','/api/scan','/api/rules/preview'].includes(path)||path.startsWith({INT:'/api/intake/',FEA:'/api/fea/',ARD:'/api/ard/'}[document])&&/\/(message|verify|repeat|complete|finalize|draft|judge|generate)$/.test(path);
 }
 async function context(client,identity,code,document,write,summary=false){
  const access=await documentAccess(client,identity,code);
@@ -69,6 +69,16 @@ export async function verifyAndComplete(document,data,revision,call){
  if(complete.status>=400)return complete;
  return {...complete,body:{...verified.body,portalCompleted:true,projectCode:complete.body?.projectCode},canEdit:false};
 }
+// Upstream interview completion is not a portal gate approval. Persist the chosen
+// document first, then enforce the existing portal readiness and stage transition.
+export async function finishNativeDocument(document,data,revision,call){
+ const operation={INT:'/api/intake/finalize',FEA:'/api/fea/complete',ARD:'/api/ard/generate'}[document];
+ const generated=await call(operation,data,revision);
+ if(generated.status>=400||generated.body?.blocked||generated.body?.guardrails?.passed===false)return {...generated,status:generated.status>=400?generated.status:400,body:{...generated.body,error:generated.body?.error||'문서 안전성 검증을 통과하지 못했습니다. 내용을 확인해 주세요.'}};
+ const completed=await call('/portal/complete',{},generated.revision);
+ if(completed.status>=400)return completed;
+ return {...completed,body:{...generated.body,...completed.body,portalCompleted:true},canEdit:false};
+}
 export async function nativeAgentRequest(identity,code,document,path,method,data={},revision,dependencies={}){
  if(!allowedNativePath(path,method,code,document))throw fail(400,'허용되지 않은 Agent 작업입니다.');
  const write=method!=='GET'&&!['/api/scan','/api/rules/preview'].includes(path);
@@ -98,6 +108,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
   }
   return {status:200,body,canEdit:ctx.canEdit};
  }
+ if(path==='/portal/finish')return finishNativeDocument(document,{...data,project_no:code},revision,(operation,input,rev)=>nativeAgentRequest(identity,code,document,operation,'POST',input,rev,dependencies));
  if(path==='/portal/verify-complete')return verifyAndComplete(document,{...data,project_no:code},revision,(operation,input,rev)=>nativeAgentRequest(identity,code,document,operation,'POST',input,rev,dependencies));
  if(path==='/portal/history')return {status:200,body:{versions:(await pool.query('select id,version_number,original_name,created_at from agent_portal.native_agent_documents where project_id=$1 and document_type=$2 order by version_number desc',[ctx.project.id,document])).rows},canEdit:ctx.canEdit};
  if(path.startsWith('/portal/version/')){
@@ -139,7 +150,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
    if(document==='INT')project[key]=withIntContacts(project[key],latest.state);
    if(document==='ARD')project[key]=withArdApprovals(project[key],latest.state);
   }
-  if(/\/(finalize|generate)$/.test(path))project._portal_generated_from={...project._portal_generated_from,[document]:nativeFormFingerprint(project[{INT:'int_data',FEA:'fea_form',ARD:'ard_form'}[document]]||{})};
+  if(/\/(finalize|generate)$/.test(path)||path==='/api/fea/complete')project._portal_generated_from={...project._portal_generated_from,[document]:nativeFormFingerprint(project[{INT:'int_data',FEA:'fea_form',ARD:'ard_form'}[document]]||{})};
   const type=document.toLowerCase(),markdown=project[type+'_md'];
   let doc;
   if(markdown){
@@ -192,6 +203,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
   }
   await client.query('update agent_portal.native_agent_sessions set payload=$2::jsonb,revision=revision+1,updated_by=$3,updated_at=now() where project_id=$1',[ctx.project.id,JSON.stringify(project),ctx.actor.id]);
   await client.query("insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,after_data) values($1,$2,'NATIVE_AGENT','document',$3,$4::jsonb)",[ctx.actor.id,ctx.project.id,`${code}-${document}`,JSON.stringify({operation:path,revision:rev+1,documentVersion:doc?.version_number,events:result.audit?.map(a=>a.event)})]);
+  if(path==='/portal/complete')result.body={...result.body,project,markdown:project[document.toLowerCase()+'_md']};
   return {...result,body:canManageAssessment(ctx.actor.app_role)?result.body:redactNativeResponse(result.body),revision:rev+1,canEdit:path==='/portal/complete'?false:latest.canEdit};
  });
 }

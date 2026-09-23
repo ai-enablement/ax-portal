@@ -53,7 +53,7 @@ jobs:
           PORTAL_AGENT_EMBEDDED=1 PYTHONPATH=server/vendor/intake-agent/python-packages python -S -B server/vendor/intake-agent/portal_bridge.py <<'JSON' > native-smoke.json
           {"project":{"project_no":"2099-999","history":[],"int_data":{}},"path":"/api/bootstrap","method":"GET","body":{},"actor":"Deployment QA"}
           JSON
-          node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('native-smoke.json'));if(r.status!==200||r.body.form.length!==5||r.body.fea_form.length!==6||r.body.ard_form.length!==7)process.exit(1);fs.unlinkSync('native-smoke.json');console.log('Packaged INT/FEA/ARD bootstrap passed');"
+          node -e "const fs=require('fs');const r=JSON.parse(fs.readFileSync('native-smoke.json'));if(r.status!==200||r.body.form.length!==5||r.body.fea_form.length!==5||r.body.ard_form.length!==7)process.exit(1);fs.unlinkSync('native-smoke.json');console.log('Packaged INT/FEA/ARD bootstrap passed');"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4

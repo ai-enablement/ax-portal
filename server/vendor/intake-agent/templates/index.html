@@ -177,7 +177,55 @@
   .gmark.weak { background:rgba(247,140,60,.18); color:#b65a13; }
   .gmark.missing { background:rgba(138,147,168,.15); color:#6b7488; }
   .gmark.held { background:rgba(192,57,43,.12); color:#a5281a; }
+  /* 선택 항목 — 비어 있어도 '미입력'(필수처럼 보임)이 아니라 '선택'으로 둔다 (2026-09-22 1-a) */
+  .gmark.opt { background:transparent; color:var(--muted); border:1px dashed rgba(138,147,168,.45); }
+  .fld-row.g-opt { opacity:.92; }
+  @keyframes ready-pulse { 0%{box-shadow:0 0 0 0 rgba(20,184,122,.55);} 100%{box-shadow:0 0 0 9px rgba(20,184,122,0);} }
   .fld-row .opt { font-size:10.5px; font-weight:600; color:var(--muted); }
+  /* 칸 위 알림 — 희망 시점이 약속으로 읽히지 않게 (2026-09-22) */
+  .fnotice { display:flex; align-items:flex-start; gap:7px; margin:0 0 9px 24px; padding:8px 11px;
+    border-radius:8px; background:rgba(247,140,60,.12); border:1px solid rgba(247,140,60,.55);
+    color:#8a4a10; font-size:12px; font-weight:800; line-height:1.55; }
+
+  /* ===== AI 인터뷰 완료 카드 — 인터뷰가 끝나면 인터뷰 카드 아래에 뜬다 (INT·FEA·ARD 공통) =====
+     [작성 내용 AI 인터뷰] 와 같은 모양 · 색만 초록. 작은 두 버튼으로 양식 수정 / 인터뷰 반복. */
+  .done-foot { border-top:1px solid var(--line); padding-top:12px; margin-top:12px; }
+  .done-foot[hidden] { display:none; }
+  .btn-done { width:100%; cursor:pointer; font-family:inherit; font-size:13px; font-weight:800;
+    padding:9px 16px; border-radius:8px; background:var(--green); color:#fff; border:0;
+    animation:ready-pulse 1.6s ease-out 3; }
+  .btn-done:hover { background:#0f9e68; }
+  .btn-done:disabled { opacity:.45; cursor:not-allowed; }
+  .done-sub { display:flex; gap:6px; justify-content:flex-end; margin-top:7px; }
+  .btn-sub { cursor:pointer; font-family:inherit; font-size:11.5px; font-weight:700; height:26px; padding:0 10px;
+    border-radius:7px; background:#fff; color:var(--ink-2); border:1px solid var(--line); transition:all .13s; }
+  .btn-sub:hover { border-color:var(--accent); color:var(--accent); }
+  /* FEA — 에이전트 권고를 강조해 보이고, 담당자가 Go / 조건부 / Drop 을 고른다 */
+  .pick-rec { border-radius:10px; padding:10px 12px; margin-bottom:10px; border:1px solid; }
+  .pick-rec.go   { background:rgba(20,184,122,.08); border-color:rgba(20,184,122,.45); }
+  .pick-rec.cond { background:rgba(247,140,60,.09); border-color:rgba(247,140,60,.5); }
+  .pick-rec.drop { background:rgba(192,57,43,.07);  border-color:rgba(192,57,43,.4); }
+  .pick-rec.tentative { border-style:dashed; }
+  .pick-rec-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .pick-rec-head .lab { font-size:11.5px; font-weight:800; color:var(--ink-2); }
+  .pick-rec .advice-badge { font-size:15px; padding:4px 12px; }
+  .pick-rec.go .advice-badge { background:var(--green); }
+  .pick-rec.cond .advice-badge { background:var(--orange); }
+  .pick-rec.drop .advice-badge { background:var(--red); }
+  .pick-rec-line { margin:7px 0 0; font-size:12.5px; line-height:1.65; color:var(--ink); }
+  .pick-ask { font-size:11.5px; font-weight:700; color:var(--ink-2); margin:0 0 6px; }
+  .pick-row { display:flex; gap:6px; }
+  .btn-pick { position:relative; flex:1; cursor:pointer; font-family:inherit; font-size:13px; font-weight:800;
+    padding:9px 0; border-radius:8px; color:#fff; border:0; transition:filter .12s; }
+  .btn-pick.go { background:var(--green); }
+  .btn-pick.cond { background:var(--orange); }
+  .btn-pick.drop { background:var(--red); }
+  .btn-pick:hover { filter:brightness(1.08); }
+  .btn-pick:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-pick.rec { box-shadow:0 0 0 3px rgba(19,0,106,.22); }
+  .btn-pick.rec::after { content:"권고"; position:absolute; top:-8px; right:8px; font-size:10px; font-weight:800;
+    padding:1px 7px; border-radius:999px; background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  .btn-pick.chosen::before { content:"✓ "; }
   /* 챗이 채운 칸을 잠깐 밝힌다 */
   @keyframes fill-flash { 0%{ background:rgba(91,141,239,.28); } 100%{ background:inherit; } }
   .just-filled input, .just-filled textarea, .just-filled .grade-pick { animation:fill-flash 1.4s ease-out; }
@@ -376,12 +424,12 @@
       <div id="intakeEmpty" class="card">
         <div class="card-head"><h2>요구 접수를 시작하세요</h2><span class="meta">표준체계 문서① INT</span></div>
         <p class="muted" style="line-height:1.8">
-          왼쪽 <b>접수 양식</b>에 아는 만큼 적고 <b>[작성 완료 및 검증]</b> 을 누르면,
-          오른쪽 <b>AI 인터뷰</b>가 내용을 검토하고 부족한 것을 물어봅니다.<br />
+          왼쪽 <b>접수 양식</b>에 아는 만큼 적고 <b>[작성 내용 AI 인터뷰]</b> 를 누르면,
+          오른쪽 <b>AI 인터뷰</b>가 내용을 검토하고 부족한 것만 물어봅니다.<br />
           양식을 다 채울 필요는 없습니다 — <b>빈칸인 채로 눌러도</b> 인터뷰가 처음부터 진행합니다.
           오른쪽에서 바로 대화만 하셔도 됩니다.<br />
-          두루뭉술하거나 앞뒤가 맞지 않는 답은 <b>접수서를 쓸 수 있는 수준이 될 때까지 계속 되묻습니다.</b>
-          궁금한 게 있으면 인터뷰 중에 <b>되물으셔도 됩니다.</b>
+          필수 항목이 채워지면 인터뷰가 끝나고 <b>[작성 및 검토 완료]</b> 버튼이 나타납니다.
+          내용이 마음에 들지 않으면 <b>[내용 직접 수정]</b> 이나 <b>[AI 인터뷰 반복]</b> 을 누르세요.
         </p>
         <div class="row" style="margin-top:12px">
           <button class="btn-primary" id="btnNew2">＋ 새 요구 접수 시작</button>
@@ -407,8 +455,7 @@
             <div class="form-foot">
               <div class="muted" id="formHint">아는 만큼만 적으셔도 됩니다. 나머지는 인터뷰에서 여쭤봅니다.</div>
               <div class="row" style="margin-top:8px">
-                <button class="btn-primary" id="btnVerify" style="flex:1">✓ 작성 완료 및 검증</button>
-                <button class="btn-light" id="btnFinalizeInt" style="height:38px">📄 INT 초안 생성</button>
+                <button class="btn-primary" id="btnVerify" style="flex:1">💬 작성 내용 AI 인터뷰</button>
               </div>
             </div>
           </div>
@@ -428,12 +475,20 @@
             <p class="muted" style="margin:8px 0 0">
               ⚠️ 주민등록번호·계좌번호 등 개인정보는 입력하지 마세요. 감지되면 저장을 차단합니다.
             </p>
+            <!-- 인터뷰가 끝나면 뜬다 — 문서를 만드는 버튼은 이것 하나다 -->
+            <div class="done-foot" id="intDone" hidden>
+              <button class="btn-done" id="btnIntComplete">✓ 작성 및 검토 완료</button>
+              <div class="done-sub">
+                <button class="btn-sub" id="btnIntEdit" title="왼쪽 접수 양식으로 돌아가 직접 고칩니다">✎ 내용 직접 수정</button>
+                <button class="btn-sub" id="btnIntRepeat" title="되묻기 횟수를 지우고 인터뷰를 처음부터 다시 합니다">↻ AI 인터뷰 반복</button>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="card" id="intDocCard" style="display:none">
           <div class="card-head">
-            <h2>INT 초안 <span class="pill pill-complete" id="intDocNo">—</span></h2>
+            <h2>INT 문서 <span class="pill pill-complete" id="intDocNo">—</span></h2>
             <div class="row">
               <span class="meta" id="intValid"></span>
               <button class="btn-light" data-export="INT" data-fmt="md">⬇ Markdown</button>
@@ -458,9 +513,10 @@
       <div id="feaEmpty" class="card">
         <div class="card-head"><h2>타당성 평가를 시작하세요</h2><span class="meta">표준체계 문서② FEA</span></div>
         <p class="muted" style="line-height:1.8">
-          접수서(INT)를 읽고 <b>평가서 초안을 채워 드립니다</b> — 대안 검토 4항목, 적합성 진단 5축, 요구 요약.<br />
+          접수서(INT)를 읽고 <b>평가서 초안을 채워 드립니다</b> — 요구 요약, 대안 검토 4항목, 기대 효과.<br />
           트랙·유형·ROI 는 <b>규칙이 계산</b>합니다. LLM 도 대화도 이 값을 바꾸지 못합니다.<br />
-          오른쪽 챗봇이 <b>G1 에서 반려당할 곳</b>을 미리 짚어 드립니다.
+          <b>[작성 내용 AI 인터뷰]</b> 를 누르면 <b>G1 에서 반려당할 곳</b>을 미리 짚고,
+          인터뷰가 끝나면 에이전트 권고를 보고 <b>Go / 조건부 / Drop</b> 을 고르시면 작성이 완료됩니다.
         </p>
         <div class="row" style="margin-top:12px">
           <select class="input" id="feaPick" style="width:280px"></select>
@@ -488,19 +544,17 @@
             <div class="form-scroll" id="feaForm"></div>
 
             <div class="form-foot">
-              <div class="muted" id="feaHint">초안을 확인하고 고치신 뒤 검증을 눌러 주세요.</div>
+              <div class="muted" id="feaHint">초안을 확인하고 고치신 뒤 [작성 내용 AI 인터뷰] 를 눌러 주세요.</div>
               <div class="row" style="margin-top:8px">
-                <button class="btn-primary" id="btnFeaVerify" style="flex:1">✓ 작성 완료 및 검증</button>
-                <button class="btn-light" id="btnFeaRedraft" style="height:38px" title="빈 칸만 다시 채웁니다">↻ 초안 보강</button>
-                <button class="btn-light" id="btnGenFea" style="height:38px">📄 FEA 초안 생성</button>
+                <button class="btn-primary" id="btnFeaVerify" style="flex:1">💬 작성 내용 AI 인터뷰</button>
               </div>
             </div>
           </div>
 
-          <!-- ── 우: AI 검토 ── -->
+          <!-- ── 우: AI 인터뷰 (G1 관점 검토) ── -->
           <div class="card split-col">
             <div class="card-head">
-              <h2>AI 검토</h2>
+              <h2>AI 인터뷰</h2>
               <span class="meta">G1 관점 검토 · 되물으셔도 됩니다</span>
             </div>
             <div class="chat" id="feaChat"></div>
@@ -512,12 +566,26 @@
             <p class="muted" style="margin:8px 0 0">
               트랙·유형·ROI 는 규칙이 결정합니다 — 대화로는 바뀌지 않습니다. 4번 응답을 고치면 즉시 다시 계산됩니다.
             </p>
+            <!-- 인터뷰가 끝나면 뜬다 — 권고를 참고해 담당자가 고르면 FEA 작성이 완료된다 -->
+            <div class="done-foot" id="feaDone" hidden>
+              <div class="pick-rec" id="feaPickRec"></div>
+              <p class="pick-ask">담당자 판정 — 하나를 고르면 FEA 작성이 완료됩니다 (G1 승인은 팀장)</p>
+              <div class="pick-row">
+                <button class="btn-pick go" data-decision="Go">Go</button>
+                <button class="btn-pick cond" data-decision="Conditional Go">조건부</button>
+                <button class="btn-pick drop" data-decision="Drop">Drop</button>
+              </div>
+              <div class="done-sub">
+                <button class="btn-sub" id="btnFeaEdit" title="왼쪽 평가서 양식으로 돌아가 직접 고칩니다">✎ 내용 직접 수정</button>
+                <button class="btn-sub" id="btnFeaRepeat" title="되묻기 횟수를 지우고 인터뷰를 처음부터 다시 합니다">↻ AI 인터뷰 반복</button>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="card" id="adviceCard" style="display:none">
           <div class="card-head">
-            <h2>에이전트 판정 권고 <span class="meta">— 참고용 · 확정은 담당자·팀장(G1)</span></h2>
+            <h2>에이전트 판정 권고 <span class="meta">— 참고용 · 판정은 담당자가 고름 · G1 승인은 팀장</span></h2>
             <span class="meta">규칙 모듈이 계산 · 대화로 바뀌지 않음</span>
           </div>
           <div id="adviceBox"></div>
@@ -530,7 +598,7 @@
 
         <div class="card" id="feaDocCard" style="display:none">
           <div class="card-head">
-            <h2>FEA 초안 <span class="pill pill-complete" id="feaDocNo">—</span></h2>
+            <h2>FEA 문서 <span class="pill pill-complete" id="feaDocNo">—</span></h2>
             <div class="row">
               <span class="meta" id="feaValid"></span>
               <button class="btn-light" data-export="FEA" data-fmt="md">⬇ Markdown</button>
@@ -541,8 +609,8 @@
           <div class="doc" id="feaDoc"></div>
           <p class="muted" style="margin:10px 0 0">
             ★ 사람 개입 지점 ② — 담당자가 트랙·유형 판정의 적정성, 대안 검토 논리, ROI 계산 근거를 검토하고
-            <b>Go/Drop을 확정</b>합니다. 5번 판정란은 에이전트가 비워 둡니다.
-            SharePoint 등록은 사람이 직접 합니다(Out of Scope).
+            <b>Go / 조건부 / Drop 을 직접 고릅니다.</b> 5번 판정란에는 담당자가 고른 값만 체크됩니다 — 에이전트는 고르지 않습니다.
+            6번 승인(작성 / 승인 / 일자)은 승인 플랫폼에서 채웁니다. SharePoint 등록은 사람이 직접 합니다(Out of Scope).
           </p>
         </div>
       </div>
@@ -585,9 +653,7 @@
             <div class="form-foot">
               <div class="muted" id="ardHint">4~6번은 비워 두셔도 됩니다 — 미팅에서 함께 채웁니다.</div>
               <div class="row" style="margin-top:8px">
-                <button class="btn-primary" id="btnArdVerify" style="flex:1">✓ 작성 완료 및 검증</button>
-                <button class="btn-light" id="btnArdRedraft" style="height:38px" title="빈 칸만 다시 채웁니다">↻ 초안 보강</button>
-                <button class="btn-light" id="btnGenArd" style="height:38px">📄 ARD 초안 생성</button>
+                <button class="btn-primary" id="btnArdVerify" style="flex:1">💬 작성 내용 AI 인터뷰</button>
               </div>
             </div>
           </div>
@@ -607,12 +673,20 @@
             <p class="muted" style="margin:8px 0 0">
               최소한만 여쭙습니다. 한 항목에 <b>최대 4번</b>까지만 묻고, 그래도 안 되면 <b>미팅에서 채웁니다</b>.
             </p>
+            <!-- 인터뷰가 끝나면 뜬다 — 문서를 만드는 버튼은 이것 하나다 -->
+            <div class="done-foot" id="ardDone" hidden>
+              <button class="btn-done" id="btnArdComplete">✓ 작성 및 검토 완료</button>
+              <div class="done-sub">
+                <button class="btn-sub" id="btnArdEdit" title="왼쪽 요구사항 정의서 양식으로 돌아가 직접 고칩니다">✎ 내용 직접 수정</button>
+                <button class="btn-sub" id="btnArdRepeat" title="되묻기 횟수를 지우고 인터뷰를 처음부터 다시 합니다">↻ AI 인터뷰 반복</button>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="card" id="ardDocCard" style="display:none">
           <div class="card-head">
-            <h2>ARD 초안 <span class="pill pill-other" id="ardDocNo">—</span></h2>
+            <h2>ARD 문서 <span class="pill pill-other" id="ardDocNo">—</span></h2>
             <span class="meta" id="ardValid">—</span>
           </div>
           <div id="ardMissing"></div>
@@ -923,6 +997,36 @@
   });
   function goTab(id){ var t=$$('.tab').filter(function(x){ return x.dataset.tab===id; })[0]; if(t) t.click(); }
 
+  /* ═══════════════ 대화 말풍선 ═══════════════
+     에이전트 문장은 **굵게** 만 살린다 (예전엔 별표가 그대로 보였다). 나머지는 전부 이스케이프 —
+     LLM 이 만든 문장을 HTML 로 넣지 않는다. 우리가 만든 '생각 중' 표시만 HTML 로 둔다. */
+  function bubbleHtml(role, text){
+    var s = String(text==null ? '' : text);
+    if(s.indexOf('<span class="typing">') === 0) return s;
+    var h = esc(s);
+    return role === 'user' ? h : h.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  }
+
+  /* ═══════════════ AI 인터뷰 완료 카드 (INT·FEA·ARD 공통) ═══════════════
+     인터뷰가 끝나면(서버의 finished) 인터뷰 카드 아래에 완료 버튼을 띄운다.
+       [작성 및 검토 완료] — 문서를 만들고 작성을 끝낸다 (FEA 는 Go / 조건부 / Drop 을 고른다)
+       [내용 직접 수정]   — 왼쪽 양식으로 돌아간다
+       [AI 인터뷰 반복]   — 되묻기·보류를 지우고 인터뷰만 처음부터 다시 한다 */
+  function setDone(prefix, on){
+    var el = $('#' + prefix + 'Done');
+    if(el) el.hidden = !on;
+  }
+  function goEditForm(formSel){
+    var box = $(formSel); if(!box) return;
+    var row = box.querySelector('.fld-row.g-weak') || box.querySelector('.fld-row.focus-ask');
+    var el = (row && row.querySelector('textarea, input:not([type=checkbox]), select'))
+          || box.querySelector('textarea, input:not([type=checkbox])');
+    var card = box.closest('.card');
+    if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
+    if(el){ setTimeout(function(){ el.focus(); el.scrollIntoView({behavior:'smooth', block:'nearest'}); }, 250); }
+    toast('왼쪽 양식을 고친 뒤 [작성 내용 AI 인터뷰] 를 다시 누르세요. 바로 완료하셔도 됩니다.');
+  }
+
   /* ═══════════════ 부팅 (FR-12 고지) ═══════════════ */
   function boot(){
     return api('/api/bootstrap').then(function(b){
@@ -1013,11 +1117,12 @@
       $('#intakeWork').style.display='';
       $('#intDocCard').style.display='none';
       $('#chat').innerHTML='';
+      setDone('int', false);
       window.__warned = {};
       renderForm();
       pushMsg('agent',
         '안녕하세요. 요구 접수를 도와드리겠습니다. 프로젝트 번호는 ' + p.project_no + ' 입니다.\n\n'
-        + '왼쪽 양식에 아는 만큼 적고 [작성 완료 및 검증] 을 눌러 주세요. '
+        + '왼쪽 양식에 아는 만큼 적고 **[작성 내용 AI 인터뷰]** 를 눌러 주세요. '
         + '빈칸이어도 괜찮습니다 — 제가 처음부터 여쭤보겠습니다.\n'
         + '여기서 바로 대화만 하셔도 되고, 진행 중에 궁금한 게 있으면 저에게 물어보셔도 됩니다.');
       goTab('intake');
@@ -1040,6 +1145,7 @@
     spec.forEach(function(sec){
       h += '<div class="fsec"><h4><span class="n">' + sec.n + '</span>' + esc(sec.title) + '</h4>';
       if(sec.hint) h += '<p class="fhint">' + esc(sec.hint).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>') + '</p>';
+      if(sec.notice) h += '<div class="fnotice" role="note"><span>📢</span><span>' + esc(sec.notice) + '</span></div>';
       sec.fields.forEach(function(f){
         FORM_KEYS.push(f.k);
         var v = data[f.k] || '';
@@ -1117,25 +1223,29 @@
     $$('#intForm .fld-row').forEach(function(row){
       var k = row.dataset.slot, s = bySlot[k];
       var el = $('#f_' + k);
-      var grade = s ? s.grade : ((el && el.value.trim()) ? 'ok' : 'missing');
+      var filled = !!(el && el.value.trim());
+      var grade = s ? s.grade : (filled ? 'ok' : 'missing');
+      // 선택 항목은 비어 있으면 '선택', 적었는데 부실해도 '참고' — 필수처럼 보이지 않게 (1-a)
+      var optional = ((BOOT.slot_rules||{})[k]||{}).optional;
+      var optLabel = '';
+      if(optional && grade !== 'ok'){ optLabel = filled ? '참고' : '선택'; grade = 'opt'; }
       row.className = 'fld-row g-' + grade + (row.classList.contains('just-filled') ? ' just-filled' : '');
       var mark = row.querySelector('[data-mark]');
       var why = row.querySelector('[data-why]');
-      var held = s && s.held;
+      var held = s && s.held && !optional;
       if(mark){
         mark.className = 'gmark ' + (held ? 'held' : grade);
-        mark.textContent = held ? '보류' : (GRADE_LABEL[grade] || grade);
+        mark.textContent = held ? '보류' : (optLabel || GRADE_LABEL[grade] || grade);
       }
       if(why){
         if(held){
           why.hidden = false; why.className = 'why held';
           why.textContent = '되물었지만 확보하지 못했습니다. 문서에는 ⬜ 미확보로 남습니다.';
-        } else if(s && s.grade === 'weak' && s.reason){
+        } else if(s && s.grade === 'weak' && s.reason && !optional){
           why.hidden = false; why.className = 'why weak'; why.textContent = s.reason;
         } else { why.hidden = true; why.textContent = ''; }
       }
     });
-    $('#btnFinalizeInt').disabled = !(CUR && CUR.project_no);
   }
 
   /* 인터뷰가 지금 묻고 있는 칸을 강조 */
@@ -1149,30 +1259,38 @@
     }
   }
 
-  /* ═══════════════ 검증 (좌 → 우) ═══════════════ */
-  $('#btnVerify').addEventListener('click', function(){
+  /* ═══════════════ 작성 내용 AI 인터뷰 (좌 → 우) ═══════════════
+     repeat=true 는 완료 카드의 [AI 인터뷰 반복] — 되묻기·보류를 지우고 처음부터 다시 한다. */
+  function runIntInterview(repeat){
     if(!CUR){ toast('먼저 새 요구 접수를 시작하세요','err'); return; }
-    window._showLoading('검증 중', '적어주신 내용을 검토하고 있습니다');
+    window._showLoading(repeat ? 'AI 인터뷰 반복' : 'AI 인터뷰', '적어주신 내용을 검토하고 있습니다');
     $('#btnVerify').disabled = true;
-    post('/api/intake/verify', {project_no: CUR.project_no, form: collectForm()}).then(function(r){
+    post(repeat ? '/api/intake/repeat' : '/api/intake/verify',
+         {project_no: CUR.project_no, form: collectForm()}).then(function(r){
       if(r.data) CUR.int_data = r.data;
       syncFormFromData(r.data, r.changed);
       applyProgress(r.progress);
       if(r.blocked){ pushMsg('agent', r.reply, 'danger'); toast('민감정보가 감지되어 저장하지 않았습니다','err'); return; }
       pushMsg('agent', r.reply);
-      (r.issues||[]).slice(0,1).forEach(function(i){ highlightAsk(i.slot); });
+      setDone('int', !!r.finished);
+      if(!r.finished) (r.issues||[]).slice(0,1).forEach(function(i){ highlightAsk(i.slot); });
+      else highlightAsk(null);
       if(r.llm_error && r.llm_error.indexOf('미설정') < 0) pushMsg('agent', 'LLM 오류: ' + r.llm_error, 'system');
-      toast(r.done ? '검증 완료 — 접수서 작성 가능' : ((r.issues||[]).length + '개 항목을 더 여쭤보겠습니다'), r.done ? 'ok' : '');
-      $('#chatInput').focus();
+      toast(r.finished ? '인터뷰가 끝났습니다 — [작성 및 검토 완료] 를 눌러 주세요'
+                       : '하나씩 여쭤보겠습니다', r.finished ? 'ok' : '');
+      if(!r.finished) $('#chatInput').focus();
     }).catch(function(e){ toast(e.message,'err'); })
       .finally(function(){ window._hideLoading(); $('#btnVerify').disabled = false; });
-  });
+  }
+  $('#btnVerify').addEventListener('click', function(){ runIntInterview(false); });
+  $('#btnIntRepeat').addEventListener('click', function(){ runIntInterview(true); });
+  $('#btnIntEdit').addEventListener('click', function(){ goEditForm('#intForm'); });
 
   /* ═══════════════ 인터뷰 (우) ═══════════════ */
   function pushMsg(role, text, cls){
     var d = document.createElement('div');
     d.className = 'msg ' + (cls || role);
-    d.innerHTML = '<div class="bubble">' + (role==='agent' && /<span|<b/.test(text) ? text : esc(text)) + '</div>';
+    d.innerHTML = '<div class="bubble">' + bubbleHtml(role, text) + '</div>';
     $('#chat').appendChild(d);
     $('#chat').scrollTop = $('#chat').scrollHeight;
     return d;
@@ -1204,7 +1322,8 @@
 
       if(r.data && CUR){ CUR.int_data = r.data; syncFormFromData(r.data, Object.keys(r.accepted||{})); }
       if(r.progress) applyProgress(r.progress);
-      var nextSlot = ((r.progress||{}).missing||[]).concat(((r.progress||{}).weak)||[])[0];
+      if(r.finished !== undefined) setDone('int', !!r.finished);
+      var nextSlot = r.finished ? null : ((r.progress||{}).missing||[]).concat(((r.progress||{}).weak)||[])[0];
       highlightAsk(nextSlot);
     }).catch(function(e){ wait.remove(); pushMsg('agent', '오류: '+e.message, 'danger'); })
       .finally(function(){ $('#btnSend').disabled=false; $('#chatInput').focus(); });
@@ -1217,31 +1336,31 @@
     this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,120)+'px';
   });
 
-  /* ═══════════════ INT 생성 ═══════════════ */
-  $('#btnFinalizeInt').addEventListener('click', function(){
+  /* ═══════════════ 작성 및 검토 완료 → INT 문서 ═══════════════ */
+  $('#btnIntComplete').addEventListener('click', function(){
     if(!CUR){ toast('먼저 접수를 시작하세요','err'); return; }
-    var go = function(){
-      window._showLoading('INT 초안 생성', '표준체계 문서① 양식으로 정리합니다');
-      post('/api/intake/finalize', {project_no: CUR.project_no}).then(function(r){
-        CUR = r.project;
-        $('#intDocCard').style.display='';
-        $('#intDocNo').textContent = CUR.project_no + '-INT';
-        $('#intDoc').innerHTML = mdToHtml(r.markdown);
-        renderMissing('#intMissing', r.validation, r.guardrails, r.assessment);
-        $('#intValid').textContent = '필수 ' + (r.validation.required_total - r.validation.required_missing)
-          + '/' + r.validation.required_total + ' 기재';
-        if(r.progress) applyProgress(r.progress);
-        $('#intDocCard').scrollIntoView({behavior:'smooth', block:'start'});
-        toast('INT 초안을 만들었습니다', 'ok');
-      }).catch(function(e){ toast(e.message,'err'); })
-        .finally(function(){ window._hideLoading(); });
-    };
     // 아직 수준에 못 미치면 한 번 되묻는다 — 강제로 막지는 않는다 (담당자 판단 여지)
     var el = $('#slotState').textContent || '';
     if(el.indexOf('보완 필요') >= 0 || el === '진행 중'){
-      if(!confirm('아직 보완이 필요한 항목이 있습니다.\n\n지금 만들면 그 항목은 ⬜ 미확보로 남습니다. 계속할까요?')) return;
+      if(!confirm('아직 채워지지 않은 필수 항목이 있습니다.\n\n이대로 완료하면 그 항목은 ⬜ 미확보로 남습니다 (미팅에서 함께 채웁니다). 계속할까요?')) return;
     }
-    go();
+    window._showLoading('작성 완료', '표준체계 문서① 양식으로 정리합니다');
+    $('#btnIntComplete').disabled = true;
+    post('/api/intake/finalize', {project_no: CUR.project_no, form: collectForm()}).then(function(r){
+      CUR = r.project;
+      $('#intDocCard').style.display='';
+      $('#intDocNo').textContent = CUR.project_no + '-INT';
+      $('#intDoc').innerHTML = mdToHtml(r.markdown);
+      renderMissing('#intMissing', r.validation, r.guardrails, r.assessment);
+      $('#intValid').textContent = '필수 ' + (r.validation.required_total - r.validation.required_missing)
+        + '/' + r.validation.required_total + ' 기재';
+      if(r.progress) applyProgress(r.progress);
+      var h = (CUR.history||[]); if(h.length) pushMsg('agent', h[h.length-1].text);
+      setDone('int', true);
+      $('#intDocCard').scrollIntoView({behavior:'smooth', block:'start'});
+      toast('INT 작성을 완료했습니다', 'ok');
+    }).catch(function(e){ toast(e.message,'err'); })
+      .finally(function(){ window._hideLoading(); $('#btnIntComplete').disabled = false; });
   });
   /* INT 를 막 만든 프로젝트 그대로 타당성 평가로 넘어간다 */
   $('#btnGoFea').addEventListener('click', function(){
@@ -1294,10 +1413,6 @@
     if(!no){ toast('먼저 요구 접수를 진행하세요','err'); return; }
     startFea(no, true);
   });
-  $('#btnFeaRedraft').addEventListener('click', function(){
-    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
-    startFea(CUR.project_no, false);
-  });
 
   function startFea(no, fresh){
     window._showLoading('평가서 초안 작성', '접수서를 읽고 대안 검토·적합성 진단을 만듭니다');
@@ -1310,6 +1425,7 @@
       if(fresh){ $('#feaChat').innerHTML = ''; $('#feaDocCard').style.display='none'; }
       renderFeaForm(r.form, r.readonly);
       applyFeaProgress(r.progress);
+      setFeaDone(false);
       feaPush('agent', r.reply);
       if(r.judgement) { $('#verdictCard').style.display=''; renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
         renderAdvice(r.verdict); }
@@ -1494,12 +1610,13 @@
     if(row){ row.classList.add('focus-ask'); row.scrollIntoView({behavior:'smooth', block:'nearest'}); }
   }
 
-  /* 검증 (좌 → 우) */
-  $('#btnFeaVerify').addEventListener('click', function(){
+  /* 작성 내용 AI 인터뷰 (좌 → 우). repeat=true 는 완료 카드의 [AI 인터뷰 반복] */
+  function runFeaInterview(repeat){
     if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
-    window._showLoading('검증 중', 'G1 관점에서 평가서를 검토합니다');
+    window._showLoading(repeat ? 'AI 인터뷰 반복' : 'AI 인터뷰', 'G1 관점에서 평가서를 검토합니다');
     $('#btnFeaVerify').disabled = true;
-    post('/api/fea/verify', {project_no: CUR.project_no, form: collectFea()}).then(function(r){
+    post(repeat ? '/api/fea/repeat' : '/api/fea/verify',
+         {project_no: CUR.project_no, form: collectFea()}).then(function(r){
       syncFeaForm(r.form, r.changed);
       applyFeaProgress(r.progress);
       if(r.readonly) Object.keys(r.readonly).forEach(function(rk){
@@ -1509,21 +1626,80 @@
         renderAdvice(r.verdict); }
       if(r.blocked){ feaPush('agent', r.reply, 'danger'); toast('민감정보가 감지되어 저장하지 않았습니다','err'); return; }
       feaPush('agent', r.reply);
-      (r.risk_flags||[]).forEach(function(f){
-        feaPush('agent', '⚠️ 4번 위험 응답 — ' + f.label + ': ' + f.reason, 'system'); });
-      (r.issues||[]).slice(0,1).forEach(function(i){ highlightFeaAsk(i.slot); });
+      setFeaDone(!!r.finished, r.verdict);
+      if(!r.finished) (r.issues||[]).slice(0,1).forEach(function(i){ highlightFeaAsk(i.slot); });
+      else highlightFeaAsk(null);
       if(r.llm_error && r.llm_error.indexOf('미설정') < 0) feaPush('agent', 'LLM 오류: '+r.llm_error, 'system');
-      toast(r.done ? '검증 완료 — G1 상정 가능' : ((r.issues||[]).length + '개 항목을 더 여쭤보겠습니다'), r.done ? 'ok' : '');
-      $('#feaChatInput').focus();
+      toast(r.finished ? '인터뷰가 끝났습니다 — Go / 조건부 / Drop 을 골라 주세요' : '하나씩 여쭤보겠습니다',
+            r.finished ? 'ok' : '');
+      if(!r.finished) $('#feaChatInput').focus();
     }).catch(function(e){ toast(e.message,'err'); })
       .finally(function(){ window._hideLoading(); $('#btnFeaVerify').disabled = false; });
+  }
+  $('#btnFeaVerify').addEventListener('click', function(){ runFeaInterview(false); });
+  $('#btnFeaRepeat').addEventListener('click', function(){ runFeaInterview(true); });
+  $('#btnFeaEdit').addEventListener('click', function(){ goEditForm('#feaForm'); });
+
+  /* 인터뷰가 끝나면 — 에이전트 권고를 강조해 보이고 담당자가 Go / 조건부 / Drop 을 고른다.
+     **에이전트는 고르지 않는다** (금칙 G-2). 권고한 버튼에 「권고」 표시만 붙인다. */
+  var VERDICT_KO = {'Go':'Go', 'Conditional Go':'조건부 Go', 'Drop':'Drop'};
+  function setFeaDone(on, v){
+    setDone('fea', on);
+    if(!on) return;
+    v = v || (CUR && CUR.verdict) || {};
+    var tentative = (v.confidence === '낮음');
+    var cls = (ADV_CLS[v.verdict] || 'cond') + (tentative ? ' tentative' : '');
+    var head = String(v.headline||'').split('\n')[0];
+    $('#feaPickRec').className = 'pick-rec ' + cls;
+    $('#feaPickRec').innerHTML = v.verdict
+      ? '<div class="pick-rec-head"><span class="lab">에이전트 판정 권고</span>'
+        + '<span class="advice-badge">' + esc(VERDICT_KO[v.verdict] || v.verdict)
+        + (tentative ? ' <small>잠정</small>' : '') + '</span>'
+        + '<span class="advice-conf">확신도 ' + esc(v.confidence||'?') + '</span></div>'
+        + '<p class="pick-rec-line">' + esc(head).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        + ((v.conditions||[]).length ? '<br/>해소해야 할 조건 ' + v.conditions.length + '건 — 아래 권고 카드 참고' : '')
+        + '</p>'
+      : '<span class="muted">권고를 계산하지 못했습니다. 아래 판정 카드를 참고하세요.</span>';
+    var chosen = ((CUR && CUR.fea_form) || {}).decision || '';
+    $$('#feaDone .btn-pick').forEach(function(b){
+      b.classList.toggle('rec', b.dataset.decision === v.verdict);
+      b.classList.toggle('chosen', b.dataset.decision === chosen);
+    });
+  }
+  $$('#feaDone .btn-pick').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
+      var decision = btn.dataset.decision;
+      window._showLoading('작성 완료', '담당자 판정 ' + (VERDICT_KO[decision]||decision) + ' — 표준체계 문서② 양식으로 정리합니다');
+      $$('#feaDone .btn-pick').forEach(function(b){ b.disabled = true; });
+      post('/api/fea/complete', {project_no: CUR.project_no, form: collectFea(), decision: decision}).then(function(r){
+        CUR = r.project;
+        $('#verdictCard').style.display='';
+        renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
+        renderAdvice(r.verdict);
+        $('#feaDocCard').style.display='';
+        $('#feaDocNo').textContent = CUR.project_no + '-FEA';
+        $('#feaDoc').innerHTML = mdToHtml(r.markdown);
+        renderMissing('#feaMissing', r.validation, r.guardrails, r.assessment);
+        $('#feaValid').textContent = '담당자 판정 ' + (VERDICT_KO[r.decision]||r.decision)
+          + ' · 필수 ' + (r.validation.required_total - r.validation.required_missing)
+          + '/' + r.validation.required_total + ' 기재';
+        if(r.progress) applyFeaProgress(r.progress);
+        var h = (CUR.fea_history||[]); if(h.length) feaPush('agent', h[h.length-1].text);
+        setFeaDone(true, r.verdict);
+        $('#feaDocCard').scrollIntoView({behavior:'smooth', block:'start'});
+        toast('FEA 작성을 완료했습니다 — 담당자 판정 ' + (VERDICT_KO[r.decision]||r.decision), 'ok');
+      }).catch(function(e){ toast(e.message,'err'); })
+        .finally(function(){ window._hideLoading();
+          $$('#feaDone .btn-pick').forEach(function(b){ b.disabled = false; }); });
+    });
   });
 
   /* 검토 대화 (우) */
   function feaPush(role, text, cls){
     var d = document.createElement('div');
     d.className = 'msg ' + (cls || role);
-    d.innerHTML = '<div class="bubble">' + (role==='agent' && /<span|<b/.test(text) ? text : esc(text)) + '</div>';
+    d.innerHTML = '<div class="bubble">' + bubbleHtml(role, text) + '</div>';
     $('#feaChat').appendChild(d);
     $('#feaChat').scrollTop = $('#feaChat').scrollHeight;
     return d;
@@ -1549,7 +1725,8 @@
       renderAdvice(r.verdict);
       if(r.readonly) Object.keys(r.readonly).forEach(function(rk){
         var box = $('#ro_'+rk); if(box) box.textContent = r.readonly[rk]; });
-      var next = ((r.progress||{}).missing||[]).concat(((r.progress||{}).weak)||[])[0];
+      if(r.finished !== undefined) setFeaDone(!!r.finished, r.verdict);
+      var next = r.finished ? null : ((r.progress||{}).missing||[]).concat(((r.progress||{}).weak)||[])[0];
       highlightFeaAsk(next);
     }).catch(function(e){ wait.remove(); feaPush('agent', '오류: '+e.message, 'danger'); })
       .finally(function(){ $('#btnFeaSend').disabled=false; $('#feaChatInput').focus(); });
@@ -1560,32 +1737,6 @@
   });
   $('#feaChatInput').addEventListener('input', function(){
     this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,120)+'px';
-  });
-
-  /* FEA 문서 생성 */
-  $('#btnGenFea').addEventListener('click', function(){
-    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
-    var st = $('#feaState').textContent || '';
-    if(st.indexOf('보완 필요') >= 0 || st === '작성 중'){
-      if(!confirm('아직 보완이 필요한 항목이 있습니다.\n\n지금 만들면 그 항목은 ⬜ 미확보로 남습니다. 계속할까요?')) return;
-    }
-    window._showLoading('FEA 초안 생성', '표준체계 문서② 양식으로 정리합니다');
-    post('/api/fea/generate', {project_no: CUR.project_no, form: collectFea()}).then(function(r){
-      CUR = r.project;
-      $('#verdictCard').style.display='';
-      renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
-        renderAdvice(r.verdict);
-      $('#feaDocCard').style.display='';
-      $('#feaDocNo').textContent = CUR.project_no + '-FEA';
-      $('#feaDoc').innerHTML = mdToHtml(r.markdown);
-      renderMissing('#feaMissing', r.validation, r.guardrails, r.assessment);
-      $('#feaValid').textContent = '필수 ' + (r.validation.required_total - r.validation.required_missing)
-        + '/' + r.validation.required_total + ' 기재';
-      if(r.progress) applyFeaProgress(r.progress);
-      $('#feaDocCard').scrollIntoView({behavior:'smooth', block:'start'});
-      toast('FEA 초안을 만들었습니다', 'ok');
-    }).catch(function(e){ toast(e.message,'err'); })
-      .finally(function(){ window._hideLoading(); });
   });
 
   /* 에이전트 판정 권고 — 규칙이 계산한 Go / Conditional Go / Drop.
@@ -1601,7 +1752,7 @@
     h += '<div class="advice-head"><span class="advice-badge">' + esc(v.verdict)
        + (tentative ? ' <small>잠정</small>' : '') + '</span>'
        + '<span class="advice-conf">확신도 ' + esc(v.confidence) + '</span>'
-       + '<span class="advice-note">참고용 · 확정은 담당자·팀장이 G1 에서</span></div>';
+       + '<span class="advice-note">참고용 · 판정은 담당자가 고름 · G1 승인은 팀장</span></div>';
     var hl = esc(v.headline).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
                             .replace(/\n{2,}/g, '<br/><br/>').replace(/\n/g, '<br/>');
     h += '<p class="advice-head-line">' + hl + '</p>';
@@ -1635,7 +1786,8 @@
     h += '<p class="muted" style="margin:10px 0 0; line-height:1.8">'
        + '이 권고는 <b>규칙 모듈이 계산</b>한 것입니다 — 대안 검토·적합성 진단·ROI·트랙 판정에서 도출되며, '
        + 'LLM 도 대화도 바꾸지 못합니다. 왼쪽 양식을 고치면 즉시 다시 계산됩니다.<br/>'
-       + '<b>최종 Go/Drop 판정은 담당자와 팀장이 G1 에서 확정</b>합니다 — 5번 판정란은 에이전트가 비워 둡니다.</p>';
+       + '<b>판정은 담당자가 고릅니다</b> — AI 인터뷰가 끝나면 오른쪽 카드에서 Go / 조건부 / Drop 중 하나를 고르세요. '
+       + '에이전트는 고르지 않습니다. G1 승인은 팀장이 합니다.</p>';
     $('#adviceBox').innerHTML = h;
   }
 
@@ -1665,7 +1817,7 @@
     h += '<div class="note ok"><b>트랙 '+esc(tr.track)+' 적용</b><ul>'
        + '<li>필수 문서: '+esc(tr.required_docs)+'</li>'
        + '<li>승인 주체: '+esc(tr.approver)+'</li>'
-       + '<li>배포 방식: '+esc(tr.pilot)+'</li></ul></div>';
+       + '<li>다음 단계는 G1 에서 팀장이 확정합니다</li></ul></div>';
 
     if(roi){
       h += roi.computed
@@ -1674,7 +1826,7 @@
           + '<br/><small>'+esc(roi.cite)+'</small></div>'
         : '<div class="note warn"><b>ROI 계산하지 않음 (금칙 G-3)</b><br/>'+esc(roi.reason)+'</div>';
     }
-    h += '<p class="muted">위 판정은 <b>초안</b>입니다. Go/Drop 확정과 트랙·유형 최종 확정은 G1에서 팀장이 합니다.</p>';
+    h += '<p class="muted">위 판정은 <b>초안</b>입니다. 트랙·유형 최종 확정과 G1 승인은 팀장이 합니다.</p>';
     $('#verdictBox').innerHTML = h;
   }
 
@@ -1761,7 +1913,8 @@
       $('#chat').innerHTML='';
       (p.history||[]).forEach(function(h){ pushMsg(h.role==='user'?'user':'agent', h.text); });
       if(!(p.history||[]).length)
-        pushMsg('agent', no + ' 을(를) 열었습니다. 왼쪽 양식을 확인하고 [작성 완료 및 검증] 을 눌러 주세요.');
+        pushMsg('agent', no + ' 을(를) 열었습니다. 왼쪽 양식을 확인하고 **[작성 내용 AI 인터뷰]** 를 눌러 주세요.');
+      setDone('int', !!r.int_finished);
       if(p.int_md){
         $('#intDocCard').style.display='';
         $('#intDocNo').textContent = no + '-INT';
@@ -1778,6 +1931,7 @@
         applyArdProgress(r.ard_progress);
         $('#ardChat').innerHTML='';
         (p.ard_history||[]).forEach(function(x){ ardPush(x.role==='user'?'user':'agent', x.text); });
+        setDone('ard', !!r.ard_finished);
         if(p.ard_md){
           $('#ardDocCard').style.display='';
           $('#ardDocNo').textContent = no + '-ARD';
@@ -1800,6 +1954,7 @@
         if(r.judgement){ $('#verdictCard').style.display='';
           renderVerdict(r.judgement.track, r.judgement.type, r.judgement.autonomy, r.roi);
         renderAdvice(r.verdict); }
+        setFeaDone(!!r.fea_finished, r.verdict);
         if(p.fea_md){
           $('#feaDocCard').style.display='';
           $('#feaDocNo').textContent = no + '-FEA';
@@ -1846,7 +2001,8 @@
   var MODAL_DOC = {no:'', code:''};
   function openDoc(no, code){
     api('/api/projects/'+encodeURIComponent(no)).then(function(d){
-      var md = (code==='INT') ? d.int_md : d.fea_md;
+      // ARD 를 누르면 FEA 가 열리던 결함 — 코드별로 고른다 (2026-09-22)
+      var md = {INT: d.int_md, FEA: d.fea_md, ARD: d.ard_md}[code];
       MODAL_DOC = {no:no, code:code};
       $('#docModalTitle').textContent = no + '-' + code;
       $('#docModalBody').innerHTML = mdToHtml(md||'(문서 없음)');
@@ -1965,9 +2121,7 @@
     $('#ardState').textContent = p.ready ? '✅ 미팅 준비 완료'
                                : ((p.blocking||[]).length ? '더 필요 ' + p.blocking.length + '건' : '작성 중');
     $('#ardState').style.color = p.ready ? 'var(--green)' : 'var(--muted)';
-    $('#ardHint').textContent = p.ready
-      ? '4~6번은 비워 두셔도 됩니다 — 미팅에서 함께 채웁니다. [ARD 초안 생성] 을 눌러 보세요.'
-      : '4~6번은 비워 두셔도 됩니다 — 미팅에서 함께 채웁니다.';
+    $('#ardHint').textContent = '4~6번은 비워 두셔도 됩니다 — 미팅에서 함께 채웁니다.';
     var bySlot = {};
     (p.slots||[]).forEach(function(s){ bySlot[s.key] = s; });
     $$('#ardForm .fld-row').forEach(function(row){
@@ -1992,7 +2146,7 @@
   function ardPush(role, text, cls){
     var d = document.createElement('div');
     d.className = 'msg ' + (cls || role);
-    d.innerHTML = '<div class="bubble">' + (role==='agent' && /<span|<b/.test(text) ? text : esc(text)) + '</div>';
+    d.innerHTML = '<div class="bubble">' + bubbleHtml(role, text) + '</div>';
     $('#ardChat').appendChild(d);
     $('#ardChat').scrollTop = $('#ardChat').scrollHeight;
     return d;
@@ -2007,6 +2161,7 @@
       renderArdForm(r.form);
       applyArdProgress(r.progress);
       if(fresh) $('#ardChat').innerHTML='';
+      setDone('ard', false);
       ardPush('agent', r.reply);
       if(r.next_question) ardPush('agent', r.next_question);
       if(r.llm_error && r.llm_error.indexOf('미설정') < 0) ardPush('agent', 'LLM 오류: '+r.llm_error, 'system');
@@ -2021,29 +2176,28 @@
     if(!no){ toast('먼저 타당성 평가를 진행하세요','err'); return; }
     startArd(no, true);
   });
-  if($('#btnArdRedraft')) $('#btnArdRedraft').addEventListener('click', function(){
+  /* 작성 내용 AI 인터뷰 (좌 → 우). repeat=true 는 완료 카드의 [AI 인터뷰 반복] */
+  function runArdInterview(repeat){
     if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
-    startArd(CUR.project_no, false);
-  });
-
-  if($('#btnArdVerify')) $('#btnArdVerify').addEventListener('click', function(){
-    if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
-    window._showLoading('검증 중', 'G2 관점에서 요구사항 정의서를 검토합니다');
+    window._showLoading(repeat ? 'AI 인터뷰 반복' : 'AI 인터뷰', 'G2 관점에서 요구사항 정의서를 검토합니다');
     $('#btnArdVerify').disabled = true;
-    post('/api/ard/verify', {project_no: CUR.project_no, form: collectArd()}).then(function(r){
+    post(repeat ? '/api/ard/repeat' : '/api/ard/verify',
+         {project_no: CUR.project_no, form: collectArd()}).then(function(r){
       syncArdForm(r.form, r.changed);
       applyArdProgress(r.progress);
       if(r.blocked){ ardPush('agent', r.reply, 'danger'); toast('민감정보가 감지되어 저장하지 않았습니다','err'); return; }
       ardPush('agent', r.reply);
-      (r.conflicts||[]).forEach(function(c){
-        ardPush('agent', '⚠️ ' + c.where + ' — ' + c.reason, 'system'); });
+      setDone('ard', !!r.finished);
       if(r.llm_error && r.llm_error.indexOf('미설정') < 0) ardPush('agent', 'LLM 오류: '+r.llm_error, 'system');
-      toast(r.done ? '미팅에 들고 갈 수 있습니다' : ((r.issues||[]).length + '개 항목을 더 여쭤보겠습니다'),
-            r.done ? 'ok' : '');
-      $('#ardChatInput').focus();
+      toast(r.finished ? '인터뷰가 끝났습니다 — [작성 및 검토 완료] 를 눌러 주세요' : '하나씩 여쭤보겠습니다',
+            r.finished ? 'ok' : '');
+      if(!r.finished) $('#ardChatInput').focus();
     }).catch(function(e){ toast(e.message,'err'); })
       .finally(function(){ window._hideLoading(); $('#btnArdVerify').disabled = false; });
-  });
+  }
+  $('#btnArdVerify').addEventListener('click', function(){ runArdInterview(false); });
+  $('#btnArdRepeat').addEventListener('click', function(){ runArdInterview(true); });
+  $('#btnArdEdit').addEventListener('click', function(){ goEditForm('#ardForm'); });
 
   function ardSend(){
     var inp = $('#ardChatInput'), msg = inp.value.trim();
@@ -2060,6 +2214,7 @@
       if(r.llm_error && r.llm_error.indexOf('미설정') < 0) ardPush('agent', 'LLM 오류: '+r.llm_error, 'system');
       syncArdForm(r.form, r.accepted);
       applyArdProgress(r.progress);
+      if(r.finished !== undefined) setDone('ard', !!r.finished);
     }).catch(function(e){ wait.remove(); toast(e.message,'err'); })
       .finally(function(){ $('#btnArdSend').disabled = false; });
   }
@@ -2068,13 +2223,15 @@
     if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); ardSend(); }
   });
 
-  if($('#btnGenArd')) $('#btnGenArd').addEventListener('click', function(){
+  /* 작성 및 검토 완료 → ARD 문서 */
+  $('#btnArdComplete').addEventListener('click', function(){
     if(!CUR){ toast('프로젝트를 먼저 여세요','err'); return; }
     var st = $('#ardState').textContent || '';
     if(st.indexOf('더 필요') >= 0 || st === '작성 중'){
-      if(!confirm('아직 G2 필수 3종이 다 서지 않았습니다.\n\n지금 만들면 그 항목은 ⬜ 미확보로 남습니다. 계속할까요?')) return;
+      if(!confirm('아직 G2 필수 3종이 다 서지 않았습니다.\n\n이대로 완료하면 그 항목은 ⬜ 미확보로 남습니다 (미팅에서 함께 채웁니다). 계속할까요?')) return;
     }
-    window._showLoading('ARD 초안 생성', '표준체계 문서③ 양식으로 정리합니다');
+    window._showLoading('작성 완료', '표준체계 문서③ 양식으로 정리합니다');
+    $('#btnArdComplete').disabled = true;
     post('/api/ard/generate', {project_no: CUR.project_no, form: collectArd()}).then(function(r){
       $('#ardDocCard').style.display='';
       $('#ardDocNo').textContent = r.doc_no;
@@ -2083,10 +2240,13 @@
       $('#ardValid').textContent = (r.meeting && r.meeting.ready)
         ? '미팅에 들고 갈 수 있습니다 — 나머지는 워크숍에서'
         : '필수 항목이 덜 채워졌습니다';
+      ardPush('agent', '📄 **ARD 작성을 완료했습니다.** 미팅에 들고 갈 1차 문서입니다 — 아래에서 확인하세요. '
+        + '3자 서명(7번)은 G2 에서 사람이 합니다.');
+      setDone('ard', true);
       $('#ardDocCard').scrollIntoView({behavior:'smooth', block:'start'});
-      toast('ARD 초안을 만들었습니다', 'ok');
+      toast('ARD 작성을 완료했습니다', 'ok');
     }).catch(function(e){ toast(e.message,'err'); })
-      .finally(function(){ window._hideLoading(); });
+      .finally(function(){ window._hideLoading(); $('#btnArdComplete').disabled = false; });
   });
 
   if($('#btnArdMd')) $('#btnArdMd').addEventListener('click', function(){
@@ -2108,8 +2268,12 @@
 
   /* ═══════════════ 감사 로그 ═══════════════ */
   var EVENT_LABEL = {
-    project_created:'프로젝트 생성', intake_turn:'대화 1턴', int_generated:'INT 초안 생성',
-    fea_generated:'FEA 초안 생성', sensitive_blocked:'⛔ 민감정보 차단',
+    project_created:'프로젝트 생성', intake_turn:'대화 1턴', int_generated:'INT 작성 완료',
+    intake_verified:'INT AI 인터뷰', intake_repeated:'INT 인터뷰 반복',
+    fea_drafted:'FEA 초안 채움', fea_verified:'FEA AI 인터뷰', fea_repeated:'FEA 인터뷰 반복', fea_turn:'FEA 대화 1턴',
+    fea_generated:'FEA 문서 생성', fea_completed:'FEA 작성 완료 (담당자 판정)',
+    ard_drafted:'ARD 초안 채움', ard_verified:'ARD AI 인터뷰', ard_repeated:'ARD 인터뷰 반복', ard_turn:'ARD 대화 1턴',
+    ard_generated:'ARD 작성 완료', sensitive_blocked:'⛔ 민감정보 차단',
     out_of_scope_refused:'⛔ 범위 밖 거절', project_updated:'문서 수정', exported:'내보내기'
   };
   function loadAudit(){

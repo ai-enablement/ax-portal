@@ -299,7 +299,8 @@ SLOT_RULES = {
     "to_be":       {"kind": "narrative", "label": "기대 모습 (구 v1.0 항목)", "min": 15,
                     "optional": True},
     "risk":        {"kind": "narrative", "label": "잘못 처리되면 생기는 일", "min": 8},
-    "when":        {"kind": "short", "label": "희망 시점", "min": 2},
+    # v4.0 INT 5번 「희망 시점과 이유」 는 ★필수가 아니다. 필수로 두면 챗봇이 끝까지 묻는다.
+    "when":        {"kind": "short", "label": "희망 시점", "min": 2, "optional": True},
     "why_urgent":  {"kind": "short", "label": "긴급 사유", "min": 4, "optional": True},
 }
 
@@ -447,9 +448,8 @@ FEA_SLOT_RULES = {
     # 4번 트랙·유형 판정 — 판정은 규칙이 하고, 오답 최대 피해는 사람이 서술한다
     "damage_desc": {"kind": "narrative", "label": "오답 최대 피해", "min": 8},
 
-    # 6번 승인
-    "written_by": {"kind": "short", "label": "작성자", "min": 2},
-    "reviewed_by": {"kind": "short", "label": "검토자", "min": 2, "optional": True},
+    # 6번 승인(작성 / 승인 / 일자)은 이 에이전트가 받지 않는다 — 승인 플랫폼에서 채운다 (2026-09-22).
+    # 문서에는 빈칸으로 남는다 (build_fea_data).
 }
 
 # 키 접두어와 FIT_AXES 를 잇는다 (v4.0: 1축)
@@ -543,20 +543,25 @@ AUTONOMY = {
     "L4": "완전 자율",
 }
 
+# 표준체계 v4.0 0.3절 「필수 문서」 행. (v1.0 의 문서 10종 목록이 v4.0 전환 뒤에도 남아 있었다)
+# 하 트랙의 "+ 운영대장 등록" 은 문서가 아니라 운영 단계의 일이라 싣지 않는다 —
+# 어디로 갈지는 G1 에서 팀장이 정한다. 에이전트가 운영으로 안내하지 않는다 (2026-09-22).
 TRACK_DOCS = {
-    "하": "INT, FEA(약식), UG + OPS 등록(목록 1행)",
-    "중": "INT, FEA, ARD, DES(핵심 항목), EVP/EVR, DEP, UG, OPS",
-    "상": "전체 10종(INT·FEA·ARD·DES·EVP·EVR·DEP·UG·OPS·CHG), DES는 전 항목 상세",
+    "하": "INT, FEA(약식)",
+    "중": "INT, FEA, ARD, DES(핵심), EVD",
+    "상": "INT, FEA, ARD, DES(전 항목), EVD",
 }
 TRACK_APPROVER = {
     "하": "팀장",
     "중": "팀장 + 현업 부서장",
-    "상": "팀장 + 현업 부서장 + IT보안/정보보호",
+    "상": "팀장 + 현업 부서장 + 정보보호",
 }
+# 표준체계 v4.0 0.3절 「배포」 행. 참고용 데이터로만 둔다 —
+# FEA(G1 단계)에서 배포 방식을 안내하지 않는다. 배포는 G3 이후의 일이다 (2026-09-22).
 TRACK_PILOT = {
-    "하": "즉시 배포 가능",
-    "중": "파일럿(2주) → 확산",
-    "상": "파일럿(4주) + 승인 게이트 → 단계 확산",
+    "하": "즉시",
+    "중": "파일럿 2주 → 확산",
+    "상": "파일럿 4주 → 단계 확산",
 }
 
 
@@ -881,9 +886,12 @@ def check_guardrails(ctx: dict) -> dict:
                 + f" — 그런데 판정은 {tr.get('track')} 트랙")
 
     # G-2 — Go/Drop 단정
-    for m in _RE_VERDICT.finditer(text):
-        s, e = max(0, m.start() - 60), min(len(text), m.end() + 60)
-        if not _RE_HEDGE.search(text[s:e]):
+    # 제목 줄(#)은 보지 않는다 — 표준체계 문서② 5번 제목 「Go / Drop 판정」 이 단정 표현으로 걸려
+    # 모든 FEA 문서가 G-2 위반으로 표시되고 있었다 (2026-09-22 발견). 제목은 양식 이름이지 판정이 아니다.
+    body = re.sub(r"(?m)^#{1,6}\s.*$", "", text)
+    for m in _RE_VERDICT.finditer(body):
+        s, e = max(0, m.start() - 60), min(len(body), m.end() + 60)
+        if not _RE_HEDGE.search(body[s:e]):
             bad("G-2", f"단정 표현 “{m.group(0)}” — 권고·초안임이 함께 표시되어야 합니다")
             break
 
@@ -963,7 +971,7 @@ INT_SPEC = {
             {"k": "risk", "label": "잘못 처리되면 생기는 일", "kind": "long", "req": True},
         ]},
         {"n": 5, "title": "희망 시점과 이유", "fields": [
-            {"k": "when", "label": "희망 시점", "kind": "text", "req": True},
+            {"k": "when", "label": "희망 시점", "kind": "text", "req": False},
             {"k": "why_urgent", "label": "이유", "kind": "long", "req": False},
         ]},
         # ── 본문은 여기까지. 표준체계 문서①은 1~5번 1페이지다. ────────────────
@@ -971,7 +979,6 @@ INT_SPEC = {
         # (체계 원칙 ⑤ "원문을 본문에 넣지 않는다 — 별첨으로 분리한다", 원칙 ⑦ 분량 상한)
         {"n": "별첨", "title": "접수 처리 (시스템 자동 입력)", "fields": [
             {"k": "project_no", "label": "프로젝트 번호", "kind": "text", "req": True},
-            {"k": "assignee", "label": "담당 배정", "kind": "text", "req": False},
             {"k": "interview_at", "label": "초기 인터뷰 일정", "kind": "text", "req": False},
             # v1.0 4번 「어떻게 되면 좋겠나요(To-Be)」. v3.1 양식에서 빠졌다 —
             # 해결책을 먼저 묻게 되어 "고통을 묻는다" 원칙과 어긋나기 때문.
@@ -1019,8 +1026,9 @@ FEA_SPEC = {
             {"k": "fit_table", "label": "판단 규칙의 문서화 가능성", "kind": "table", "req": False,
              "cols": ["항목", "판정", "근거"]},
             # 표준체계 문서② 양식의 3지선다 체크란. 에이전트는 체크하지 않는다 (금칙 G-2).
-            {"k": "decision", "label": "판정 — 담당자·팀장 확정 (G1)", "kind": "long", "req": True,
-             "hint": "에이전트는 공란으로 둔다"},
+            # 담당자가 화면에서 Go / 조건부 / Drop 을 고르면 그 값으로만 체크된다.
+            {"k": "decision", "label": "판정 — 담당자 선택 (G1 승인은 팀장)", "kind": "long", "req": True,
+             "hint": "에이전트는 고르지 않는다"},
             {"k": "agent_verdict", "label": "▶ 에이전트 권고 (참고용)", "kind": "text", "req": True},
             {"k": "verdict_reasons", "label": "권고 근거", "kind": "table", "req": True,
              "cols": ["구분", "확인 내용", "판정에 미친 영향", "근거 조항"]},
@@ -1029,9 +1037,9 @@ FEA_SPEC = {
             {"k": "recommendation", "label": "권고 사유 (상세)", "kind": "long", "req": True},
             {"k": "drop_alternatives", "label": "Drop 권고 시 대안 안내", "kind": "long", "req": False},
         ]},
+        # 6번은 승인 플랫폼에서 채운다 — 에이전트 문서에는 빈칸으로 남는다 (2026-09-22)
         {"n": 6, "title": "승인", "fields": [
-            {"k": "written_by", "label": "작성", "kind": "text", "req": True},
-            {"k": "reviewed_by", "label": "검토", "kind": "text", "req": False},
+            {"k": "written_by", "label": "작성", "kind": "text", "req": False},
             {"k": "approved_by", "label": "승인(팀장)", "kind": "text", "req": False},
             {"k": "approved_at", "label": "일자", "kind": "text", "req": False},
         ]},
@@ -1310,7 +1318,6 @@ def fea_form_to_parts(form: dict) -> dict:
         "fit": fit, "alts": alts,
         "summary": (f.get("summary") or "").strip(),
         "author": (f.get("written_by") or "").strip(),
-        "reviewer": (f.get("reviewed_by") or "").strip(),
         "approver": (f.get("approved_by") or "").strip(),
         "approved_at": (f.get("approved_at") or "").strip(),
         "damage_desc": (f.get("damage_desc") or "").strip(),
@@ -1326,7 +1333,7 @@ def build_fea_data(int_data: dict, judgement: dict, fit: dict, alts: dict,
     judgement = {"track": judge_track(...), "type": judge_type(...), "autonomy": judge_autonomy_consistency(...)}
     fit       = {axis_key: {"grade": "상|중|하", "reason": "..."}}
     alts      = {alt_key: "검토 결과 서술", "alt_conclusion": "..."}
-    extra     = 사람이 채운 나머지 (damage_desc / decision / reviewer / approver / approved_at)
+    extra     = 사람이 채운 나머지 (damage_desc / decision / approver / approved_at)
     """
     extra = extra or {}
     tr = judgement.get("track") or {}
@@ -1380,20 +1387,23 @@ def build_fea_data(int_data: dict, judgement: dict, fit: dict, alts: dict,
                              + (f"  ⚠️ {au['message']}" if au.get("message") else "")),
         "verdict_basis": basis_rows,
         # 표준체계 문서② 5번 3지선다. 에이전트는 체크하지 않는다 (금칙 G-2).
-        # 담당자가 화면에서 고른 값이 있으면 그것만 기재한다.
-        "decision": ((f"**담당자 기재: {extra['decision']}**  (G1 최종 확정은 팀장)\n\n"
-                      + verdict_checkbox(rec["verdict"]))
-                     if extra.get("decision") else verdict_checkbox(rec["verdict"])),
+        # 담당자가 화면에서 고른 값(Go / 조건부 / Drop)으로만 체크한다.
+        "decision": decision_text(extra.get("decision"), rec, tr, int_data),
         "agent_verdict": (f"**{rec['verdict']}**  (확신도 {rec['confidence']}) — 참고용. "
                           f"확정은 담당자·팀장이 G1 에서 합니다."),
-        "verdict_reasons": [[r["area"], r["finding"], r["effect"], r["cite"]]
-                            for r in rec["reasons"]] or None,
+        # 걸림돌이 하나도 없는 Go 는 근거 행이 비어 "미확보 필수 항목" 으로 잡히고 있었다 (2026-09-22).
+        # 비었으면 '걸림돌 없음' 을 근거로 적는다 — 지어내는 것이 아니라 규칙이 확인한 사실이다.
+        "verdict_reasons": ([[r["area"], r["finding"], r["effect"], r["cite"]] for r in rec["reasons"]]
+                            or [["종합", "걸림돌로 볼 신호가 확인되지 않았습니다"
+                                 + (f" — {rec['good'][0]}" if rec.get("good") else ""),
+                                 rec["verdict"], rec.get("cite") or CITE["gate.g1"]]]),
         "verdict_conditions": ("\n".join(f"{i}. {c}" for i, c in enumerate(rec["conditions"], 1))
                                if rec["conditions"] else None),
         "recommendation": rec["text"],
         "drop_alternatives": rec["alternatives"] or None,
-        "written_by": author or "(에이전트 초안)",
-        "reviewed_by": extra.get("reviewer") or None,
+        # 6번 작성 / 승인 / 일자 — 승인 플랫폼에서 채운다. 에이전트는 비워 둔다 (2026-09-22).
+        # author 는 플랫폼이 사용자 정보로 넘길 자리다 (넘기지 않으면 빈칸).
+        "written_by": author or None,
         "approved_by": extra.get("approver") or None,
         "approved_at": extra.get("approved_at") or None,
         "_verdict": rec,   # 화면용 — render_doc 은 밑줄 키를 무시한다
@@ -1550,7 +1560,7 @@ def recommend_verdict(tr: dict, ty: dict, au: dict, roi: dict, fit: dict,
             "**조건부**", CITE["track.autonomy_table"])
     if (tr or {}).get("track") == "상":
         add("트랙", f"상 트랙입니다 — 필수 문서 {TRACK_DOCS['상']}, "
-                   f"승인 주체 {TRACK_APPROVER['상']}, 배포는 {TRACK_PILOT['상']}",
+                   f"승인 주체 {TRACK_APPROVER['상']}",
             "유의", CITE["track.docs"])
 
     # ── 5. 평가서 자체의 완성도 ──
@@ -1646,7 +1656,8 @@ def recommend_verdict(tr: dict, ty: dict, au: dict, roi: dict, fit: dict,
     lines.append(f"- 유형: **{ty.get('type', '?')}** — {ty.get('reason', '')}")
     lines.append(f"- 품질 확인 방법: {ty.get('quality_rule', '')} [{CITE['type.quality']}]")
     lines.append(f"- 필수 문서: {tr.get('required_docs', '')} [{CITE['track.docs']}]")
-    lines.append(f"- 승인 주체: {tr.get('approver', '')} · 배포: {tr.get('pilot', '')}")
+    lines.append(f"- 승인 주체: {tr.get('approver', '')}")
+    lines.append("- 다음 단계는 G1 에서 팀장이 확정합니다.")
 
     return {
         "verdict": verdict, "confidence": confidence, "headline": head,
@@ -1659,17 +1670,47 @@ def recommend_verdict(tr: dict, ty: dict, au: dict, roi: dict, fit: dict,
     }
 
 
-def verdict_checkbox(verdict: str) -> str:
+_CHECKBOX_BLANK = {"Go": "트랙: ______, 목표 일정: ______",
+                   "Conditional Go": "조건: ______",
+                   "Drop": "사유 + 대안 안내: ______"}
+DECISION_LABEL = {"Go": "Go", "Conditional Go": "조건부 Go", "Drop": "Drop"}
+
+
+def verdict_checkbox(verdict: str, chosen: str = "", fill: str = "") -> str:
     """표준체계 문서② 5번 양식의 3지선다. **에이전트는 체크하지 않는다** (금칙 G-2).
 
-    권고한 항목만 표시해 두고, 실제 체크는 담당자·팀장이 한다.
+    권고한 항목만 표시해 둔다. 체크(☑)는 **담당자가 화면에서 고른 값(chosen)** 에만 붙는다.
+    fill 은 고른 줄의 빈칸을 채울 내용이다 (트랙·조건·대안 — 규칙이 이미 계산한 것).
     """
-    mark = {v: ("◀ 에이전트 권고" if v == verdict else "") for v in VERDICTS}
-    return "\n".join([
-        f"☐ Go (트랙: ______, 목표 일정: ______)   {mark['Go']}",
-        f"☐ Conditional Go (조건: ______)   {mark['Conditional Go']}",
-        f"☐ Drop (사유 + 대안 안내: ______)   {mark['Drop']}",
-        "",
-        "※ 위 체크란은 **담당자·팀장이 G1 에서 확정**합니다. 에이전트는 체크하지 않습니다.",
-    ])
+    lines = []
+    for v in VERDICTS:
+        box = "☑" if v == chosen else "☐"
+        body = fill if (v == chosen and fill) else _CHECKBOX_BLANK[v]
+        mark = "◀ 에이전트 권고" if v == verdict else ""
+        lines.append(f"{box} {v} ({body})   {mark}")
+    lines.append("")
+    lines.append("※ 체크는 **담당자가 고른 값**입니다. 에이전트는 고르지 않습니다. G1 승인은 팀장이 합니다."
+                 if chosen in VERDICTS else
+                 "※ 위 체크란은 **담당자가 고릅니다.** 에이전트는 체크하지 않습니다.")
+    return "\n".join(lines)
+
+
+def decision_text(chosen: str, rec: dict, track: dict | None = None, int_data: dict | None = None) -> str:
+    """FEA 5번 판정란. 담당자가 고르지 않았으면 빈 체크란만 싣는다.
+
+    고른 줄의 빈칸은 규칙이 이미 계산한 값으로 채운다 — 새로 판단하지 않는다.
+    목표 일정은 요구자 희망만 적고 **확정하지 않는다** (개발 일정은 AI 활성화팀과 조율 후 확정).
+    """
+    chosen = (chosen or "").strip()
+    if chosen not in VERDICTS:
+        return verdict_checkbox(rec.get("verdict", ""))
+    when = str((int_data or {}).get("when") or "").strip()
+    fill = {
+        "Go": (f"트랙: {(track or {}).get('track') or '______'}, 목표 일정: "
+               + (f"요구자 희망 {when} — AI 활성화팀과 조율 후 확정" if when else "AI 활성화팀과 조율 후 확정")),
+        "Conditional Go": "조건: " + ("; ".join(rec.get("conditions") or []) or "______"),
+        "Drop": "사유 + 대안 안내: " + (rec.get("alternatives") or "______"),
+    }[chosen]
+    return (f"**담당자 선택: {DECISION_LABEL[chosen]}** — 담당자가 확정한 값입니다 (G1 승인은 팀장).\n\n"
+            + verdict_checkbox(rec.get("verdict", ""), chosen, fill))
 
