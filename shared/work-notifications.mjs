@@ -244,10 +244,6 @@ function projectNotification(project, actor) {
 
   if (step === 8) return currentGateNotification(project, actor, relations, "G4");
 
-  if (step === 9 && project.lowRoute?.enabled && relations.author) {
-    if (!project.lowRoute.registeredAt) return item(project, "운영 대장 등록", "하 트랙 OPS 등록 정보를 확인해 주세요.", 9, "danger");
-    if (project.lowRoute.phase !== "operating") return item(project, "하 트랙 배포", "운영 대장 등록 후 즉시 배포를 확정해 주세요.", 9, "warning");
-  }
   return null;
 }
 

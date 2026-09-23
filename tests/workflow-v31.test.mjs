@@ -222,15 +222,22 @@ test('partial development document edits do not falsely modify signed ARD',()=>{
  const changed=structuredClone(s.historicalDocuments[5]);changed.documents.EVR.fields['summary.result']='새 결과';
  assert.doesNotThrow(()=>run(s,{historicalDocuments:{5:changed}},developer));
 });
-test('G1 low track assignment enters registration, never invents skipped approvals',()=>{
+test('G1 low track assignment enters development, retains downstream gates and never invents approvals',()=>{
  const s={journeyStep:2,workflowTrack:'LOW',g1Resolution:{decision:'GO'},developerIds:[]};
  const n=run(s,{developerIds:['5']},admin);
- assert.equal(n.journeyStep,9);assert.equal(n.lowRoute.phase,'registration');
+ assert.equal(n.journeyStep,5);assert.equal(n.lowRoute.phase,'development');assert.equal(n.deliveryPhase,'development');
  assert.equal(n.workflowApprovals.G2,undefined);assert.equal(n.workflowApprovals.G3,undefined);assert.equal(n.workflowApprovals.G4,undefined);
- assert.throws(()=>run(n,{lowRouteAction:'deploy'},admin),/운영대장/);
- const registered=applyWorkflow(n,{lowRouteAction:'register'},{...n},admin,{...project,registrationKnowledgeOwner:'지식담당'});
- assert.equal(registered.historicalDocuments[9].schemaVersion,2);
- assert.equal(run(registered,{lowRouteAction:'deploy'},admin).lowRoute.phase,'operating');
+ assert.throws(()=>run(n,{lowRouteAction:'deploy'},admin),/G3·G4/);
+ assert.throws(()=>run(n,{lowRouteAction:'register'},admin),/G3·G4/);
+ const g3={...gateState(6),workflowTrack:'LOW',lowRoute:n.lowRoute};
+ assert.equal(run(g3,{gateVote:{gate:'G3',role:'team_leader',decision:'APPROVED'}},leader).journeyStep,7);
+ const g4={...gateState(8),workflowTrack:'LOW',lowRoute:{...n.lowRoute,phase:'expansion_approval'}};
+ const ownerApproved=run(g4,vote('G4','owner'),owner);
+ assert.equal(ownerApproved.journeyStep,8);
+ const operating=run(ownerApproved,vote('G4','team_leader'),leader);
+ assert.equal(operating.journeyStep,9);assert.equal(operating.lowRoute.phase,'operating');
+ const missing={...g3,uatRecord:undefined};
+ assert.throws(()=>run(missing,vote('G3','team_leader'),leader),/UAT/);
 });
 test('unconfirmed classification is never treated as low; admin assignment does not approve G1',()=>{
  const s={journeyStep:2,developerIds:[]};

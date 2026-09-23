@@ -2643,7 +2643,7 @@ function LegacyTeamWorkspaceDashboard({
             <span className="lifecycle-heading-mark">LC</span>
             <div>
               <h2>Agent Life Cycle</h2>
-              <p>요구 접수부터 확산 승인까지 · 하 트랙은 G1 이후 운영대장 등록·배포</p>
+              <p>요구 접수부터 확산 승인까지 · 하 트랙은 G1 이후 개발·평가로 연결</p>
             </div>
           </div>
           <div className="lifecycle-compact-summary">
@@ -7541,8 +7541,8 @@ function UserDashboard({
               title="선택된 Agent 과제가 없습니다."
               description="과제를 등록하거나 왼쪽 목록에서 선택하면 현재 단계와 문서 상태가 여기에 표시됩니다."
             />
-          ) : current.source === "database" && isLowRoute(current) && selectedJourney > 2 && selectedJourney < 9 ? (
-            <EmptyDataPage title="하 트랙 적용 제외" description="G1 승인 후 운영대장 등록·배포로 연결되는 단축 경로입니다. 이 단계의 가짜 승인 이력을 생성하지 않습니다." />
+          ) : current.source === "database" && isLowRoute(current) && ([3,4].includes(selectedJourney)||(selectedJourney===5&&selectedDeliveryPhase==='design')) ? (
+            <EmptyDataPage title="하 트랙 적용 제외" description="하 트랙은 G1 승인 후 개발·평가로 이동하며, 이후 G3·배포·확산·G4 절차를 진행합니다." />
           ) : current.source === "database" && [2,4,6,8].includes(selectedJourney) ? (
             <WorkflowGate key={current.no + ":" + selectedJourney + ":" + JSON.stringify(current.workflowApprovals)} project={current} gate={{2:"G1",4:"G2",6:"G3",8:"G4"}[selectedJourney]} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />
           ) : current.source === "database" && selectedJourney > effectiveJourneyStep ? (

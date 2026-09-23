@@ -44,7 +44,6 @@ function portalJourneyStep(stageCode) {
 }
 
 function databaseProjectStatus(journeyStep, state = {}) {
-  if(isLowRoute(state)&&state.lowRoute.phase!=='operating')return 'in_progress';
   if (state.g2ReworkState === "editing") return "rework";
   if (Number(journeyStep) >= 9) return "operating";
   if ([2, 4, 6, 8].includes(Number(journeyStep))) return "in_review";

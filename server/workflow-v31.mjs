@@ -210,7 +210,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   if(changes.gateVote){
     const {gate,role,decision,reason}=changes.gateVote;
     const ardParty=gate==='G2'&&['requester','owner'].includes(role);
-    if((ardParty?![3,4].includes(step):GATE_STEPS[gate]!==step)||gate==='G1'||isLowRoute(previous))deny('현재 승인 대기 중인 게이트에서만 승인할 수 있습니다.');
+    if((ardParty?![3,4].includes(step):GATE_STEPS[gate]!==step)||gate==='G1'||(isLowRoute(previous)&&gate==='G2'))deny('현재 승인 대기 중인 게이트에서만 승인할 수 있습니다.');
     if(!requiredApprovers(gate,merged).includes(role)||!eligibleRole(role,actor,project,merged))deny('이 승인 역할의 담당자가 아닙니다.',403);
     if(merged.workflowApprovals?.[gate]?.[role]?.decision==='APPROVED')deny('이미 해당 역할의 판정이 완료되었습니다. 보완 후 새 승인 라운드에서 처리해 주세요.');
     if(gate==='G2'&&role==='team_leader'&&!ardPartiesApproved(merged))deny('요구자와 Project Owner가 요구 정의서에 먼저 승인해야 합니다.');
@@ -223,30 +223,19 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     if(ardParty&&step===3&&ardPartiesApproved(merged))merged.journeyStep=4;
     else if(allApproved(gate,merged))merged.journeyStep=step+1;
   }
-  if(changes.lowRouteAction){
-    if(!isLowRoute(previous)||step!==9||!author)deny('하 트랙 운영 등록 담당자만 처리할 수 있습니다.',403);
-    if(changes.lowRouteAction==='register'){
-      if(!project.owner_id||!merged.developerIds?.length||!project.registrationKnowledgeOwner)deny('오너·개발 담당자·지식갱신 담당자 등록이 필요합니다.');
-      merged.lowRoute={...previous.lowRoute,knowledgeOwner:project.registrationKnowledgeOwner,registeredAt:now,registeredBy:String(actor.id),phase:'ready'};
-      const existing=merged.historicalDocuments?.[9]||{};
-      const ops=existing.documents?.OPS||{};
-      merged.historicalDocuments={...merged.historicalDocuments,9:{...existing,schemaVersion:2,status:'draft',updatedAt:now,documents:{...existing.documents,OPS:{...ops,status:'draft',completedSections:ops.completedSections||[],fields:{...ops.fields,'owners.knowledgeOwner':project.registrationKnowledgeOwner,'owners.owner':merged.projectOwner||merged.owner||'', 'owners.operator':merged.developerNames?.join(' · ')||'', 'owners.type':merged.feaDraft?.agentType||'', 'owners.track':'하','owners.autonomy':merged.feaDraft?.autonomy||''}}}}};
-    }else if(changes.lowRouteAction==='deploy'){
-      if(!previous.lowRoute.registeredAt||!['GO','CONDITIONAL'].includes(merged.g1Resolution?.decision))deny('G1 승인과 운영대장 등록을 먼저 완료해 주세요.');
-      merged.lowRoute={...previous.lowRoute,phase:'operating',deployedAt:now,deployedBy:String(actor.id)};
-    }else deny('유효한 단축 경로 동작이 필요합니다.');
-  }
+  if(changes.lowRouteAction)deny('하 트랙은 개발·평가와 G3·G4 승인을 거쳐 배포해야 합니다.');
   // G1 approval is separate from Admin developer assignment.
   if(step===2&&['GO','CONDITIONAL'].includes(merged.g1Resolution?.decision)&&merged.developerIds?.length){
     if(!merged.workflowTrack)merged.workflowTrack=projectTrack(merged);
     if(merged.workflowTrack==='LOW'){
-      merged.lowRoute={enabled:true,phase:'registration',reason:'v3.1 하 트랙 · G1 승인 후 운영대장 등록',startedAt:now};
-      merged.journeyStep=9;
+      merged.lowRoute={enabled:true,phase:'development',reason:'하 트랙 · G1 승인 후 개발·평가',startedAt:now};
+      merged.journeyStep=5;
+      merged.deliveryPhase='development';
     }else merged.journeyStep=3;
   }
   const next=Number(merged.journeyStep);
   if(next!==step){
-    const lowJump=step===2&&next===9&&merged.lowRoute?.enabled;
+    const lowJump=step===2&&next===5&&merged.lowRoute?.enabled&&merged.deliveryPhase==='development';
     const fastJump=step===0&&next===5&&merged.fastTrack?.status===FAST_TRACK_STATUSES.GF_APPROVED;
     const regularizedJump=step===7&&next===9&&merged.fastTrack?.status===FAST_TRACK_STATUSES.REGULARIZED;
     if(!lowJump&&!fastJump&&!regularizedJump&&next!==step+1)deny('현재 단계를 완료한 뒤 다음 단계로 진행해 주세요.');
@@ -263,7 +252,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     merged.status=['요구 접수 작성 중','타당성 평가 진행 중','G1 착수 승인 대기','요구 정의 진행 중','G2 개발 착수 승인 대기',merged.deliveryPhase==='development'?'개발·평가 진행 중':'설계 진행 중','G3 배포 승인 대기','배포·확산 진행 중','G4 확산 승인 대기','운영 이관 완료'][next];
     merged.nextAction=merged.status;merged.progress=Math.round(next/9*100);
   }
-  if(isLowRoute(merged)){merged.status=merged.lowRoute.phase==='operating'?'운영 중':merged.lowRoute.registeredAt?'하 트랙 · 배포 대기':'하 트랙 · 운영대장 등록';merged.progress=merged.lowRoute.phase==='operating'?100:90;}
+  if(isLowRoute(merged))merged.lowRoute={...merged.lowRoute,phase:next>=9?'operating':next===5?'development':next===6?'approval':next===7?'rollout':'expansion_approval'};
   if(merged.fastTrack?.status===FAST_TRACK_STATUSES.REQUESTED){merged.status='Fast Track 자격 판정 대기';merged.nextAction='AI 활성화팀장 Fast Track 자격 판정';}
   if(merged.fastTrack?.status===FAST_TRACK_STATUSES.QUALIFIED){merged.status='ARD-Lite 작성 및 GF 승인 대기';merged.nextAction=!merged.intakeReview?.at?'INT AI 인터뷰·검토':!ardLiteDocumentComplete(merged)?'ARD-Lite .md 작성·완료':'AI 활성화팀장 GF 긴급 착수 승인';}
   return merged;

@@ -5,7 +5,7 @@ export const projectListFilters=isAiTeam=>isAiTeam?PROJECT_LIST_FILTERS:['진행
 export const PROJECT_LIST_SORTS=['최신 과제순','과제번호순','마감 임박순','이름순','진행률순'];
 export function isOngoingProject(project){
   if(project.historicalImport&&!project.historicalImportFinalizedAt)return true;
-  if(project.lowRoute?.enabled)return project.lowRoute.phase!=='operating';
+  if(project.lowRoute?.enabled)return Number(project.journeyStep)<9||project.lowRoute.phase!=='operating';
   return Number(project.journeyStep)<9&&!['완료','운영 중','중단','종료'].includes(project.status);
 }
 const normalizeSearch=value=>String(value??'').normalize('NFKC').toLocaleLowerCase().trim();
