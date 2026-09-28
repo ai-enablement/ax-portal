@@ -8,7 +8,7 @@ import {
 } from "./workflow-v31.mjs";
 import { ardLiteGaps,ardLiteDocumentComplete } from "./fast-track.mjs";
 import {intakeRequired} from './intake-standard.mjs';
-import {isProjectParty} from './project-actors.mjs';
+import {isProjectParty,isProjectDeveloper} from './project-actors.mjs';
 import {canManageAssessment} from './document-role-policy.mjs';
 import {agentGuidance} from './notification-content.mjs';
 
@@ -30,7 +30,7 @@ export function filterProjectList(projects, filter, actorId) {
 }
 
 function actorRelations(project, actor) {
-  const developer = isAssignedDeveloper(project, actor.id);
+  const developer = isProjectDeveloper(project, actor);
   const requester = isProjectParty(project,actor,'requester');
   const owner = isProjectParty(project,actor,'owner');
   return {
@@ -40,7 +40,7 @@ function actorRelations(project, actor) {
     requirementsAuthor:canManageAssessment(actor.appRole),
     requester,
     owner,
-    securityReviewer: same(project.securityReviewerId, actor.id),
+    securityReviewer: [actor.id,...(actor.sharedUserIds||[])].some(id=>same(project.securityReviewerId,id)),
     teamLeader: actor.appRole === "team_leader",
     admin: actor.appRole === "admin",
   };
@@ -260,7 +260,7 @@ export function buildWorkNotifications(projects, actor) {
         /개발 담당자 배정/.test(notification.title) ? 'Admin' :
         /UAT|요구 접수서 작성/.test(notification.title) ? '요구자' :
         /타당성 평가서 작성|G1 보완 요청|ARD 요구 정의 작성|G2 보완 요청|ARD-Lite 작성/.test(notification.title) ? (actor.appRole==='team_leader'?'AI 활성화팀장':'Admin') :
-        isAssignedDeveloper(project, actor.id) ? '개발 담당자' :
+        isProjectDeveloper(project, actor) ? '개발 담당자' :
         isProjectParty(project,actor,'requester') ? '요구자' :
         isProjectParty(project,actor,'owner') ? 'Project Owner' :
         actor.appRole === 'team_leader' ? 'AI 활성화팀장' : 'Admin'

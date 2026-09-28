@@ -5,7 +5,7 @@ export class ProjectContactError extends Error {
 }
 
 export function validateHistoricalContactUpdate(state, update, actor) {
-  const assigned=(state.developerIds||[]).map(String).includes(String(actor.id));
+  const assigned=(state.developerIds||[]).map(String).some(id=>[String(actor.id),...(actor.sharedUserIds||[])].includes(id));
   if(!state.historicalImport || !(actor.app_role==='admin'||(actor.app_role!=='general_user'&&assigned)))throw new ProjectContactError('Admin 또는 지정 개발 담당자만 이관 연락처를 보완할 수 있습니다.',403);
   if(!update||typeof update!=='object'||Array.isArray(update))throw new ProjectContactError('연락처 입력을 확인해 주세요.');
   const result={};

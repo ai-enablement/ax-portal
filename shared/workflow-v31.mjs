@@ -79,7 +79,7 @@ export function gateGaps(gate,state){
   return ['알 수 없는 게이트'];
 }
 export function eligibleRole(role,actor,project,state){
-  const same=id=>id!=null&&String(id)===String(actor.id);
+  const same=id=>id!=null&&[String(actor.id),...(actor.sharedUserIds||[])].includes(String(id));
   if(!actor.is_active)return false;
   if(role==='requester')return same(project.requester_id);
   if(role==='owner')return same(project.owner_id);

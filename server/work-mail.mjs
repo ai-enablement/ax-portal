@@ -99,7 +99,7 @@ export async function scanWorkMail(client, env=process.env, loadProjects=listNot
     const result=await loadProjects(client,actor);
     if(result.status && result.status!==200)throw new Error('MAIL_PROJECT_LOOKUP_FAILED');
     stage='notification_calculation';
-    const items=buildWorkNotifications(result.body.projects,{id:String(actor.id),email:actor.email,appRole:actor.app_role});
+    const items=buildWorkNotifications(result.body.projects,{id:String(actor.id),email:actor.email,appRole:actor.app_role,sharedUserIds:result.body.sharedUserIds});
     const keys=actor.email?items.map(mailKey):[];
     stage='queue_write';
     await client.query('begin');transaction=true;

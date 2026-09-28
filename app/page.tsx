@@ -18,6 +18,7 @@ import ProjectListDrawer from "./project-list-drawer";
 import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
 import ProjectDeadline from './project-deadline';
+import LeaderDashboard from './leader-dashboard';
 import ProjectCategoryEditor from './project-category';
 import ArdReview from './ard-review';
 import HistoricalAdmin from './historical-admin';
@@ -95,6 +96,7 @@ const ACCOUNT_APP_ROLES: Record<AccountRole, "team_leader" | "team_member" | "bt
 };
 type PortalIdentity = {
   userId: string;
+  sharedUserIds?: string[];
   email: string;
   displayName: string;
   objectId: string;
@@ -172,7 +174,7 @@ const navGroups = [
     label: "WORKSPACE",
     items: [
       { id: "home" as View, icon: "⌂", label: "홈" },
-      { id: "teamboard" as View, icon: "▥", label: "AI 활성화팀 대시보드" },
+      { id: "teamboard" as View, icon: "▥", label: "리더용 대시보드" },
       { id: "governance" as View, icon: "✓", label: "Admin & Governance" },
     ],
   },
@@ -1397,6 +1399,7 @@ export default function Home() {
   const notifications = useMemo(
     () => buildWorkNotifications(userProjectItems, {
       id: identity?.userId,
+      sharedUserIds: identity?.sharedUserIds,
       email: actorEmail,
       appRole: identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : identity?.appRole,
     }),
@@ -1902,20 +1905,7 @@ export default function Home() {
             notify={notify}
           />
         )}
-        {view === "teamboard" && role !== ACCOUNT_ROLES.user &&
-          (teamAccounts.length > 0 || teamDashboardRequirements.length > 0 ? (
-            <LegacyTeamWorkspaceDashboard
-              setView={go}
-              openWorkflow={openWorkflow}
-              members={teamAccounts}
-              requirements={teamDashboardRequirements}
-            />
-          ) : (
-            <EmptyDataPage
-              title="등록된 Agent 과제가 없습니다."
-              description="새 Agent 과제가 접수되면 담당자별 진행 현황과 지연 위험이 여기에 표시됩니다."
-            />
-          ))}
+        {view === "teamboard" && role !== ACCOUNT_ROLES.user && <LeaderDashboard key={`${identity?.userId}:${role}`} identity={identity} devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined} onProject={(projectNo:string)=>openWorkflow('home',projectNo)}/>}
         {view === "operations" &&
           (adminProjectItems.some((project) => project.journeyStep >= 9) ? (
             <OperationsImprovement
@@ -7151,7 +7141,7 @@ function UserDashboard({
   const signedInTeamAccount = teamAccounts.find(
     (account) => account.email.toLowerCase() === identity?.email?.toLowerCase(),
   );
-  const isAssignedHistoricalDeveloper = isProjectDeveloper(current,{id:identity?.userId||signedInTeamAccount?.id});
+  const isAssignedHistoricalDeveloper = isProjectDeveloper(current,{sharedUserIds:identity?.sharedUserIds,id:identity?.userId||signedInTeamAccount?.id});
   const canAuthorHistoricalDocument =
     role === ACCOUNT_ROLES.admin ||
     (assignedDeveloperIds.length > 0
@@ -14967,7 +14957,7 @@ function Governance({
               <div className="governance-account-form">
                 <div><b>프로젝트 수행 계정 등록</b><small>BTS와 비피 솔루션은 이메일 없이 이름만으로도 등록할 수 있습니다.</small></div>
                 <input aria-label="등록할 사용자 이름" placeholder="이름" value={accountDraft.displayName} onChange={(event) => setAccountDraft({ ...accountDraft, displayName: event.target.value })} />
-                <input aria-label="등록할 MS 계정" type="email" placeholder={registrationEmailOptional ? "MS 계정 이메일 (선택)" : "name@changshininc.com"} required={!registrationEmailOptional} value={accountDraft.email} onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })} />
+                <input aria-label="등록할 MS 계정" type="email" placeholder={registrationEmailOptional ? "공용 로그인 이메일 (중복 가능)" : "name@changshininc.com"} required={!registrationEmailOptional} value={accountDraft.email} onChange={(event) => setAccountDraft({ ...accountDraft, email: event.target.value })} />
                 <select aria-label="등록할 역할" value={accountDraft.appRole} onChange={(event) => setAccountDraft({ ...accountDraft, appRole: event.target.value })}>
                   <option value="team_member">AI 활성화팀 팀원</option>
                   <option value="bts">BTS</option>
@@ -15188,13 +15178,13 @@ function Governance({
               <div>
                 <small>ACCOUNT MANAGEMENT</small>
                 <h2 id="governance-account-edit-title">사용자 계정 수정</h2>
-                <p>이름, MS 계정 이메일과 포털 역할을 사용자별로 변경합니다.</p>
+                <p>BTS·비피솔루션은 같은 역할끼리 공용 로그인 이메일을 사용할 수 있습니다. 해당 계정은 연결된 인원들의 과제를 함께 처리합니다.</p>
               </div>
               <button aria-label="계정 수정 닫기" onClick={() => setEditingAccount(null)}><X size={20} /></button>
             </header>
             <div className="governance-account-edit-form">
               <label><span>사용자 이름</span><input value={accountEditDraft.displayName} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, displayName: event.target.value })} /></label>
-              <label><span>MS 계정 이메일{editEmailOptional ? " (선택)" : ""}</span><input type="email" placeholder={editEmailOptional ? "이메일 없이 수행자로 등록됨" : "name@changshininc.com"} required={!editEmailOptional} value={accountEditDraft.email} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, email: event.target.value })} /></label>
+              <label><span>{editEmailOptional ? "공용 로그인 이메일 (선택·동일 역할 내 중복 가능)" : "MS 계정 이메일"}</span><input type="email" placeholder={editEmailOptional ? "이메일 없이 수행자로 등록됨" : "name@changshininc.com"} required={!editEmailOptional} value={accountEditDraft.email} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, email: event.target.value })} /></label>
               <label><span>계정 역할</span><select value={accountEditDraft.appRole} onChange={(event) => setAccountEditDraft({ ...accountEditDraft, appRole: event.target.value })}>
                 <option value="general_user">일반 User</option>
                 <option value="team_member">AI 활성화팀 팀원</option>

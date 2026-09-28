@@ -127,13 +127,13 @@ test("governance roles are stored in PostgreSQL and enforced by the server", asy
 
 test("governance users support protected per-account editing and soft deletion", async () => {
   const api = await read("server/database-api.mjs");
-  assert.match(api, /email=nullif\(\$4,''\), display_name=\$5, is_active=true/);
-  assert.match(api, /lower\(email\)=lower\(\$1\) and id<>\$2/);
+  assert.match(api, /email=\$4, display_name=\$5, is_active=true,shared_account_id=\$6/);
+  assert.match(await read('server/shared-accounts.mjs'), /lower\(email\)=lower\(\$1\) and id<>\$2/);
   assert.match(api, /Bootstrap account email and role must be changed in Azure App Service settings/);
   assert.match(api, /method === "DELETE" && pathname\.startsWith\("\/governance\/users\/"\)/);
   assert.match(api, /You cannot delete your own account/);
   assert.match(api, /The last active admin cannot be deleted/);
-  assert.match(api, /set app_role='general_user', team_id=null, is_active=false/);
+  assert.match(api, /set app_role='general_user', team_id=null, shared_account_id=null, is_active=false/);
   assert.match(api, /Admin & Governance 계정 삭제 · 이력 보존/);
 });
 
@@ -142,8 +142,8 @@ test("BTS and BP Solution roster entries can be registered without email", async
   assert.match(api, /const emailOptional = \["bts", "bp_solution"\]\.includes\(newRole\)/);
   assert.match(api, /const existing = email\s*\?/);
   assert.match(api, /nullif\(\$3,''\)/);
-  assert.match(api, /email=nullif\(\$4,''\)/);
-  assert.match(api, /coalesce\(u\.email, ''\) as email/);
+  assert.match(api, /email=\$4/);
+  assert.match(api, /coalesce\(u\.email, login.email, ''\) as email/);
 });
 
 test("non-user development roles and team workload are persisted and served from PostgreSQL", async () => {

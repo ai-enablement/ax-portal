@@ -12,7 +12,7 @@ export type WorkNotification = {
 
 export function buildWorkNotifications(
   projects: unknown[],
-  actor: { id?: string; email?: string; appRole?: string },
+  actor: { id?: string; email?: string; appRole?: string; sharedUserIds?: string[] },
 ): WorkNotification[];
 
 export function isAssignedDeveloper(project: {developerIds?: (string | number)[]}, actorId?: string | number): boolean;

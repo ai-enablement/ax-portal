@@ -1,6 +1,7 @@
 // Integration checks use connection-local TEMP tables only. No persistent data changes.
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {setRpaVisibility} from '../server/rpa-visibility.mjs';
 import {getPool,closePool} from '../server/db/pool.mjs';
 import {listRpa,createRpaRequest,linkRpaPic,readRpaFile,updateRpaPics} from '../server/rpa-portal.mjs';
 import {updateRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../server/rpa-management.mjs';
@@ -12,6 +13,7 @@ try{
  for(const t of ['rpa_projects','rpa_pic_links','rpa_pic_history','rpa_requests','rpa_request_files'])await client.query(`create temp table ${t}(like agent_portal.${t} including all)`);
  const roles=['admin','team_leader','team_member','general_user','bts','bp_solution'];
  for(const [i,role]of roles.entries())await client.query('insert into pg_temp.users values($1,$2,$3,$4,true)',[i+1,`${role}@example.invalid`,role,role]);
+ await client.query('alter table pg_temp.users add column shared_account_id bigint');
  const p={id:'test:1',code:'QA-001',name:'Isolated fixture',pics:['PIC'],fields:{},sourceRow:2};
  await client.query('insert into pg_temp.rpa_projects(id,project_code,payload,source_hash) values($1,$2,$3,$4)',[p.id,p.code,p,'test']);
  const query=(sql,args)=>client.query(sql.replaceAll('agent_portal.','pg_temp.'),args);
@@ -106,6 +108,24 @@ try{
  await updateRpaPics(identity('team_leader'),{...picBody,revision:4,previousLinks:[{pic:'Replacement',email:'bp_solution@example.invalid'}],pics:[]});checks++;
  assert.equal((await listRpa(identity('bp_solution'))).projects.length,0);checks++;
  const removed=(await listRpa(identity('admin'))).projects.find(p=>p.id===newMaster.id);assert.deepEqual(removed.pics,[]);assert.equal(removed.revision,5);checks+=2;
+ const excluded={...p,id:'hidden:1',code:'HIDDEN-001',status:'7. 제외(미개발)'};
+ await query('insert into agent_portal.rpa_projects(id,project_code,payload,source_hash) values($1,$2,$3,$4)',[excluded.id,excluded.code,excluded,'test']);
+ await linkRpaPic(identity('admin'),{projectId:excluded.id,pic:'PIC',email:'general_user@example.invalid',reason:'fixture'});
+ assert.equal((await listRpa(identity('admin'))).hiddenProjects.length,1);
+ assert.equal((await listRpa(identity('general_user'))).hiddenProjects.length,0);
+ assert.equal((await listRpa(identity('general_user'))).projects.some(x=>x.id===excluded.id),false);checks+=3;
+ const visibility={hidden:false,items:[{id:excluded.id,revision:0}]};
+ for(const role of ['general_user','bts','bp_solution']){await assert.rejects(()=>setRpaVisibility(identity(role),visibility),e=>e.status===403);checks++;}
+ await assert.rejects(()=>createRpaRequest(identity('admin'),{...body,projectId:excluded.id,key:randomUUID(),files:[]}),e=>e.status===409);checks++;
+ await setRpaVisibility(identity('team_member'),visibility);
+ assert.equal((await listRpa(identity('general_user'))).projects.some(x=>x.id===excluded.id),true);checks++;
+ await assert.rejects(()=>setRpaVisibility(identity('admin'),{...visibility,hidden:true}),e=>e.status===409);checks++;
+ const hiddenRequest=await createRpaRequest(identity('general_user'),{...body,projectId:excluded.id,key:randomUUID(),files:[]});
+ await setRpaVisibility(identity('team_leader'),{hidden:true,items:[{id:excluded.id,revision:1}]});
+ const hiddenData=await listRpa(identity('general_user'));
+ assert.ok(hiddenData.requests.some(x=>x.id===hiddenRequest.id));assert.ok(hiddenData.requestProjects.some(x=>x.id===excluded.id));checks+=2;
+ const savedHidden=(await query('select payload from agent_portal.rpa_projects where id=$1',[excluded.id])).rows[0].payload;
+ assert.equal(savedHidden.visibility.hidden,true);assert.equal(savedHidden.status,excluded.status);assert.equal(savedHidden.history.at(-1).kind,'visibility');checks+=3;
  console.log(JSON.stringify({passed:checks,storage:'temporary tables only',persistentChanges:0}));
  const deletion={id:newMaster.id,revision:5,confirmCode:master.fields['과제번호'],reason:'Isolated delete test'};
  const unified=await createRpaMaster(identity('admin'),{fields:{...master.fields,'과제번호':'QA-PAIRS'},pics:[{pic:'One',email:'general_user@example.invalid'},{pic:'Two',email:'bts@example.invalid'}]});

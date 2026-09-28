@@ -42,6 +42,7 @@ create table if not exists users (
   organization_id bigint not null references organizations(id) on delete restrict,
   team_id bigint references teams(id) on delete set null,
   ms_account_id text,
+  shared_account_id bigint references users(id) on delete restrict,
   email text,
   display_name text not null,
   app_role text not null default 'general_user'

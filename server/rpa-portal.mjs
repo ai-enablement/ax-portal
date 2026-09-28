@@ -1,4 +1,6 @@
 import {randomUUID} from 'node:crypto';
+import {withSharedUsers} from './shared-accounts.mjs';
+import {isRpaHidden} from '../shared/rpa-visibility.mjs';
 import {workflowAction} from '../shared/rpa-workflow.mjs';
 import {stageMail} from '../shared/rpa-notifications.mjs';
 import {getPool,withTransaction} from './db/pool.mjs';
@@ -12,7 +14,7 @@ export async function rpaActor(identity,client=getPool()){
  // Only the server-resolved, explicitly enabled development switcher can override.
  // Entra/production callers always use the stored role, never a request-body role.
  if(process.env.NODE_ENV!=='production'&&identity.source==='development'&&identity.canSwitchRole&&['admin','team_leader','team_member','general_user','bts','bp_solution'].includes(identity.appRole))return {...actor,app_role:identity.appRole};
- return actor;
+ return withSharedUsers(client,actor);
 }
 const scope=`(p.payload->>'deletedAt' is null and ($1::boolean or exists(select 1 from agent_portal.rpa_pic_links l where l.project_id=p.id and l.email=$2) or exists(select 1 from agent_portal.rpa_requests assigned where assigned.project_id=p.id and lower(assigned.payload->>'assigneeEmail')=$2)))`;
 async function allowedProject(client,actor,id){
@@ -25,9 +27,10 @@ export async function listRpa(identity){
  const tickets=(await pool.query(`select r.id::text,r.project_id,r.created_by,r.payload,r.status,r.created_at,r.updated_at,u.display_name as requester,u.email as requester_email from agent_portal.rpa_requests r join agent_portal.rpa_projects p on p.id=r.project_id join agent_portal.users u on u.id=r.created_by where ${scope} order by r.created_at desc`,args)).rows;
  const requests=tickets.map(r=>{const payload={...r.payload};delete payload.completionMailJobs;delete payload.stageMailJobs;delete payload.workflowMailToken;return {...payload,allowedAction:workflowAction(r.status,payload,actor,r.created_by),id:r.id,projectId:r.project_id,code:`REQ-${new Date(r.created_at).getUTCFullYear()}-${r.id.padStart(6,'0')}`,resumeStatus:r.status,status:r.payload.onHold?'held':r.status,createdAt:r.created_at,updatedAt:r.updated_at,requester:r.requester,requesterEmail:r.requester_email};});
  const links=canLinkRpaPic(actor.app_role)?(await pool.query('select project_id as "projectId",pic,email from agent_portal.rpa_pic_links order by project_id,pic')).rows:[];
- const developerAccounts=canReadAllRpa(actor.app_role)?(await pool.query('select display_name as label,email as value from agent_portal.users where is_active=true order by display_name,email')).rows:[];
+ const developerAccounts=canReadAllRpa(actor.app_role)?(await pool.query("select string_agg(u.display_name,' / ' order by u.display_name) as label,coalesce(u.email,login.email) as value from agent_portal.users u left join agent_portal.users login on login.id=u.shared_account_id where u.is_active=true and (u.shared_account_id is null or (login.is_active and login.app_role=u.app_role)) and coalesce(u.email,login.email) is not null group by coalesce(u.email,login.email) order by label")).rows:[];
  const people=canReadAllRpa(actor.app_role)?(await pool.query('select display_name from agent_portal.users order by display_name')).rows.map(u=>u.display_name):[];
- return {projects,requests,links,people,developerAccounts,canReadAll:canReadAllRpa(actor.app_role),canLink:canLinkRpaPic(actor.app_role),actor:{name:actor.display_name,email:actor.email},mailEnabled:['live','test'].includes(process.env.PORTAL_MAIL_MODE)&&!!process.env.POWER_AUTOMATE_MAIL_URL};
+ const hiddenProjects=projects.filter(isRpaHidden),visibleProjects=projects.filter(p=>!isRpaHidden(p));
+ return {projects:visibleProjects,hiddenProjects:canReadAllRpa(actor.app_role)?hiddenProjects:[],requestProjects:hiddenProjects.filter(p=>requests.some(r=>r.projectId===p.id)),requests,links,people,developerAccounts,canReadAll:canReadAllRpa(actor.app_role),canLink:canLinkRpaPic(actor.app_role),actor:{name:actor.display_name,email:actor.email},mailEnabled:['live','test'].includes(process.env.PORTAL_MAIL_MODE)&&!!process.env.POWER_AUTOMATE_MAIL_URL};
 }
 export async function createRpaRequest(identity,body){
  const error=validateRpaRequest(body);if(error)fail(400,error);
@@ -36,6 +39,7 @@ export async function createRpaRequest(identity,body){
  if(files.reduce((s,f)=>s+f.size,0)>10*1024*1024)fail(413,'첨부파일 총 용량은 10MB 이하입니다.');
  return withTransaction(async client=>{
   const actor=await rpaActor(identity,client);const project=await allowedProject(client,actor,body.projectId);
+  if(isRpaHidden(project.payload))fail(409,'숨김 과제입니다. 관리자가 숨김을 해제한 후 요청을 등록해 주세요.');
   const existing=(await client.query('select id::text,created_by from agent_portal.rpa_requests where idempotency_key=$1',[body.key])).rows[0];
   if(existing){if(String(existing.created_by)!==String(actor.id))fail(409,'다른 접수에 사용된 키입니다.');return {id:existing.id};}
   const payload={title:body.title.trim(),description:body.description.trim(),type:body.type,priority:body.priority,occurredDate:body.occurredDate,notifyEmail:body.notifyEmail.trim().toLowerCase(),log:String(body.log||''),errorStep:String(body.errorStep||'').slice(0,1000),files:files.map(({id,name,size})=>({id,name,size})),history:[{kind:'created',at:new Date().toISOString(),label:'요청 접수',actor:actor.display_name}],mailStatus:'not_requested'};

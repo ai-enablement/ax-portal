@@ -1,4 +1,5 @@
 import {resolvePortalIdentity} from '../../../server/auth.mjs';
+import {setRpaVisibility} from '../../../server/rpa-visibility.mjs';
 import {rpaNotifications} from '../../../shared/rpa-notifications.mjs';
 import {updateRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../../../server/rpa-management.mjs';
 import {isSameOriginRequest} from '../../../server/request-origin.mjs';
@@ -24,6 +25,7 @@ export async function POST(request){try{
  if(body.action==='master')return Response.json(await createRpaMaster(identity,body),{status:201});
  if(body.action==='master-update')return Response.json(await updateRpaMaster(identity,body));
  if(body.action==='master-delete')return Response.json(await deleteRpaMaster(identity,body));
+ if(body.action==='master-visibility')return Response.json(await setRpaVisibility(identity,body));
  if(body.action!=='create')return Response.json({error:'지원하지 않는 작업입니다.'},{status:400});
  return Response.json(await createRpaRequest(identity,body),{status:201});
 }catch(e){return errorResponse(e);}}

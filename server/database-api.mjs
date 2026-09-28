@@ -1,4 +1,7 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
+import {withSharedUsers,sharedAccountFields} from './shared-accounts.mjs';
+import {projectActorIds,isProjectDeveloper} from '../shared/project-actors.mjs';
+import {saveProjectProgress} from './project-progress.mjs';
 import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {draftProjectCode} from './project-numbering.mjs';
 import {categoryChange} from '../shared/project-category.mjs';
@@ -97,7 +100,8 @@ async function ensurePortalCatalog(client) {
   return { organizationId: organization.rows[0].id, aiTeamId: team.rows[0].id };
 }
 
-export async function ensurePortalUser(client, identity) {
+export async function ensurePortalUser(client,identity){return withSharedUsers(client,await ensureSinglePortalUser(client,identity));}
+async function ensureSinglePortalUser(client, identity) {
   if (!identity?.email) return null;
   // Local preview must never overwrite a real Entra identity with a shared test ID.
   if (identity.source === 'development') {
@@ -125,7 +129,7 @@ export async function ensurePortalUser(client, identity) {
       `update agent_portal.users
           set ms_account_id = coalesce(nullif($2, ''), ms_account_id),
               email = $3,
-              display_name = coalesce(nullif($4, ''), display_name),
+              display_name = case when app_role in ('bts','bp_solution') then display_name else coalesce(nullif($4, ''), display_name) end,
               app_role = coalesce($5, app_role),
               is_active = true,
               last_login_at = now(),
@@ -596,11 +600,12 @@ async function listGovernanceUsers(identity) {
     );
   }
   const result = await pool.query(
-    `select u.id, coalesce(u.email, '') as email, u.display_name as "displayName", u.app_role as "appRole",
+    `select u.id, coalesce(u.email, login.email, '') as email, u.shared_account_id as "sharedAccountId", u.display_name as "displayName", u.app_role as "appRole",
             u.is_active as "isActive", u.last_login_at as "lastLoginAt",
             t.team_name as "teamName"
        from agent_portal.users u
        left join agent_portal.teams t on t.id = u.team_id
+       left join agent_portal.users login on login.id=u.shared_account_id
       where u.app_role in ('team_leader','team_member','bts','bp_solution','admin')
       order by case u.app_role when 'admin' then 1 when 'team_leader' then 2
                  when 'team_member' then 3 when 'bts' then 4 when 'bp_solution' then 5 else 6 end,
@@ -643,6 +648,7 @@ async function registerGovernanceUser(body, identity) {
     return { status: 400, body: { error: emailOptional ? "Name and a valid MS account email, when provided, are required." : "Name and a valid MS account email are required." } };
   }
   return withTransaction(async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtext('governance-account-write'))");
     const actor = await governanceActor(client, identity);
     if (!actor || !allowedRoleChange(actor.app_role, newRole)) {
       return { status: 403, body: { error: "Role assignment permission is required." } };
@@ -668,14 +674,15 @@ async function registerGovernanceUser(body, identity) {
          values ($1,'general_user',$2,$3,$4)`,
         [user.id, newRole, actor.id, "Admin & Governance 수행 계정 등록"],
       );
-    } else if (existing.rows[0]) {
+    } else if (existing.rows[0] && !emailOptional) {
       return { status: 409, body: { error: "This MS account is already registered in the project roster." } };
     } else {
+      const account=await sharedAccountFields(client,{email,role:newRole});
       user = (await client.query(
-        `insert into agent_portal.users (organization_id, team_id, email, display_name, app_role, is_active)
-         values ($1,case when $4 in ('team_member','team_leader','bts','bp_solution','admin') then $2::bigint else null end,nullif($3,''),$5,$4,true)
+        `insert into agent_portal.users (organization_id, team_id, email, display_name, app_role, is_active,shared_account_id)
+         values ($1,case when $4 in ('team_member','team_leader','bts','bp_solution','admin') then $2::bigint else null end,nullif($3,''),$5,$4,true,$6)
          returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
-        [catalog.organizationId, catalog.aiTeamId, email, newRole, displayName],
+        [catalog.organizationId, catalog.aiTeamId, account.email, newRole, displayName,account.sharedAccountId],
       )).rows[0];
       await client.query(
         `insert into agent_portal.user_role_history (user_id, previous_role, new_role, changed_by, change_reason)
@@ -689,14 +696,16 @@ async function registerGovernanceUser(body, identity) {
 
 async function updateGovernanceUser(userId, body, identity) {
   return withTransaction(async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtext('governance-account-write'))");
     const actor = await governanceActor(client, identity);
     const target = (await client.query(
-      `select id, email, display_name, app_role, is_active
+      `select id, email, shared_account_id, display_name, app_role, is_active
          from agent_portal.users where id=$1 for update`, [userId],
     )).rows[0];
     if (!target) return { status: 404, body: { error: "User not found." } };
     const newRole = String(body.appRole || target.app_role);
-    const email = String(body.email ?? target.email ?? "").trim().toLowerCase();
+    const linkedEmail=target.shared_account_id?(await client.query('select email from agent_portal.users where id=$1',[target.shared_account_id])).rows[0]?.email:null;
+    const email = String(body.email ?? target.email ?? linkedEmail ?? "").trim().toLowerCase();
     const displayName = String(body.displayName ?? target.display_name ?? "").trim();
     const emailOptional = ["bts", "bp_solution"].includes(newRole);
     if (!actor || !allowedRoleChange(actor.app_role, newRole)) {
@@ -716,22 +725,18 @@ async function updateGovernanceUser(userId, body, identity) {
       const count = await client.query(`select count(*)::int as count from agent_portal.users where app_role='admin' and is_active=true`);
       if (count.rows[0].count <= 1) return { status: 409, body: { error: "The last active admin cannot be demoted." } };
     }
-    const duplicate = email
-      ? await client.query(
-          `select id from agent_portal.users where lower(email)=lower($1) and id<>$2 limit 1`,
-          [email, target.id],
-        )
-      : { rows: [] };
-    if (duplicate.rows[0]) return { status: 409, body: { error: "This MS account email is already registered." } };
+    const account=await sharedAccountFields(client,{email,role:newRole,target});
     const catalog = await ensurePortalCatalog(client);
     const updated = (await client.query(
       `update agent_portal.users set app_role=$2,
               team_id=case when $2 in ('team_member','team_leader','bts','bp_solution','admin') then $3::bigint else null end,
-              email=nullif($4,''), display_name=$5, is_active=true,
+              email=$4, display_name=$5, is_active=true,shared_account_id=$6,
+              ms_account_id=case when email is not distinct from $4 and $6::bigint is null then ms_account_id else null end,
               updated_at=now() where id=$1
        returning id, email, display_name as "displayName", app_role as "appRole", is_active as "isActive"`,
-      [target.id, newRole, catalog.aiTeamId, email, displayName],
+      [target.id, newRole, catalog.aiTeamId, account.email, displayName,account.sharedAccountId],
     )).rows[0];
+    await client.query("insert into agent_portal.audit_logs(actor_user_id,action_code,entity_type,entity_id,before_data,after_data) values($1,'GOVERNANCE_ACCOUNT_UPDATE','user',$2,$3::jsonb,$4::jsonb)",[actor.id,String(target.id),JSON.stringify({email:target.email||linkedEmail,name:target.display_name,role:target.app_role,sharedAccountId:target.shared_account_id}),JSON.stringify({email,name:displayName,role:newRole,sharedAccountId:account.sharedAccountId})]);
     if (target.app_role !== newRole) await client.query(
       `insert into agent_portal.user_role_history (user_id, previous_role, new_role, changed_by, change_reason)
        values ($1,$2,$3,$4,$5)`,
@@ -743,6 +748,7 @@ async function updateGovernanceUser(userId, body, identity) {
 
 async function deleteGovernanceUser(userId, identity) {
   return withTransaction(async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtext('governance-account-write'))");
     const actor = await governanceActor(client, identity);
     if (!actor) return { status: 403, body: { error: "Account management permission is required." } };
     const target = (await client.query(
@@ -754,6 +760,7 @@ async function deleteGovernanceUser(userId, identity) {
     if (bootstrapAccountSource(target.email)) {
       return { status: 409, body: { error: "Bootstrap accounts must be removed from Azure App Service settings first." } };
     }
+    if((await client.query('select id from agent_portal.users where shared_account_id=$1 limit 1',[target.id])).rowCount)return {status:409,body:{error:'공용 계정에 연결된 인원들의 이메일 연결을 먼저 변경해 주세요.'}};
     if (actor.app_role === "team_leader" && !["team_member", "bts", "bp_solution"].includes(target.app_role)) {
       return { status: 403, body: { error: "Team leaders can only delete team member, BTS, or BP Solution accounts." } };
     }
@@ -766,7 +773,7 @@ async function deleteGovernanceUser(userId, identity) {
     }
     await client.query(
       `update agent_portal.users
-          set app_role='general_user', team_id=null, is_active=false, updated_at=now()
+          set app_role='general_user', team_id=null, shared_account_id=null, is_active=false, updated_at=now()
         where id=$1`,
       [target.id],
     );
@@ -817,6 +824,7 @@ function portalProjectFromRow(row) {
     nextAction: row.nextAction || runtime.nextAction || "다음 작업 확인 필요",
     requestedDate: row.requestedCompletionDate ? kstDate(row.requestedCompletionDate) : runtime.requestedDate || "",
     receivedDate: runtime.receivedDate || receivedDate,
+    committedDate: row.committedCompletionDate ? kstDate(row.committedCompletionDate) : runtime.committedDate || '',
     owner: runtime.owner || row.ownerName || row.requesterName,
     requester: runtime.requester || row.requesterName,
     projectOwner: runtime.projectOwner || row.ownerName || row.requesterName,
@@ -844,12 +852,14 @@ async function listOperationalProjects(identity) {
 
 // Internal worker only. Reuse the same visibility predicate and DB projection as the UI.
 export async function listNotificationProjectsForActor(pool, actor) {
+  actor=await withSharedUsers(pool,actor);
   const result = await pool.query(
     `select p.project_code as "projectCode", p.project_name as "projectName",
             p.project_category as "projectCategory", p.project_summary as "projectSummary",
             p.current_stage_code as "stageCode", p.project_status as "projectStatus",
             p.progress_percent as "progressPercent", p.next_action as "nextAction",
             p.requested_completion_date as "requestedCompletionDate",
+            p.committed_completion_date as "committedCompletionDate",
             p.created_at as "createdAt", p.updated_at as "updatedAt",
             requester.id as "requesterId", owner_user.id as "ownerId",
             requester.display_name as "requesterName", owner_user.display_name as "ownerName",
@@ -880,21 +890,21 @@ export async function listNotificationProjectsForActor(pool, actor) {
       where p.deleted_at is null
         and (
           $2 in ('admin','team_leader')
-          or ir.raw_answers->'portalState'->>'securityReviewerId'=($1::bigint)::text
+          or ir.raw_answers->'portalState'->>'securityReviewerId'=any($3::text[])
           or ($2='team_member' and (p.current_stage_code in ('INT','FEA') or p.requester_id=$1 or p.owner_id=$1 or exists (
             select 1 from agent_portal.project_members access_pm where access_pm.project_id=p.id and access_pm.user_id=$1 and access_pm.ended_at is null
           )))
           or ($2 in ('bts','bp_solution') and exists (
-            select 1 from agent_portal.project_members access_pm where access_pm.project_id=p.id and access_pm.user_id=$1 and access_pm.ended_at is null
+            select 1 from agent_portal.project_members access_pm where access_pm.project_id=p.id and access_pm.user_id=any($3::bigint[]) and access_pm.ended_at is null
           ))
           or ($2='general_user' and (p.requester_id=$1 or p.owner_id=$1 or exists (
             select 1 from agent_portal.project_members access_pm where access_pm.project_id=p.id and access_pm.user_id=$1 and access_pm.ended_at is null
           )))
         )
       order by p.updated_at desc, p.project_code desc`,
-    [actor.id, actor.app_role],
+    [actor.id, actor.app_role,projectActorIds(actor)],
   );
-  return { status: 200, body: { projects: result.rows.map(portalProjectFromRow) } };
+  return { status: 200, body: { projects: result.rows.map(portalProjectFromRow),sharedUserIds:actor.sharedUserIds||[] } };
 }
 
 async function syncProjectDevelopers(client, projectId, developerIds, actorId) {
@@ -1060,6 +1070,7 @@ async function syncIntakeConversation(client, projectId, messages, actorId) {
 
 export async function createOperationalProject(body, identity, transact = withTransaction) {
   const submittedState = assertPortalProjectState(body.project || body);
+  for(const key of ['manualProgress','developmentStartDate','progressRevision','progressUpdatedAt','progressUpdatedBy','progressHistory','progressChange'])delete submittedState[key];
   sanitizeNewWorkflow(submittedState);
   delete submittedState.categoryHistory;
   delete submittedState.categoryChange;
@@ -1187,6 +1198,11 @@ export async function updateOperationalProject(projectCode, body, identity, tran
     )).rows[0];
     if (!project) return { status: 404, body: { error: "Project not found." } };
     const previousState = project.runtime_state || {};
+    if(['manualProgress','developmentStartDate','progressRevision','progressUpdatedAt','progressUpdatedBy','progressHistory'].some(key=>key in changes))return {status:403,body:{error:'진척률 전용 입력 기능을 사용해 주세요.'}};
+    if('progressChange' in changes){
+      if(Object.keys(changes).length!==1)return {status:400,body:{error:'진척률은 다른 변경과 별도로 저장해 주세요.'}};
+      return saveProjectProgress(client,project,actor,changes.progressChange);
+    }
     if('categoryHistory' in changes)return {status:403,body:{error:'카테고리 변경 이력은 서버에서 관리합니다.'}};
     if('category' in changes&&changes.category!==project.project_category)return {status:403,body:{error:'카테고리 변경 기능을 사용해 주세요.'}};
     let categoryEntry;
@@ -1215,10 +1231,10 @@ export async function updateOperationalProject(projectCode, body, identity, tran
       }
     }
     const developerIds = (previousState.developerIds || []).map(String);
-    const canWriteImport = actor.app_role === "admin" || (actor.app_role !== "general_user" && (developerIds.length ? developerIds.includes(String(actor.id)) : !previousState.historicalImportFinalizedAt&&["team_leader","team_member"].includes(actor.app_role)));
-    const related = String(previousState.securityReviewerId||'')===String(actor.id) || project.requester_id === actor.id || project.owner_id === actor.id || (await client.query(
-      `select 1 from agent_portal.project_members where project_id=$1 and user_id=$2 and ended_at is null limit 1`,
-      [project.id, actor.id],
+    const canWriteImport = actor.app_role === "admin" || (actor.app_role !== "general_user" && (developerIds.length ? isProjectDeveloper(previousState,actor) : !previousState.historicalImportFinalizedAt&&["team_leader","team_member"].includes(actor.app_role)));
+    const related = projectActorIds(actor).includes(String(previousState.securityReviewerId||'')) || projectActorIds(actor).includes(String(project.requester_id)) || projectActorIds(actor).includes(String(project.owner_id)) || (await client.query(
+      `select 1 from agent_portal.project_members where project_id=$1 and user_id=any($2::bigint[]) and ended_at is null limit 1`,
+      [project.id, projectActorIds(actor)],
     )).rows[0];
     if (!["admin", "team_leader"].includes(actor.app_role) && !related && !(previousState.historicalImport && canWriteImport) && !(actor.app_role === "team_member" && ["INT", "FEA"].includes(project.current_stage_code))) {
       return { status: 403, body: { error: "You are not assigned to update this project." } };
@@ -1385,9 +1401,10 @@ async function listTeamWorkload(identity) {
 
   const [memberResult, projectResult] = await Promise.all([
     pool.query(
-      `select u.id::text as id, coalesce(u.email, '') as email, u.display_name as "displayName",
+      `select u.id::text as id, coalesce(u.email, login.email, '') as email, u.display_name as "displayName",
               u.app_role as "appRole", u.job_title as "jobTitle"
          from agent_portal.users u
+         left join agent_portal.users login on login.id=u.shared_account_id
         where u.is_active = true
           and u.app_role in ('team_leader','team_member','bts','bp_solution','admin')
         order by case u.app_role when 'team_leader' then 1 when 'team_member' then 2

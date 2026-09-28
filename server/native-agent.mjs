@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {projectActorIds,matchesProjectActor} from '../shared/project-actors.mjs';
 import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {isProjectCode} from '../shared/project-code.mjs';
 import {assignCompletedIntNumber} from './project-numbering.mjs';
@@ -40,13 +41,13 @@ async function context(client,identity,code,document,write,summary=false){
  const row=(await client.query('select raw_answers from agent_portal.intake_requests where project_id=$1',[access.project.id])).rows[0];
  const state=row?.raw_answers?.portalState||{};
  const actor=access.actor;
- const member=(await client.query("select 1 from agent_portal.project_members where project_id=$1 and user_id=$2 and relationship='developer' and ended_at is null",[access.project.id,actor.id])).rowCount>0;
+ const member=(await client.query("select 1 from agent_portal.project_members where project_id=$1 and user_id=any($2::bigint[]) and relationship='developer' and ended_at is null",[access.project.id,projectActorIds(actor)])).rowCount>0;
  const policy=nativeDocumentPolicy(actor,access.project,state,member,document);
  if(!summary&&(!policy.canReadStage||write&&!policy.canEdit))throw fail(403,'이 문서는 팀장·Admin만 조회·작성할 수 있습니다. 완료 문서는 보완 요청 전까지 변경할 수 없습니다.');
  return {...access,state,...policy};
 }
 export function nativeDocumentPolicy(actor,project,state,member,document){
- const related=[project.requester_id,project.owner_id].some(id=>id!=null&&String(id)===String(actor.id));
+ const related=[project.requester_id,project.owner_id].some(id=>matchesProjectActor(actor,id));
  const importing=state.historicalImport&&!state.historicalImportFinalizedAt;
  const full=document==='INT'||canManageAssessment(actor.app_role);
  const authorized=document==='INT'?(actor.app_role==='admin'||(importing?member:related||member)):canManageAssessment(actor.app_role);

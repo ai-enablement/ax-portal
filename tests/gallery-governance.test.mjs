@@ -104,7 +104,7 @@ test("BP Solution is a distinct development role", () => {
 test("BTS and BP Solution can be added to the roster by name only", () => {
   assert.match(page, /const registrationEmailOptional = \["bts", "bp_solution"\]/);
   assert.match(page, /BTS와 비피 솔루션은 이메일 없이 이름만으로도 등록할 수 있습니다/);
-  assert.match(page, /MS 계정 이메일 \(선택\)/);
+  assert.match(page, /공용 로그인 이메일 \(중복 가능\)/);
   assert.match(page, /이메일 미등록/);
   assert.match(page, /key=\{account\.id\}/);
 });
@@ -114,8 +114,8 @@ test("team dashboard maps registered accounts and database project assignments",
   assert.match(page, /setTeamAccounts\(payload\.members \|\| \[\]\)/);
   assert.match(page, /setTeamWorkloadProjects\(payload\.projects \|\| \[\]\)/);
   assert.match(page, /item\.assignedUserIds\?\.includes\(account\.id\)/);
-  assert.match(page, /members=\{teamAccounts\}/);
-  assert.match(page, /requirements=\{teamDashboardRequirements\}/);
+  assert.match(page, /<LeaderDashboard/);
+  assert.match(page, /identity=\{identity\}/);
   assert.match(page, /userProjectAsTeamRequirement/);
 });
 

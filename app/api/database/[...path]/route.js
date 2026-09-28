@@ -41,6 +41,7 @@ async function route(request, context) {
       headers: { "cache-control": "no-store" },
     });
   } catch (error) {
+    if(error?.status===409)return Response.json({error:error.message},{status:409,headers:{'cache-control':'no-store'}});
     console.error("Database API request failed:", error instanceof Error ? error.message : error);
     return Response.json({ error: "Database request failed." }, { status: 500 });
   }

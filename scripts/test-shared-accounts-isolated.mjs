@@ -1,0 +1,56 @@
+// Connection-local TEMP tables only. No real users, permissions or mail are changed.
+import assert from 'node:assert/strict';
+import {getPool,closePool} from '../server/db/pool.mjs';
+import {handleDatabaseRequest,ensurePortalUser} from '../server/database-api.mjs';
+import {documentAccess} from '../server/document-files.mjs';
+import {withSharedUsers} from '../server/shared-accounts.mjs';
+import {isProjectDeveloper} from '../shared/project-actors.mjs';
+const pool=getPool(),c=await pool.connect(),oldQuery=pool.query,oldConnect=pool.connect;
+try{
+ for(const t of ['organizations','teams','users','user_role_history','audit_logs','projects','project_members','intake_requests','documents','document_versions'])await c.query(`create temp table ${t}(like agent_portal.${t} including all)`);
+ const q=(sql,args)=>c.query(sql.replaceAll('agent_portal.','pg_temp.'),args);
+ pool.query=q;pool.connect=async()=>({query:q,release(){}});
+ await q("insert into agent_portal.organizations(organization_code,organization_name) values('TEST','Test')");
+ await q("insert into agent_portal.users(organization_id,email,display_name,app_role) values(1,'admin@example.invalid','Admin','admin')");
+ const admin={email:'admin@example.invalid',source:'development'};
+ const call=(method,pathname,body,identity=admin)=>handleDatabaseRequest({method,pathname,body,identity});
+ const register=(displayName,email,appRole='bp_solution')=>call('POST','/governance/users',{displayName,email,appRole});
+ const first=await register('First','shared@example.invalid');assert.equal(first.status,201);
+ const second=await register('Second','shared@example.invalid');assert.equal(second.status,201);
+ assert.notEqual(first.body.user.id,second.body.user.id);
+ let list=await call('GET','/governance/users');
+ assert.equal(list.body.users.filter(u=>u.email==='shared@example.invalid').length,2);
+ const login={email:'shared@example.invalid',source:'development'};
+ let actor=await ensurePortalUser({query:q},login);
+ assert.equal(actor.id,first.body.user.id);assert.equal(actor.sharedUserIds.length,2);
+ assert.ok(isProjectDeveloper({developerIds:[String(second.body.user.id)]},actor));
+ await assert.rejects(()=>register('Admin collision','shared@example.invalid','bts'),e=>e.status===409);
+ assert.equal((await register('Internal','admin@example.invalid','team_member')).status,409);
+ await assert.rejects(()=>register('External collision','admin@example.invalid'),e=>e.status===409);
+ const third=await register('Third','separate@example.invalid');assert.equal(third.status,201);
+ const edit=id=>`/governance/users/${id}`;
+ assert.equal((await call('PATCH',edit(third.body.user.id),{email:'shared@example.invalid'})).status,200);
+ actor=await ensurePortalUser({query:q},login);assert.equal(actor.sharedUserIds.length,3);
+ await assert.rejects(()=>call('PATCH',edit(first.body.user.id),{appRole:'admin'}),e=>e.status===409);
+ assert.equal((await call('DELETE',edit(first.body.user.id))).status,409);
+ const forbidden=await call('PATCH',edit(third.body.user.id),{email:'other@example.invalid'},login);assert.equal(forbidden.status,403);
+ await call('PATCH',edit(third.body.user.id),{email:'separate@example.invalid'});
+ actor=await ensurePortalUser({query:q},login);assert.equal(actor.sharedUserIds.length,2);
+ assert.equal(isProjectDeveloper({developerIds:[String(third.body.user.id)]},actor),false);
+ // Document access must recognize an assignment to a non-primary roster person.
+ await q('create temp table fixture_projects(id bigint,requester_id bigint,owner_id bigint,current_stage_code text,project_code text,deleted_at timestamptz)');
+ await q("insert into pg_temp.fixture_projects values(999,1,1,'DES','QA-SHARED',null)");
+ await q('insert into agent_portal.project_members(project_id,user_id,relationship) values(999,$1,\'developer\')',[second.body.user.id]);
+ await q("insert into agent_portal.projects(id,organization_id,project_code,project_name,requester_id,current_stage_code) overriding system value values(999,1,'2026-999','Shared fixture',1,'DES')");
+ assert.equal((await call('GET','/projects',{},login)).body.projects.length,1);
+ assert.equal((await call('GET','/projects',{}, {email:'separate@example.invalid',source:'development'})).body.projects.length,0);
+ const docClient={query:(sql,args)=>q(sql.replaceAll('agent_portal.projects','pg_temp.fixture_projects'),args)};
+ assert.ok((await documentAccess(docClient,login,'QA-SHARED',true,'DES'))?.canWrite);
+ assert.equal(await documentAccess(docClient,{email:'separate@example.invalid'},'QA-SHARED',true,'DES'),null);
+ await call('DELETE',edit(second.body.user.id));
+ actor=await withSharedUsers({query:q},await ensurePortalUser({query:q},login));assert.equal(actor.sharedUserIds.length,1);
+ assert.equal((await call('GET','/projects',{},login)).body.projects.length,0);
+ assert.equal(await documentAccess(docClient,login,'QA-SHARED',true,'DES'),null);
+ const names=(await q('select display_name from agent_portal.users where id=$1',[first.body.user.id])).rows[0];assert.equal(names.display_name,'First');
+ console.log('Shared accounts integration passed: registration, editing, role isolation, shared document access, disconnect/delete revocation; TEMP tables only.');
+}finally{pool.query=oldQuery;pool.connect=oldConnect;c.release();await closePool();}

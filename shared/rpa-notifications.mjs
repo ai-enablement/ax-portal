@@ -12,7 +12,7 @@ export function stageMail(action,request,project,recipient,id){
  return {notificationId:id,recipient,requestId:String(request.id),cta:n.cta,subject:`[RPA · ${n.title}]${request.priority==='urgent'?'[긴급]':''} ${n.requestCode} | ${project.code} · ${request.title}`,htmlBody:`<h2>${escapeHtml(n.title)}</h2><p>${escapeHtml(n.instruction)}</p>${detailHtml(fields)}<h3>지금 처리할 일</h3><p>${escapeHtml(n.instruction)}</p>`};
 }
 export function rpaNotifications(data){
- const projects=new Map(data.projects.map(p=>[p.id,p]));
+ const projects=new Map([...data.projects,...(data.requestProjects||[])].map(p=>[p.id,p]));
  return data.requests.flatMap(r=>{
   const action=({assign:'received',resolve:r.verification?.decision==='rejected'?'rework':'assign',verify:'resolve',finalize:'finalize'})[r.allowedAction];
   if(!action)return [];

@@ -2,7 +2,7 @@ import {canReadAllRpa} from './rpa-policy.mjs';
 export function workflowAction(status,payload,actor,requesterId){
  if(payload.completedAt)return null;
  if(status==='received')return canReadAllRpa(actor.app_role)?'assign':null;
- if(status==='testing')return String(actor.id)===String(requesterId)?'verify':null;
+ if(status==='testing')return [String(actor.id),...(actor.sharedUserIds||[])].includes(String(requesterId))?'verify':null;
  const assigned=!!payload.assigneeEmail&&payload.assigneeEmail.toLowerCase()===actor.email.toLowerCase();
  if(status==='working')return assigned?'resolve':null;
  if(status==='completed'&&payload.verification?.decision==='approved')return assigned?'finalize':null;

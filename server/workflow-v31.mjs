@@ -49,7 +49,7 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
   if('g2Approvals' in changes)deny('승인 결과를 직접 수정할 수 없습니다.',403);
   const step=Number(previous.journeyStep??0);
   if(!previous.historicalImport&&step===0&&(changes.feaDraft||changes.feaCompleted||Number(merged.journeyStep)>0))deny('요구 접수 Agent 검토를 완료한 뒤 FEA를 작성해 주세요.');
-  const author=actor.app_role==='admin'||(previous.developerIds||[]).map(String).includes(String(actor.id));
+  const author=actor.app_role==='admin'||(previous.developerIds||[]).map(String).some(id=>[String(actor.id),...(actor.sharedUserIds||[])].includes(id));
   const importOpen=isImportInProgress(previous);
   if(changes.finalizeHistoricalImport && (importOpen || needsImportCompletionRepair(previous))) {
     if(!author && !(!previous.developerIds?.length && ['team_leader','team_member'].includes(actor.app_role)))deny('이관 담당자만 완료할 수 있습니다.',403);
