@@ -67,7 +67,7 @@ export function developmentEvdComplete(state){return markdownDocumentComplete(st
 export function releaseEvdComplete(state){return markdownDocumentComplete(state,'EVD','deployment_rollout')||documentComplete(state,7,'DEP');}
 export function gateGaps(gate,state){
   if(gate==='G1')return [...(!state.feaCompleted?['FEA 작성 완료']:[]),...(state.nativeAgentArtifacts?.INT?.status==='complete'||isHistoricalDocumentComplete(state,0)?[]:intakeRequired(state).map(f=>f.label)),...(state.nativeAgentArtifacts?.FEA?.status==='complete'||isHistoricalDocumentComplete(state,1)?[]:feaRequired(state).map(f=>f.label))];
-  if(gate==='G2')return [...(documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료']),...(!validDeadline(state.committedDate)?['팀장 프로젝트 마감일 확정']:[])];
+  if(gate==='G2')return [...(documentComplete(state,3,'ARD')?[]:['ARD 필수 항목 작성 완료']),...(!validDeadline(state.committedDate)?[state.historicalImport&&!state.historicalImportFinalizedAt?'프로젝트 마감일 지정 (배정된 개발 담당자)':'팀장 프로젝트 마감일 확정']:[])];
   if(gate==='G3'){
     const c=state.gateChecks?.G3||{};
     return [...(!developmentEvdComplete(state)?['개발·평가 문서[EVD] 첨부 완료']:[]),...(c.criteriaPassed!==true?['ARD 성공 기준 전 항목 통과']:[]),...(c.zeroViolations!==true?['금칙 위반 0건']:[]),...(!String(c.evidence||'').trim()?['평가 근거 문서·버전']:[]),...(state.uatRecord?.completed!==true?['요구자 UAT 완료']:[])];
