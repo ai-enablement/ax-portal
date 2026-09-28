@@ -1,4 +1,5 @@
 'use client';
+import RpaSelect from './rpa-select';
 import {useRef} from 'react';
 import {Paperclip,PaperPlaneTilt} from '@phosphor-icons/react';
 import {RPA_TYPES} from '../shared/rpa-policy.mjs';
@@ -9,15 +10,15 @@ export default function RpaRequestForm({form,setForm,projects,actor,files,setFil
  const required=<span className="rpa-required" aria-hidden="true">*</span>;
  return <form className="rpa-form rpa-intake-form" onSubmit={onSubmit}>
   <div className="rpa-request-project">
-   <label>대상 RPA 과제 선택 {required}<select required value={form.projectId} onChange={e=>change('projectId',e.target.value)}>{projects.map(p=><option key={p.id} value={p.id}>[{p.code}] {p.name} ({p.department} / 담당: {p.pics?.join('/')||'미지정'})</option>)}</select></label>
+   <label>대상 RPA 과제 선택 {required}<RpaSelect required value={form.projectId} onChange={e=>change('projectId',e.target.value)}>{projects.map(p=><option key={p.id} value={p.id}>[{p.code}] {p.name} ({p.department} / 담당: {p.pics?.join('/')||'미지정'})</option>)}</RpaSelect></label>
    <div className="rpa-request-context"><span>운영 PC: <b>{fields['운영 PC']||'미등록'}</b></span><span>실행주기: <b>{fields['주기']||'미등록'} {fields['실행 시간']&&`(${fields['실행 시간']})`}</b></span><span>기존 개발자: <b>{project?.developer||'미등록'}</b></span></div>
   </div>
   <div className="rpa-request-grid">
    <label>요청자 성명 {required}<input readOnly value={actor.name||actor.email}/></label>
    <label>요청 부서<input readOnly value={project?.department||'미등록'}/></label>
    <label>완료 알림 이메일 {required}<input type="email" required value={form.notifyEmail} onChange={e=>change('notifyEmail',e.target.value)}/></label>
-   <label>요청 유형 {required}<select value={form.type} onChange={e=>change('type',e.target.value)}>{RPA_TYPES.map(t=><option key={t} value={t}>{t==='오류 수정'?'단순 오류 수정 (봇 중단/에러)':t}</option>)}</select></label>
-   <label>긴급도 / 우선순위 {required}<select value={form.priority} onChange={e=>change('priority',e.target.value)}><option value="normal">일반 (정기 일정 및 일반 처리)</option><option value="urgent">긴급 (업무 중단 · 우선 처리)</option></select></label>
+   <label>요청 유형 {required}<RpaSelect value={form.type} onChange={e=>change('type',e.target.value)}>{RPA_TYPES.map(t=><option key={t} value={t}>{t==='오류 수정'?'단순 오류 수정 (봇 중단/에러)':t}</option>)}</RpaSelect></label>
+   <label>긴급도 / 우선순위 {required}<RpaSelect value={form.priority} onChange={e=>change('priority',e.target.value)}><option value="normal">일반 (정기 일정 및 일반 처리)</option><option value="urgent">긴급 (업무 중단 · 우선 처리)</option></RpaSelect></label>
    <label>오류 발생 날짜<input type="date" required value={form.occurredDate} onChange={e=>change('occurredDate',e.target.value)}/></label>
   </div>
   <label>요청 제목 {required}<input required maxLength={200} placeholder="예: SAP ZSDM0510 출고일자 필드 인식 불가로 인한 스케줄 중단" value={form.title} onChange={e=>change('title',e.target.value)}/></label>

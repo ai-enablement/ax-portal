@@ -50,10 +50,12 @@ try{
  await updateRpaRequest(identity('admin'),{...edit,version:current.updatedAt,status:'completed'});
  current=(await listRpa(identity('general_user'))).requests[0];
  assert.ok(current.completedAt);assert.ok(current.history.some(h=>h.kind==='completed'));checks++;
- const master={fields:{'과제번호':'QA-NEW','과제명':'Fixture','부서':'QA','PIC':'Test','개발자':'Developer','운영 PC':'QA'}};
+ const master={fields:{'과제번호':'QA-NEW','과제명':'Fixture','부서':'QA','PIC':'Test','개발자':'Developer / Another Developer','운영 PC':'QA'}};
  await assert.rejects(()=>createRpaMaster(identity('general_user'),master),e=>e.status===403);checks++;
  const newMaster=await createRpaMaster(identity('team_member'),{fields:{...master.fields,'월':'O','토':'O','실행 시간':'10:00','월 실행 시간':'09:00, 15:00','토 실행 시간':'15:30'}});checks++;
  const savedMaster=(await listRpa(identity('admin'))).projects.find(p=>p.id===newMaster.id);
+ assert.equal(savedMaster.developer,'Developer / Another Developer');checks++;
+ assert.ok((await listRpa(identity('admin'))).people.includes('team_member'));assert.deepEqual((await listRpa(identity('general_user'))).people,[]);checks+=2;
  assert.equal(savedMaster.fields['월 실행 시간'],'09:00, 15:00');assert.equal(savedMaster.fields['토 실행 시간'],'15:30');checks+=2;
  assert.equal(savedMaster.fields['토'],'O');assert.equal(savedMaster.fields['실행 시간'],'10:00');assert.equal(savedMaster.history[0].kind,'master');checks+=3;
  assert.equal((await listRpa(identity('general_user'))).projects.some(p=>p.id===newMaster.id),false);checks++;

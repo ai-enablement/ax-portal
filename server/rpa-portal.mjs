@@ -23,7 +23,8 @@ export async function listRpa(identity){
  const tickets=(await pool.query(`select r.id::text,r.project_id,r.payload,r.status,r.created_at,r.updated_at,u.display_name as requester,u.email as requester_email from agent_portal.rpa_requests r join agent_portal.rpa_projects p on p.id=r.project_id join agent_portal.users u on u.id=r.created_by where ${scope} order by r.created_at desc`,args)).rows;
  const requests=tickets.map(r=>({...r.payload,id:r.id,projectId:r.project_id,code:`REQ-${new Date(r.created_at).getUTCFullYear()}-${r.id.padStart(6,'0')}`,status:r.payload.onHold?'held':r.status,createdAt:r.created_at,updatedAt:r.updated_at,requester:r.requester,requesterEmail:r.requester_email}));
  const links=canLinkRpaPic(actor.app_role)?(await pool.query('select project_id as "projectId",pic,email from agent_portal.rpa_pic_links order by project_id,pic')).rows:[];
- return {projects,requests,links,canReadAll:canReadAllRpa(actor.app_role),canLink:canLinkRpaPic(actor.app_role),actor:{name:actor.display_name,email:actor.email},mailEnabled:false};
+ const people=canReadAllRpa(actor.app_role)?(await pool.query('select display_name from agent_portal.users order by display_name')).rows.map(u=>u.display_name):[];
+ return {projects,requests,links,people,canReadAll:canReadAllRpa(actor.app_role),canLink:canLinkRpaPic(actor.app_role),actor:{name:actor.display_name,email:actor.email},mailEnabled:false};
 }
 export async function createRpaRequest(identity,body){
  const error=validateRpaRequest(body);if(error)fail(400,error);

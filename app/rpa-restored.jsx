@@ -1,4 +1,5 @@
 'use client';
+import RpaSelect from './rpa-select';
 import {useState} from 'react';
 import {CaretRight,Desktop,Clock,PlusCircle,ClockCounterClockwise,ListBullets,PencilSimple} from '@phosphor-icons/react';
 import {MASTER_COLUMNS,STATUS_LABELS,masterCells,projectHistory,isRpaRunDay} from '../shared/rpa-display.mjs';
@@ -13,12 +14,12 @@ export function MasterTable({projects,requests,onDetail,onRequest,onHistory,onBr
 export function ProjectLog({project,requests,onOpen,onBrowse,onClose}){
  const [kind,setKind]=useState('all');const entries=projectHistory(project,requests),shown=entries.filter(h=>kind==='all'||h.kind===kind);
  const types=[['all','전체 이력 보기'],['master','마스터 등록'],['master_updated','과제 정보 수정'],['created','신규 접수'],['assigned','담당자 배정'],['status','상태 변경'],['updated','조치 내용 갱신'],['completed','처리 완료'],['mail','완료 알림 메일']];
- const fields=project.fields||{},status=show(project.status||fields['진행 상태']);
- const tone=/완료/.test(status)?'completed':/보류|중단|반려/.test(status)?'held':/진행|개발|운영/.test(status)?'working':'received';
+ const fields=project.fields||{};
+
  return <div className="rpa-project-log">
   <header className="rpa-log-heading"><h2>{project.code} · {project.name}</h2><p className="rpa-muted">과제별 변경 및 완료 이력 · {entries.length}건</p></header>
   <dl className="rpa-log-summary" aria-label="RPA 과제 요약">
-   <div><dt>진행 상태</dt><dd><span className={'rpa-badge '+tone}>{status}</span></dd></div>
+
    <div><dt>배포일자</dt><dd>{show(fields['현업배포일자'])}</dd></div>
    <div><dt>부서</dt><dd>{show(project.department)}</dd></div>
    <div><dt>현업 PIC</dt><dd>{show(project.pics?.join('/'))}</dd></div>
@@ -26,7 +27,7 @@ export function ProjectLog({project,requests,onOpen,onBrowse,onClose}){
    <div><dt>운영 PC</dt><dd><Desktop size={15} aria-hidden="true"/>{show(fields['운영 PC'])}</dd></div>
    <div className="rpa-log-schedule"><dt>스케줄</dt><dd><Clock size={15} aria-hidden="true"/>{[fields['실행 시간'],fields['실행일']].filter(Boolean).join(' · ')||'미등록'}</dd></div>
   </dl>
-  <div className="rpa-log-toolbar"><h3>이력 타임라인</h3><label>유형 필터<select value={kind} onChange={e=>setKind(e.target.value)}>{types.map(([v,l])=><option key={v} value={v}>{l} ({v==='all'?entries.length:entries.filter(h=>h.kind===v).length})</option>)}</select></label></div>
+  <div className="rpa-log-toolbar"><h3>이력 타임라인</h3><label>유형 필터<RpaSelect value={kind} onChange={e=>setKind(e.target.value)}>{types.map(([v,l])=><option key={v} value={v}>{l} ({v==='all'?entries.length:entries.filter(h=>h.kind===v).length})</option>)}</RpaSelect></label></div>
   <ol className="rpa-history rpa-log-timeline">{shown.map((h,i)=><li key={i}>
    <div className="rpa-log-event-head"><span className={'rpa-log-kind '+h.kind}>{types.find(([v])=>v===h.kind)?.[1]||'변경 이력'}</span>{h.requestCode&&<span className="rpa-log-ticket">{h.requestCode}</span>}<time><Clock size={13} aria-hidden="true"/>{formatKst(h.at)}</time></div>
    <strong>{h.label}</strong><div className="rpa-log-event-meta"><span>작성자: {show(h.actor)}</span>{h.requestId&&<button onClick={()=>onOpen(requests.find(r=>r.id===h.requestId))}>과제 상세 열기 <CaretRight size={13}/></button>}</div>
@@ -41,5 +42,5 @@ export function ProgressEditor({request,developers,onSave,busy}){
  const change=(key,value)=>setDraft({...draft,[key]:value});
  const save=async(next)=>{await onSave({action:'update',id:request.id,version:request.updatedAt,...draft,status:next||draft.status,expectedAt:draft.expectedAt?draft.expectedAt+':00+09:00':''});};
  const next=({received:'working',working:'testing',testing:'completed'})[draft.status];
- return <form className="rpa-form" onSubmit={e=>{e.preventDefault();save();}}><h3>유지보수 진행상황 관리</h3><div className="rpa-form-pair"><label>진행 상태<select value={draft.status} onChange={e=>change('status',e.target.value)}>{Object.entries(STATUS_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>담당 개발자<input list="rpa-developer-options" maxLength={200} value={draft.assignee} onChange={e=>change('assignee',e.target.value)}/><datalist id="rpa-developer-options">{developers.map(d=><option key={d} value={d}/>)}</datalist></label></div><label>반영 예정 일시 (KST)<input type="datetime-local" value={draft.expectedAt} onChange={e=>change('expectedAt',e.target.value)}/></label><label>원인 분석 결과<textarea rows={3} maxLength={15000} value={draft.analysis} onChange={e=>change('analysis',e.target.value)}/></label><label>조치 내용 및 수정 내역<textarea rows={4} maxLength={15000} value={draft.resolution} onChange={e=>change('resolution',e.target.value)}/></label><label>변경 / 반려·보류 사유<textarea required={draft.status==='held'} maxLength={15000} value={draft.reason} onChange={e=>change('reason',e.target.value)}/></label><p className="rpa-muted">작업자와 변경 시간은 실제 로그인 계정·KST 기준으로 기록됩니다.</p><div className="rpa-form-actions"><button disabled={busy}>작업 내용 저장</button>{next&&<button disabled={busy} className="rpa-primary" type="button" onClick={()=>save(next)}>현재 단계 완료 → {STATUS_LABELS[next]}</button>}</div></form>;
+ return <form className="rpa-form" onSubmit={e=>{e.preventDefault();save();}}><h3>유지보수 진행상황 관리</h3><div className="rpa-form-pair"><label>진행 상태<RpaSelect value={draft.status} onChange={e=>change('status',e.target.value)}>{Object.entries(STATUS_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</RpaSelect></label><label>담당 개발자<RpaSelect aria-label="담당 개발자" allowCustom options={developers} value={draft.assignee} onChange={e=>change('assignee',e.target.value)}/></label></div><label>반영 예정 일시 (KST)<input type="datetime-local" value={draft.expectedAt} onChange={e=>change('expectedAt',e.target.value)}/></label><label>원인 분석 결과<textarea rows={3} maxLength={15000} value={draft.analysis} onChange={e=>change('analysis',e.target.value)}/></label><label>조치 내용 및 수정 내역<textarea rows={4} maxLength={15000} value={draft.resolution} onChange={e=>change('resolution',e.target.value)}/></label><label>변경 / 반려·보류 사유<textarea required={draft.status==='held'} maxLength={15000} value={draft.reason} onChange={e=>change('reason',e.target.value)}/></label><p className="rpa-muted">작업자와 변경 시간은 실제 로그인 계정·KST 기준으로 기록됩니다.</p><div className="rpa-form-actions"><button disabled={busy}>작업 내용 저장</button>{next&&<button disabled={busy} className="rpa-primary" type="button" onClick={()=>save(next)}>현재 단계 완료 → {STATUS_LABELS[next]}</button>}</div></form>;
 }
