@@ -3,6 +3,8 @@ import {withTransaction} from './db/pool.mjs';
 import {rpaActor} from './rpa-portal.mjs';
 import {canReadAllRpa} from '../shared/rpa-policy.mjs';
 import {STATUS_LABELS} from '../shared/rpa-display.mjs';
+import {RPA_DAYS,timeKey,validTimes} from '../shared/rpa-schedule.mjs';
+function checkTimes(f){for(const d of RPA_DAYS)if(Object.hasOwn(f,timeKey(d))&&!validTimes(f[timeKey(d)]))fail(400,'요일별 실행 시간은 HH:MM 형식으로 입력해 주세요.');}
 const fail=(s,m)=>{throw Object.assign(new Error(m),{status:s});};
 function manager(actor){if(!canReadAllRpa(actor.app_role))fail(403,'AI 활성화팀 팀원·팀장 또는 Admin만 변경할 수 있습니다.');}
 export async function updateRpaRequest(identity,body){
@@ -37,6 +39,7 @@ export async function createRpaMaster(identity,body){
   const f=body.fields;if(!f||typeof f!=='object'||Array.isArray(f))fail(400,'과제 정보를 확인해 주세요.');
   for(const k of ['과제번호','과제명','부서','PIC','개발자','운영 PC'])if(!String(f[k]||'').trim())fail(400,`${k} 항목을 입력해 주세요.`);
   for(const v of Object.values(f))if(typeof v!=='string'||v.length>10000)fail(400,'입력 길이를 확인해 주세요.');
+  checkTimes(f);
   const code=f['과제번호'].trim();if(!/^[A-Za-z0-9-]{2,40}$/.test(code))fail(400,'과제번호 형식을 확인해 주세요.');
   await c.query('select pg_advisory_xact_lock(hashtext($1))',['rpa-master:'+code]);
   if((await c.query('select id from agent_portal.rpa_projects where project_code=$1',[code])).rowCount)fail(409,'이미 등록된 과제번호입니다.');
@@ -55,9 +58,10 @@ export async function updateRpaMaster(identity,body){
   if((body.revision??0)!==(old.revision??0))fail(409,'다른 사용자가 수정했습니다. 새로고침 후 다시 시도해 주세요.');
   const input=body.fields;
   if(!input||typeof input!=='object'||Array.isArray(input))fail(400,'과제 정보를 확인해 주세요.');
-  const allowed=['과제번호','과제명','법인','본부','부서','접수타입','PIC','현업 이메일','개발자','운영 PC','진행 상태','현업배포일자','사용 화면','주기','실행 방법','실행일','실행 시간','개발공수(DAY)','월 작업 MH (25일)','비고','월','화','수','목','금','토','일'];
+  const allowed=['과제번호','과제명','법인','본부','부서','접수타입','PIC','현업 이메일','개발자','운영 PC','진행 상태','현업배포일자','사용 화면','주기','실행 방법','실행일','실행 시간','개발공수(DAY)','월 작업 MH (25일)','비고','월','화','수','목','금','토','일',...RPA_DAYS.map(timeKey)];
   for(const [k,v] of Object.entries(input))if(!allowed.includes(k)||typeof v!=='string'||v.length>10000)fail(400,'입력 내용을 확인해 주세요.');
   const f={...old.fields,...input};
+  checkTimes(f);
   if(f['과제번호']!==old.code)fail(400,'과제번호는 변경할 수 없습니다.');
   for(const k of ['과제명','부서','PIC','개발자','운영 PC'])if(!String(f[k]||'').trim())fail(400,`${k} 항목을 입력해 주세요.`);
   if(typeof body.reason!=='string'||!body.reason.trim()||body.reason.length>1000)fail(400,'변경 사유를 입력해 주세요.');

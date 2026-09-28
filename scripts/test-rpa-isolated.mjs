@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {getPool,closePool} from '../server/db/pool.mjs';
-import {listRpa,createRpaRequest,linkRpaPic,readRpaFile} from '../server/rpa-portal.mjs';
+import {listRpa,createRpaRequest,linkRpaPic,readRpaFile,updateRpaPics} from '../server/rpa-portal.mjs';
 import {updateRpaRequest,createRpaMaster,updateRpaMaster} from '../server/rpa-management.mjs';
 const pool=getPool(),client=await pool.connect(),originalQuery=pool.query,originalConnect=pool.connect;
 let checks=0;
@@ -52,8 +52,9 @@ try{
  assert.ok(current.completedAt);assert.ok(current.history.some(h=>h.kind==='completed'));checks++;
  const master={fields:{'과제번호':'QA-NEW','과제명':'Fixture','부서':'QA','PIC':'Test','개발자':'Developer','운영 PC':'QA'}};
  await assert.rejects(()=>createRpaMaster(identity('general_user'),master),e=>e.status===403);checks++;
- const newMaster=await createRpaMaster(identity('team_member'),{fields:{...master.fields,'월':'O','토':'O','실행 시간':'10:00'}});checks++;
+ const newMaster=await createRpaMaster(identity('team_member'),{fields:{...master.fields,'월':'O','토':'O','실행 시간':'10:00','월 실행 시간':'09:00, 15:00','토 실행 시간':'15:30'}});checks++;
  const savedMaster=(await listRpa(identity('admin'))).projects.find(p=>p.id===newMaster.id);
+ assert.equal(savedMaster.fields['월 실행 시간'],'09:00, 15:00');assert.equal(savedMaster.fields['토 실행 시간'],'15:30');checks+=2;
  assert.equal(savedMaster.fields['토'],'O');assert.equal(savedMaster.fields['실행 시간'],'10:00');assert.equal(savedMaster.history[0].kind,'master');checks+=3;
  assert.equal((await listRpa(identity('general_user'))).projects.some(p=>p.id===newMaster.id),false);checks++;
  await linkRpaPic(identity('admin'),{projectId:newMaster.id,pic:'Test',email:'general_user@example.invalid',reason:'new master visibility test'});
@@ -74,5 +75,17 @@ try{
  await linkRpaPic(identity('team_member'),{projectId:p.id,pic:'PIC',email:'bts@example.invalid',reason:'reassignment test'});
  assert.equal((await listRpa(identity('general_user'))).requests.length,0);assert.equal((await listRpa(identity('bts'))).requests.length,1);checks+=2;
  assert.equal(Number((await query('select count(*) as n from agent_portal.rpa_pic_history')).rows[0].n),3);checks++;
+ const picBody={projectId:newMaster.id,revision:3,previousLinks:[{pic:'Test',email:'general_user@example.invalid'}],pics:[{pic:'Replacement',email:'bp_solution@example.invalid'},{pic:'Unlinked',email:''}],reason:'PIC reassignment'};
+ for(const role of ['general_user','bts','bp_solution']){await assert.rejects(()=>updateRpaPics(identity(role),picBody),e=>e.status===403);checks++;}
+ await assert.rejects(()=>updateRpaPics(identity('admin'),{...picBody,pics:[{pic:'Duplicate'},{pic:'Duplicate'}]}),e=>e.status===400);checks++;
+ await assert.rejects(()=>updateRpaPics(identity('admin'),{...picBody,previousLinks:[]}),e=>e.status===409);checks++;
+ await updateRpaPics(identity('team_member'),picBody);checks++;
+ assert.equal((await listRpa(identity('general_user'))).projects.some(p=>p.id===newMaster.id),false);checks++;
+ const replaced=(await listRpa(identity('bp_solution'))).projects.find(p=>p.id===newMaster.id);
+ assert.deepEqual(replaced.pics,['Replacement','Unlinked']);assert.equal(replaced.fields.PIC,'Replacement/Unlinked');assert.equal(replaced.history.at(-1).changes.PIC.before[0].pic,'Test');checks+=3;
+ await assert.rejects(()=>updateRpaPics(identity('admin'),picBody),e=>e.status===409);checks++;
+ await updateRpaPics(identity('team_leader'),{...picBody,revision:4,previousLinks:[{pic:'Replacement',email:'bp_solution@example.invalid'}],pics:[]});checks++;
+ assert.equal((await listRpa(identity('bp_solution'))).projects.length,0);checks++;
+ const removed=(await listRpa(identity('admin'))).projects.find(p=>p.id===newMaster.id);assert.deepEqual(removed.pics,[]);assert.equal(removed.revision,5);checks+=2;
  console.log(JSON.stringify({passed:checks,storage:'temporary tables only',persistentChanges:0}));
 }finally{pool.query=originalQuery;pool.connect=originalConnect;client.release();await closePool();}

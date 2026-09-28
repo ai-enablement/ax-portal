@@ -59,3 +59,26 @@ export async function readRpaFile(identity,id){
  const f=(await pool.query('select f.*,r.project_id from agent_portal.rpa_request_files f join agent_portal.rpa_requests r on r.id=f.request_id where f.id=$1',[id])).rows[0];
  if(!f)fail(404,'파일을 찾을 수 없습니다.');await allowedProject(pool,actor,f.project_id);return f;
 }
+export async function updateRpaPics(identity,body){
+ return withTransaction(async client=>{
+  const actor=await rpaActor(identity,client);
+  if(!canLinkRpaPic(actor.app_role))fail(403,'AI 활성화팀 팀원·팀장 또는 Admin만 PIC 정보를 변경할 수 있습니다.');
+  const row=(await client.query('select payload from agent_portal.rpa_projects where id=$1 for update',[body.projectId])).rows[0];
+  if(!row)fail(404,'과제를 찾을 수 없습니다.');
+  const p=row.payload;
+  const links=(await client.query('select pic,email from agent_portal.rpa_pic_links where project_id=$1 order by pic',[body.projectId])).rows;
+  const signature=items=>JSON.stringify(items.map(x=>[x.pic,x.email]).sort((a,b)=>a[0].localeCompare(b[0])));
+  if(body.revision!==(p.revision??0)||!Array.isArray(body.previousLinks)||signature(body.previousLinks)!==signature(links))fail(409,'PIC 정보가 변경되었습니다. 닫고 새로고침한 뒤 다시 시도해 주세요.');
+  if(!Array.isArray(body.pics)||body.pics.length>50)fail(400,'PIC는 최대 50명까지 등록할 수 있습니다.');
+  const pics=body.pics.map(x=>({pic:String(x?.pic||'').trim(),email:String(x?.email||'').trim().toLowerCase()}));
+  if(pics.some(x=>!x.pic||x.pic.length>100||/[/,;\n\r]/.test(x.pic)||x.email.length>254||(x.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x.email)))||new Set(pics.map(x=>x.pic.toLowerCase())).size!==pics.length)fail(400,'중복되지 않는 PIC 이름과 올바른 이메일을 입력해 주세요.');
+  const reason=String(body.reason||'').trim();if(!reason||reason.length>1000)fail(400,'변경 사유를 입력해 주세요.');
+  const before=(p.pics||[]).map(pic=>({pic,email:links.find(l=>l.pic===pic)?.email||''}));
+  const history={kind:'pic_updated',label:'PIC 정보 변경',at:new Date().toISOString(),actor:actor.display_name,actorEmail:actor.email,reason,changes:{PIC:{before,after:pics}}};
+  await client.query('delete from agent_portal.rpa_pic_links where project_id=$1',[body.projectId]);
+  for(const x of pics.filter(x=>x.email))await client.query('insert into agent_portal.rpa_pic_links(project_id,pic,email,changed_by) values($1,$2,$3,$4)',[body.projectId,x.pic,x.email,actor.id]);
+  const updated={...p,pics:pics.map(x=>x.pic),fields:{...p.fields,PIC:pics.map(x=>x.pic).join('/'),'현업 이메일':pics.map(x=>x.email).filter(Boolean).join('; ')},revision:(p.revision??0)+1,history:[...(p.history||[]),history]};
+  await client.query('update agent_portal.rpa_projects set payload=$2 where id=$1',[body.projectId,updated]);
+  return {saved:true};
+ });
+}

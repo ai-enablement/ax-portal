@@ -1,7 +1,7 @@
 import {resolvePortalIdentity} from '../../../server/auth.mjs';
 import {updateRpaRequest,createRpaMaster,updateRpaMaster} from '../../../server/rpa-management.mjs';
 import {isSameOriginRequest} from '../../../server/request-origin.mjs';
-import {listRpa,createRpaRequest,linkRpaPic,readRpaFile} from '../../../server/rpa-portal.mjs';
+import {listRpa,createRpaRequest,linkRpaPic,readRpaFile,updateRpaPics} from '../../../server/rpa-portal.mjs';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const errorResponse=e=>Response.json({error:e.status?e.message:e.code==='42P01'?'RPA 데이터 초기 등록이 필요합니다.':'RPA 데이터를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'},{status:e.status||503,headers:{'Cache-Control':'no-store'}});
@@ -17,6 +17,7 @@ export async function POST(request){try{
  const reader=request.body?.getReader();let size=0;const chunks=[];if(reader){while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>15*1024*1024){await reader.cancel();return Response.json({error:'요청 용량을 초과했습니다.'},{status:413});}chunks.push(Buffer.from(value));}}
  let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{return Response.json({error:'잘못된 요청입니다.'},{status:400});}
  if(body.action==='link')return Response.json(await linkRpaPic(identity,body));
+ if(body.action==='pics')return Response.json(await updateRpaPics(identity,body));
  if(body.action==='update')return Response.json(await updateRpaRequest(identity,body));
  if(body.action==='master')return Response.json(await createRpaMaster(identity,body),{status:201});
  if(body.action==='master-update')return Response.json(await updateRpaMaster(identity,body));
