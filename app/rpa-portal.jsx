@@ -1,4 +1,5 @@
 'use client';
+import {readJson} from '../shared/read-json.mjs';
 import RpaSelect from './rpa-select';
 import RpaVisibility from './rpa-visibility';
 import './rpa-visibility.css';
@@ -36,12 +37,11 @@ export default function RpaPortal({devRole}={}){
   if(!r||!p){setError('요청이 삭제되었거나 현재 계정에 조회 권한이 없습니다.');return;}
   setView('table');setDetail({request:r,project:p});setDetailTab('progress');
  }
- async function load(){try{const r=await fetch('/api/rpa',{cache:'no-store',headers:devRole?{'x-portal-dev-role':devRole}:{}});const d=await r.json();if(!r.ok)throw Error(d.error);setError('');receiveData(d);}catch(e){setError(e.message);}}
+ async function load(){setError('');try{const d=await readJson('/api/rpa',{headers:devRole?{'x-portal-dev-role':devRole}:{}});receiveData(d);}catch(e){setError(e.message);}}
  useEffect(()=>{
   const controller=new AbortController();
-  fetch('/api/rpa',{cache:'no-store',signal:controller.signal,headers:devRole?{'x-portal-dev-role':devRole}:{}})
-   .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);return d;})
-   .then(d=>receiveData(d)).catch(e=>{if(e.name!=='AbortError')setError(e.message);});
+  readJson('/api/rpa',{signal:controller.signal,headers:devRole?{'x-portal-dev-role':devRole}:{}})
+   .then(d=>{if(!controller.signal.aborted)receiveData(d);}).catch(e=>{if(e.name!=='AbortError')setError(e.message);});
   return()=>controller.abort();
  },[devRole]);
  async function post(body){setBusy(true);setError('');try{const r=await fetch('/api/rpa',{method:'POST',headers:{'Content-Type':'application/json',...(devRole?{'x-portal-dev-role':devRole}:{})},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error);await load();return d;}catch(e){setError(e.message);return null;}finally{setBusy(false);}}

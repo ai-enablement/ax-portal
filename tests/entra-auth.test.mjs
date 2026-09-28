@@ -100,7 +100,7 @@ test("client and database routes use the server-authenticated identity", async (
     readFile(new URL("../app/api/auth/session/route.js", import.meta.url), "utf8"),
     readFile(new URL("../app/api/database/[...path]/route.js", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /fetch\("\/api\/auth\/session"/);
+  assert.match(page, /readJson\('\/api\/auth\/session'/);
   assert.match(page, /authenticated-account/);
   assert.match(sessionRoute, /resolvePortalIdentity/);
   assert.match(sessionRoute, /ensurePortalUser/);

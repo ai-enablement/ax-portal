@@ -1,4 +1,6 @@
 "use client";
+import {readJson} from '../shared/read-json.mjs';
+import './data-load-status.css';
 import {formatKst,kstDate} from '../shared/portal-time.mjs';
 
 import "./release-documents.css";
@@ -924,6 +926,18 @@ export default function Home() {
     GalleryApplication[]
   >(initialGalleryApplications);
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>("checking");
+  const [loadErrors,setLoadErrors]=useState<Record<string,string>>({});
+  const [loadBusy,setLoadBusy]=useState<Record<string,boolean>>({});
+  const [loadRetries,setLoadRetries]=useState({projects:0,gallery:0,health:0,identity:0});
+  const [galleryStatus,setGalleryStatus]=useState<DatabaseStatus>("checking");
+  const retryLoad=(key:keyof typeof loadRetries)=>setLoadRetries(v=>({...v,[key]:v[key]+1}));
+  const loadError=(key:string,message:string)=>setLoadErrors(v=>({...v,[key]:message}));
+  useEffect(()=>{
+    // Preserve data during retries, but never carry it into a different account/role.
+    setSubmittedProjects([]);setGalleryApplications([]);
+    setDatabaseStatus('checking');setGalleryStatus('checking');
+    setLoadErrors({});
+  },[identity?.userId,role]);
   const [teamAccounts, setTeamAccounts] = useState<TeamAccount[]>([]);
   const [teamWorkloadProjects, setTeamWorkloadProjects] = useState<TeamRequirement[]>(initialTeamRequirements);
   const projectUpdateQueue = useRef(new Map<string, Promise<void>>());
@@ -950,13 +964,9 @@ export default function Home() {
     let active = true;
 
     async function loadIdentity() {
+      setLoadBusy(v=>({...v,identity:true}));loadError('identity','');
       try {
-        const response = await fetch("/api/auth/session", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("Microsoft Entra identity is unavailable.");
-        const authenticatedIdentity = (await response.json()) as PortalIdentity;
+        const authenticatedIdentity = await readJson('/api/auth/session',{signal:controller.signal}) as PortalIdentity;
         if (!active) return;
         setIdentity(authenticatedIdentity);
         setRole(authenticatedIdentity.accountRole);
@@ -965,6 +975,9 @@ export default function Home() {
       } catch (error) {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setIdentityStatus("error");
+        loadError('identity',error instanceof Error?error.message:'계정 정보를 확인하지 못했습니다.');
+      } finally {
+        if(active)setLoadBusy(v=>({...v,identity:false}));
       }
     }
 
@@ -973,7 +986,7 @@ export default function Home() {
       active = false;
       controller.abort();
     };
-  }, []);
+  }, [loadRetries.identity]);
 
   useEffect(() => {
     try {
@@ -1018,26 +1031,12 @@ export default function Home() {
 
     async function loadDatabaseData() {
       if (identityStatus !== "ready") return;
+      setLoadBusy(v=>({...v,projects:true}));loadError('projects','');
       try {
-        const [healthResponse, galleryResponse, projectsResponse] = await Promise.all([
-          fetch("/api/database/health", { signal: controller.signal }),
-          fetch("/api/database/gallery/applications", {
-            signal: controller.signal,
-          }),
-          fetch("/api/database/projects", {
-            cache: "no-store",
-            signal: controller.signal,
-          }),
-        ]);
-        if (!healthResponse.ok || !galleryResponse.ok || !projectsResponse.ok) {
-          throw new Error("Database gateway is unavailable.");
-        }
-        const galleryPayload = (await galleryResponse.json()) as {
-          applications?: GalleryApplication[];
-        };
+        let projectPayload = await readJson('/api/database/projects',{signal:controller.signal}) as {projects?:UserProject[]};
         if (!active) return;
-        const databaseApplications = galleryPayload.applications || [];
-        let projectPayload = (await projectsResponse.json()) as { projects?: UserProject[] };
+        setSubmittedProjects(projectPayload.projects || []);
+        setDatabaseStatus('connected');
         const legacyRaw = window.localStorage.getItem("agent-portal-submitted-projects");
         if (legacyRaw) {
           const legacyProjects = (JSON.parse(legacyRaw) as UserProject[]).filter((project) => project.source !== "database");
@@ -1063,7 +1062,7 @@ export default function Home() {
             if (refreshed.ok) projectPayload = await refreshed.json() as { projects?: UserProject[] };
           }
         }
-        setGalleryApplications(databaseApplications);
+        if(!active)return;
         setSubmittedProjects(projectPayload.projects || []);
         setDeletedProjectNos([]);
         setProjectOverrides({});
@@ -1071,6 +1070,9 @@ export default function Home() {
       } catch (error) {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setDatabaseStatus("fallback");
+        loadError('projects',error instanceof Error?error.message:'Agent 과제를 조회하지 못했습니다.');
+      } finally {
+        if(active)setLoadBusy(v=>({...v,projects:false}));
       }
     }
 
@@ -1079,7 +1081,28 @@ export default function Home() {
       active = false;
       controller.abort();
     };
-  }, [identityStatus, role]);
+  }, [identityStatus, role, loadRetries.projects]);
+
+  useEffect(()=>{
+    if(identityStatus!=='ready')return;
+    const controller=new AbortController();
+    setLoadBusy(v=>({...v,gallery:true}));loadError('gallery','');
+    readJson('/api/database/gallery/applications',{signal:controller.signal})
+      .then(data=>{if(!controller.signal.aborted){setGalleryApplications(data.applications||[]);setGalleryStatus('connected');}})
+      .catch(error=>{if(!controller.signal.aborted){setGalleryStatus('fallback');loadError('gallery',error.message);}})
+      .finally(()=>{if(!controller.signal.aborted)setLoadBusy(v=>({...v,gallery:false}));});
+    return()=>controller.abort();
+  },[identityStatus,role,loadRetries.gallery]);
+
+  useEffect(()=>{
+    if(identityStatus!=='ready')return;
+    const controller=new AbortController();
+    setLoadBusy(v=>({...v,health:true}));loadError('health','');
+    readJson('/api/database/health',{signal:controller.signal})
+      .catch(error=>{if(!controller.signal.aborted)loadError('health',error.message);})
+      .finally(()=>{if(!controller.signal.aborted)setLoadBusy(v=>({...v,health:false}));});
+    return()=>controller.abort();
+  },[identityStatus,loadRetries.health]);
 
   useEffect(() => {
     if (
@@ -1329,10 +1352,10 @@ export default function Home() {
         ...galleryApplications.filter((item) => item.id !== application.id),
       ]);
       setGalleryDraft(null);
-      setDatabaseStatus("connected");
+      setGalleryStatus("connected");
       notify("Agent Gallery 등록 신청이 PostgreSQL에 저장되었습니다.");
     } catch (error) {
-      setDatabaseStatus("fallback");
+      setGalleryStatus("fallback");
       notify(error instanceof Error ? error.message : "DB 저장에 실패했습니다. 다시 시도해 주세요.");
     }
   };
@@ -1362,10 +1385,10 @@ export default function Home() {
           application.id === id ? payload.application! : application,
         ),
       );
-      setDatabaseStatus("connected");
+      setGalleryStatus("connected");
       return true;
     } catch (error) {
-      setDatabaseStatus("fallback");
+      setGalleryStatus("fallback");
       notify(error instanceof Error ? error.message : "DB 저장에 실패했습니다. 다시 시도해 주세요.");
       return false;
     }
@@ -1377,7 +1400,7 @@ export default function Home() {
     const payload = await response.json();
     if (!response.ok) return notify(payload.error || "Agent를 삭제하지 못했습니다.");
     saveGalleryApplications(galleryApplications.filter((application) => application.id !== id));
-    setDatabaseStatus("connected");
+    setGalleryStatus("connected");
     notify("등록된 Agent를 삭제했습니다.");
   };
 
@@ -1880,6 +1903,14 @@ export default function Home() {
           </div>
         </header>
 
+        {(['identity','health',...(view==='gallery'?['gallery']:['home','intake','definition','delivery','governance','operations'].includes(view)?['projects']:[])] as const).map(key=>{
+          const label=({identity:'계정 확인',health:'연결 상태 확인',gallery:'Agent Gallery',projects:'Agent 과제'} as Record<string,string>)[key];
+          if(!loadErrors[key]&&!loadBusy[key])return null;
+          return <div key={key} className="data-load-status" role={loadErrors[key]?'alert':'status'}>
+            <span><strong>{label}</strong> · {loadErrors[key]||'불러오는 중입니다. 일시적인 연결 지연에는 자동으로 재시도합니다.'}{loadErrors[key]&&key!=='identity'&&' 이 영역의 조회만 실패했습니다. 기존에 표시된 자료는 최신이 아닐 수 있습니다.'}</span>
+            {loadErrors[key]&&<button disabled={loadBusy[key]} onClick={()=>retryLoad(key as keyof typeof loadRetries)}>다시 시도</button>}
+          </div>;
+        })}
         {(view === "home" || view === "intake" || view === "definition" || view === "delivery") && (
           <Dashboard
             role={role}
@@ -1940,7 +1971,7 @@ export default function Home() {
             notify={notify}
             role={role}
             identity={identity}
-            databaseStatus={databaseStatus}
+            databaseStatus={galleryStatus}
             applications={galleryApplications}
             initialDraft={galleryDraft}
             onDraftHandled={() => setGalleryDraft(null)}

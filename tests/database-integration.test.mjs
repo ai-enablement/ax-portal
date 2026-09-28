@@ -216,10 +216,10 @@ test("Azure Web App build and Hybrid Connection settings are present", async () 
 test("Gallery requires PostgreSQL and never falls back to browser persistence", async () => {
   const page = await read("app/page.tsx");
 
-  assert.match(page, /fetch\("\/api\/database\/health"/);
+  assert.match(page, /readJson\('\/api\/database\/health'/);
   assert.match(page, /\/api\/database\/gallery\/applications/);
   assert.match(page, /PostgreSQL 연결/);
   assert.match(page, /PostgreSQL 연결 불가/);
   assert.doesNotMatch(page, /Agent Gallery 등록 신청이 이 브라우저에 임시 저장/);
-  assert.match(page, /setDatabaseStatus\("fallback"\)/);
+  assert.match(page, /setGalleryStatus\("fallback"\)/);
 });
