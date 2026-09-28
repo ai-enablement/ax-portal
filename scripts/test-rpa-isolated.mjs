@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {getPool,closePool} from '../server/db/pool.mjs';
 import {listRpa,createRpaRequest,linkRpaPic,readRpaFile,updateRpaPics} from '../server/rpa-portal.mjs';
-import {updateRpaRequest,createRpaMaster,updateRpaMaster} from '../server/rpa-management.mjs';
+import {updateRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../server/rpa-management.mjs';
+import {runRpaMailCycle} from '../server/rpa-mail.mjs';
 const pool=getPool(),client=await pool.connect(),originalQuery=pool.query,originalConnect=pool.connect;
 let checks=0;
 try{
@@ -35,21 +36,33 @@ try{
  assert.equal((await createRpaRequest(identity('general_user'),body)).id,created.id);checks++;
  const d=await listRpa(identity('general_user'));assert.equal(d.requests.length,1);assert.equal(d.requests[0].requester,'general_user');checks++;
  const file=d.requests[0].files[0].id;assert.equal((await readRpaFile(identity('general_user'),file)).content.toString(),'fixture');checks++;
- const edit={id:created.id,version:d.requests[0].updatedAt,status:'working',assignee:'Developer',analysis:'Cause',resolution:'Fix',reason:'test',expectedAt:''};
- await assert.rejects(()=>updateRpaRequest(identity('general_user'),edit),e=>e.status===403);checks++;
- for(const role of ['admin','team_leader','team_member']){
-  const current=(await listRpa(identity(role))).requests[0];
-  await updateRpaRequest(identity(role),{...edit,version:current.updatedAt,analysis:role});
-  checks++;
- }
- await assert.rejects(()=>updateRpaRequest(identity('admin'),{...edit,version:'2000-01-01'}),e=>e.status===409);checks++;
- let current=(await listRpa(identity('admin'))).requests[0];
- await updateRpaRequest(identity('admin'),{...edit,version:current.updatedAt,status:'held'});
- assert.equal((await listRpa(identity('general_user'))).requests[0].status,'held');checks++;
- current=(await listRpa(identity('admin'))).requests[0];
- await updateRpaRequest(identity('admin'),{...edit,version:current.updatedAt,status:'completed'});
- current=(await listRpa(identity('general_user'))).requests[0];
- assert.ok(current.completedAt);assert.ok(current.history.some(h=>h.kind==='completed'));checks++;
+ const update=async(role,operation,extra={})=>{const current=(await listRpa(identity('admin'))).requests.find(x=>x.id===created.id);return updateRpaRequest(identity(role),{id:created.id,version:current.updatedAt,operation,...extra});};
+ const stageSent=[];
+ const checkStage=async(recipient,subject)=>{const count=stageSent.length;const send=async mail=>{stageSent.push(mail);return {status:'sent',code:'MOCK'};};await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},send);await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},send);assert.equal(stageSent.length,count+1);assert.equal(stageSent.at(-1).recipient,recipient);assert.ok(stageSent.at(-1).subject.includes(subject));checks+=3;};
+ await assert.rejects(()=>update('general_user','assign',{}),e=>e.status===403);checks++;
+ await assert.rejects(()=>update('admin','assign',{assigneeEmail:'team_member@example.invalid'}),e=>e.status===400);checks++;
+ await update('team_leader','assign',{assigneeEmail:'team_member@example.invalid',expectedAt:'2026-10-01T15:00:00+09:00'});checks++;
+ await checkStage('team_member@example.invalid','조치 요청');
+ await assert.rejects(()=>update('admin','resolve',{analysis:'Cause',resolution:'Fix'}),e=>e.status===403);checks++;
+ await assert.rejects(()=>update('team_member','finalize'),e=>e.status===403);checks++;
+ await assert.rejects(()=>update('team_member','resolve',{analysis:'Cause'}),e=>e.status===400);checks++;
+ await update('team_member','resolve',{analysis:'Cause',resolution:'Fix'});checks++;
+ await checkStage('general_user@example.invalid','검증 요청');
+ await assert.rejects(()=>update('team_member','verify',{decision:'approved'}),e=>e.status===403);checks++;
+ await assert.rejects(()=>update('general_user','verify',{decision:'rejected'}),e=>e.status===400);checks++;
+ await update('general_user','verify',{decision:'rejected',reason:'Needs adjustment',comment:'Please revise'});checks++;
+ await checkStage('team_member@example.invalid','재조치 요청');assert.ok(stageSent.at(-1).htmlBody.includes('Needs adjustment'));checks++;
+ let current=(await listRpa(identity('admin'))).requests[0];assert.equal(current.status,'working');assert.equal(current.verification.reason,'Needs adjustment');checks+=2;
+ await update('team_member','resolve',{analysis:'Cause revised',resolution:'Fix revised'});
+ await update('general_user','verify',{decision:'approved',comment:'Confirmed'});checks+=2;
+ await checkStage('team_member@example.invalid','최종 확인 요청');
+ current=(await listRpa(identity('admin'))).requests[0];assert.equal(current.completedAt,undefined);assert.equal(current.completionMailJobs,undefined);checks+=2;
+ await assert.rejects(()=>update('admin','finalize'),e=>e.status===403);checks++;
+ await update('team_member','finalize');checks++;
+ current=(await listRpa(identity('general_user'))).requests[0];assert.ok(current.completedAt);assert.equal(current.mailStatus,'pending');assert.equal(current.history.at(-1).snapshot.comment,'Confirmed');assert.equal(current.history.find(h=>h.kind==='verify').snapshot.reason,'Needs adjustment');checks+=4;
+ await assert.rejects(()=>update('team_member','finalize'),e=>e.status===403);checks++;
+ let sent=0;const mockSend=async mail=>{sent++;assert.equal(mail.recipient,'general_user@example.invalid');assert.ok(mail.htmlBody.includes('Fix revised'));return {status:'sent',code:'MOCK'};};
+ await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},mockSend);await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},mockSend);assert.equal(sent,1);checks++;
  const master={fields:{'과제번호':'QA-NEW','과제명':'Fixture','부서':'QA','PIC':'Test','개발자':'Developer / Another Developer','운영 PC':'QA'}};
  await assert.rejects(()=>createRpaMaster(identity('general_user'),master),e=>e.status===403);checks++;
  const newMaster=await createRpaMaster(identity('team_member'),{fields:{...master.fields,'월':'O','토':'O','실행 시간':'10:00','월 실행 시간':'09:00, 15:00','토 실행 시간':'15:30'}});checks++;
@@ -89,5 +102,26 @@ try{
  await updateRpaPics(identity('team_leader'),{...picBody,revision:4,previousLinks:[{pic:'Replacement',email:'bp_solution@example.invalid'}],pics:[]});checks++;
  assert.equal((await listRpa(identity('bp_solution'))).projects.length,0);checks++;
  const removed=(await listRpa(identity('admin'))).projects.find(p=>p.id===newMaster.id);assert.deepEqual(removed.pics,[]);assert.equal(removed.revision,5);checks+=2;
+ console.log(JSON.stringify({passed:checks,storage:'temporary tables only',persistentChanges:0}));
+ const deletion={id:newMaster.id,revision:5,confirmCode:master.fields['과제번호'],reason:'Isolated delete test'};
+ const unified=await createRpaMaster(identity('admin'),{fields:{...master.fields,'과제번호':'QA-PAIRS'},pics:[{pic:'One',email:'general_user@example.invalid'},{pic:'Two',email:'bts@example.invalid'}]});
+ for(const role of ['general_user','bts']){assert.ok((await listRpa(identity(role))).projects.some(p=>p.id===unified.id));checks++;}
+ await updateRpaMaster(identity('team_member'),{id:unified.id,revision:0,fields:{'과제명':'Pairs changed'},pics:[{pic:'One',email:'bp_solution@example.invalid'},{pic:'Two',email:''}],reason:'Reassign PIC'});
+ for(const role of ['general_user','bts']){assert.equal((await listRpa(identity(role))).projects.some(p=>p.id===unified.id),false);checks++;}
+ const unifiedData=(await listRpa(identity('bp_solution'))).projects.find(p=>p.id===unified.id);assert.equal(unifiedData.fields['현업 이메일'],'bp_solution@example.invalid');assert.equal(unifiedData.history.at(-1).kind,'pic_updated');checks+=2;
+ for(const role of ['general_user','bts','bp_solution']){await assert.rejects(()=>deleteRpaMaster(identity(role),deletion),e=>e.status===403);checks++;}
+ await assert.rejects(()=>deleteRpaMaster(identity('admin'),{...deletion,revision:0}),e=>e.status===409);checks++;
+ await assert.rejects(()=>deleteRpaMaster(identity('admin'),{...deletion,confirmCode:'wrong'}),e=>e.status===400);checks++;
+ await assert.rejects(()=>deleteRpaMaster(identity('admin'),{...deletion,reason:''}),e=>e.status===400);checks++;
+ const pending=await createRpaRequest(identity('admin'),{...body,projectId:newMaster.id,key:randomUUID(),files:[]});
+ await assert.rejects(()=>deleteRpaMaster(identity('admin'),deletion),e=>e.status===409);checks++;
+ await query("update agent_portal.rpa_requests set status='completed',payload=payload || jsonb_build_object('completedAt',now()) where id=$1",[pending.id]);
+ await deleteRpaMaster(identity('team_member'),deletion);checks++;
+ const listed=await listRpa(identity('admin'));assert.equal(listed.projects.some(p=>p.id===newMaster.id),false);assert.equal(listed.requests.some(r=>r.id===pending.id),false);checks+=2;
+ const archived=(await query('select payload from agent_portal.rpa_projects where id=$1',[newMaster.id])).rows[0].payload;
+ assert.ok(archived.deletedAt);assert.equal(archived.history.at(-1).reason,deletion.reason);checks+=2;
+ await assert.rejects(()=>updateRpaMaster(identity('admin'),{...patch,revision:6}),e=>e.status===404);checks++;
+ await assert.rejects(()=>createRpaRequest(identity('admin'),{...body,projectId:newMaster.id,key:randomUUID(),files:[]}),e=>e.status===404);checks++;
+ await assert.rejects(()=>deleteRpaMaster(identity('admin'),{...deletion,revision:6}),e=>e.status===404);checks++;
  console.log(JSON.stringify({passed:checks,storage:'temporary tables only',persistentChanges:0}));
 }finally{pool.query=originalQuery;pool.connect=originalConnect;client.release();await closePool();}

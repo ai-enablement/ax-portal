@@ -1,5 +1,8 @@
 import {isRpaRunDay} from './rpa-display.mjs';
 export const RPA_DAYS=['월','화','수','목','금','토','일'];
+export function applySchedulePreset(fields,selected){
+ return {...fields,...Object.fromEntries(RPA_DAYS.map(d=>[d,selected.includes(d)?'O':''])),주기:selected.length?'일':'',실행일:selected.length===7?'매일':selected.length?'주중':''};
+}
 export const timeKey=day=>`${day} 실행 시간`;
 export const validTimes=value=>typeof value==='string'&&(!value.trim()||/^([01]?\d|2[0-3]):[0-5]\d(?:\s*,\s*([01]?\d|2[0-3]):[0-5]\d)*$/.test(value.trim()));
 // Parse only unambiguous day/range clauses. Never assign uncertain legacy prose to a day.

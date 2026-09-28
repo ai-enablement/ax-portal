@@ -29,7 +29,7 @@ export default function RpaRequestForm({form,setForm,projects,actor,files,setFil
    <input ref={picker} className="rpa-file-picker" aria-label="첨부파일 선택" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.xlsx,.pptx,.txt,.csv" onChange={e=>{const chosen=[...e.target.files];if(chosen.length>5||chosen.some(f=>f.size>5*1024*1024)||chosen.reduce((s,f)=>s+f.size,0)>10*1024*1024){setError('첨부파일은 개별 5MB, 최대 5개 / 총 10MB까지 가능합니다.');e.target.value='';setFiles([]);}else{setFiles(chosen);setError('');}}}/>
    <small>개별 5MB · 최대 5개 / 총 10MB</small>
   </div>
-  <p className="rpa-request-note">완료 알림 이메일은 저장됩니다. RPA 자동 발송은 아직 연결되지 않았습니다.</p>
+  <p className="rpa-request-note">조치 완료 시 연결된 PIC에게 완료 메일을 보냅니다. PIC 이메일이 미연결이면 위 완료 알림 이메일을 사용합니다.</p>
   <footer className="rpa-form-actions"><button type="button" disabled={busy} onClick={onCancel}>취소</button><button className="rpa-primary" disabled={busy}><PaperPlaneTilt size={17}/>{busy?'접수 중…':'요청 접수 등록'}</button></footer>
  </form>;
 }
