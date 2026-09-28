@@ -1,4 +1,5 @@
 import {resolvePortalIdentity} from '../../../server/auth.mjs';
+import {rpaNotifications} from '../../../shared/rpa-notifications.mjs';
 import {updateRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../../../server/rpa-management.mjs';
 import {isSameOriginRequest} from '../../../server/request-origin.mjs';
 import {listRpa,createRpaRequest,linkRpaPic,readRpaFile,updateRpaPics} from '../../../server/rpa-portal.mjs';
@@ -9,7 +10,8 @@ export async function GET(request){try{
  const identity=resolvePortalIdentity(request.headers);if(!identity)return Response.json({error:'로그인이 필요합니다.'},{status:401});
  const fileId=new URL(request.url).searchParams.get('file');
  if(fileId){const f=await readRpaFile(identity,fileId);return new Response(f.content,{headers:{'Content-Type':f.mime_type,'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});}
- return Response.json(await listRpa(identity),{headers:{'Cache-Control':'no-store'}});
+ const data=await listRpa(identity);
+ return Response.json(new URL(request.url).searchParams.has('notifications')?{notifications:rpaNotifications(data)}:data,{headers:{'Cache-Control':'no-store'}});
 }catch(e){return errorResponse(e);}}
 export async function POST(request){try{
  if(!isSameOriginRequest(request))return Response.json({error:'Invalid origin'},{status:403});

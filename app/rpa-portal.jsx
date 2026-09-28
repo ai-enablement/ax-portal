@@ -25,12 +25,21 @@ function Fields({fields}){return <dl className="rpa-fields">{Object.entries(fiel
 export default function RpaPortal({devRole}={}){
  const [advanced,setAdvanced]=useState(false),[priority,setPriority]=useState('all'),[projectFilter,setProjectFilter]=useState('all'),[historyProject,setHistoryProject]=useState(null),[masterForm,setMasterForm]=useState(false);
  const [data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[view,setView]=useState('master'),[query,setQuery]=useState(''),[status,setStatus]=useState('all'),[detail,setDetail]=useState(null),[detailTab,setDetailTab]=useState('original'),[form,setForm]=useState(null),[files,setFiles]=useState([]),[link,setLink]=useState(null),[message,setMessage]=useState('');
- async function load(){try{const r=await fetch('/api/rpa',{cache:'no-store',headers:devRole?{'x-portal-dev-role':devRole}:{}});const d=await r.json();if(!r.ok)throw Error(d.error);setError('');setData(d);}catch(e){setError(e.message);}}
+ const deepLinkHandled=useRef(false);
+ function receiveData(d){
+  setData(d);if(deepLinkHandled.current)return;
+  const id=new URL(window.location.href).searchParams.get('rpaRequest');if(!id)return;
+  deepLinkHandled.current=true;
+  const r=d.requests.find(r=>String(r.id)===id),p=r&&d.projects.find(p=>p.id===r.projectId);
+  if(!r||!p){setError('요청이 삭제되었거나 현재 계정에 조회 권한이 없습니다.');return;}
+  setView('table');setDetail({request:r,project:p});setDetailTab('progress');
+ }
+ async function load(){try{const r=await fetch('/api/rpa',{cache:'no-store',headers:devRole?{'x-portal-dev-role':devRole}:{}});const d=await r.json();if(!r.ok)throw Error(d.error);setError('');receiveData(d);}catch(e){setError(e.message);}}
  useEffect(()=>{
   const controller=new AbortController();
   fetch('/api/rpa',{cache:'no-store',signal:controller.signal,headers:devRole?{'x-portal-dev-role':devRole}:{}})
    .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);return d;})
-   .then(d=>setData(d)).catch(e=>{if(e.name!=='AbortError')setError(e.message);});
+   .then(d=>receiveData(d)).catch(e=>{if(e.name!=='AbortError')setError(e.message);});
   return()=>controller.abort();
  },[devRole]);
  async function post(body){setBusy(true);setError('');try{const r=await fetch('/api/rpa',{method:'POST',headers:{'Content-Type':'application/json',...(devRole?{'x-portal-dev-role':devRole}:{})},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error);await load();return d;}catch(e){setError(e.message);return null;}finally{setBusy(false);}}

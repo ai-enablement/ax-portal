@@ -1,6 +1,7 @@
 import {getPool,withTransaction} from './db/pool.mjs';
 import {deliverMail} from './work-mail.mjs';
 import {mailAppOrigin} from './mail-config.mjs';
+import {escapeHtml} from '../shared/notification-content.mjs';
 const aggregate=jobs=>['uncertain','failed','sending','pending'].find(s=>jobs.some(j=>j.status===s))||'sent';
 export async function runRpaMailCycle(env=process.env,send=deliverMail){
  if(!['live','test'].includes(env.PORTAL_MAIL_MODE))return;
@@ -36,7 +37,7 @@ export async function runRpaMailCycle(env=process.env,send=deliverMail){
     const recipient=env.PORTAL_MAIL_MODE==='test'?env.PORTAL_MAIL_TEST_RECIPIENT:mail.recipient;
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient||''))throw Error('Invalid recipient');
     const origin=env.PORTAL_APP_URL||env.NEXT_PUBLIC_APP_URL?mailAppOrigin(env):null;
-    const htmlBody=mail.htmlBody+(origin?`<p><a href="${origin}/">RPA Portal에서 요청 확인</a></p>`:'');
+    const htmlBody=mail.htmlBody+(origin?`<p><a href="${escapeHtml(origin)}/?rpaRequest=${encodeURIComponent(mail.requestId||row.id)}">${escapeHtml(mail.cta||'해당 요청 확인')} →</a></p><p>로그인 후 해당 요청의 진행 상황으로 연결됩니다. 접근 권한이 있는 계정으로 로그인해 주세요.</p>`:'');
     outcome=await send({...mail,recipient,htmlBody},env);
    }catch{outcome={status:'failed',code:'MAIL_CONFIGURATION_OR_AUTH_FAILED'};}
    await mutate(job=>{

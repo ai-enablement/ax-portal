@@ -1403,10 +1403,27 @@ export default function Home() {
     [userProjectItems, identity?.userId, identity?.appRole, identity?.canSwitchRole, actorEmail, role],
   );
 
+  const [rpaNotices,setRpaNotices]=useState<Array<{id:string;href:string;title:string;instruction:string;requestCode:string;projectName:string;requestTitle:string;cta:string}>>([]);
+  const [rpaNoticeError,setRpaNoticeError]=useState(false);
+  useEffect(()=>{
+    if(!identity?.userId)return;
+    let active=true;const controller=new AbortController();
+    const refresh=async()=>{try{
+      const response=await fetch('/api/rpa?notifications=1',{cache:'no-store',signal:controller.signal,headers:identity?.canSwitchRole?{'x-portal-dev-role':ACCOUNT_APP_ROLES[role]}:{}});
+      if(!response.ok)throw Error('notifications unavailable');
+      const data=await response.json();if(active){setRpaNotices(data.notifications||[]);setRpaNoticeError(false);}
+    }catch{if(active){setRpaNotices([]);setRpaNoticeError(true);}}};
+    void refresh();const timer=setInterval(()=>void refresh(),60000);
+    window.addEventListener('focus',refresh);
+    return()=>{active=false;controller.abort();clearInterval(timer);window.removeEventListener('focus',refresh);};
+  },[identity?.userId,identity?.canSwitchRole,role,notificationOpen]);
   const mailLinkHandled = useRef(false);
   useEffect(() => {
-    if(mailLinkHandled.current || databaseStatus !== 'connected' || !identity?.userId) return;
-    const code = new URL(window.location.href).searchParams.get('workProject');
+    if(mailLinkHandled.current || !identity?.userId) return;
+    const params=new URL(window.location.href).searchParams;
+    if(params.has('rpaRequest')){mailLinkHandled.current=true;setView('rpa');return;}
+    if(databaseStatus !== 'connected')return;
+    const code = params.get('workProject');
     if(!code) return;
     const project = userProjectItems.find(p=>(p.no===code || p.provisionalProjectCode===code) && p.source==='database');
     if(!project) return; // Never load a project outside the authenticated API result.
@@ -1803,13 +1820,13 @@ export default function Home() {
             )}
             <button
               className="icon-button"
-              aria-label={`업무 알림 ${notifications.length}건`}
+              aria-label={`업무 알림 ${notifications.length+rpaNotices.length}건`}
               aria-expanded={notificationOpen}
               aria-controls="notification-panel"
               onClick={() => setNotificationOpen((current) => !current)}
             >
               <Bell size={17} />
-              <i>{notifications.length}</i>
+              <i>{notifications.length+rpaNotices.length}</i>
             </button>
             {notificationOpen && (
               <section
@@ -1822,7 +1839,7 @@ export default function Home() {
                     <b>업무 알림</b>
                     <small>우선순위가 높은 순서입니다.</small>
                   </div>
-                  <Pill tone="red">{notifications.length}건</Pill>
+                  <Pill tone="red">{notifications.length+rpaNotices.length}건</Pill>
                 </header>
                 <div>
                   {notifications.map((item) => (
@@ -1834,12 +1851,16 @@ export default function Home() {
                       <p>
                         <small>{item.projectNo} · {item.projectName}</small>
                         <b>{item.title}</b>
-                        <em>{item.body}</em>
+                        <em>{item.reason}</em>
+                        <em>{item.instruction}</em>
+                        <small>{item.cta} →</small>
                       </p>
                       <ArrowRight size={14} weight="bold" />
                     </button>
                   ))}
-                  {notifications.length === 0 && (
+                  {rpaNotices.map(item=><button key={`rpa-${item.id}`} onClick={()=>{window.location.href=item.href;}}><span className="info"/><p><small>RPA · {item.requestCode} · {item.projectName}</small><b>{item.title} · {item.requestTitle}</b><em>{item.instruction}</em><small>{item.cta} →</small></p><ArrowRight size={14}/></button>)}
+                  {rpaNoticeError&&<p role="status">RPA 알림을 불러오지 못했습니다. 다시 열어 확인해 주세요.</p>}
+                  {notifications.length === 0 && rpaNotices.length === 0 && !rpaNoticeError && (
                     <div className="notification-empty">
                       <CheckCircle size={22} weight="duotone" />
                       <b>지금 처리할 업무가 없습니다.</b>

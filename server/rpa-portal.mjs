@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {workflowAction} from '../shared/rpa-workflow.mjs';
+import {stageMail} from '../shared/rpa-notifications.mjs';
 import {getPool,withTransaction} from './db/pool.mjs';
 import {validateUpload} from './document-files.mjs';
 import {canReadAllRpa,canLinkRpaPic,validateRpaRequest} from '../shared/rpa-policy.mjs';
@@ -34,12 +35,18 @@ export async function createRpaRequest(identity,body){
  const files=body.files.map(f=>{const bytes=Buffer.from(String(f.base64||''),'base64');let mime;try{mime=validateUpload(String(f.name||''),bytes);}catch(e){fail(400,e.message);}return {id:randomUUID(),name:String(f.name).replace(/[\r\n\\/]/g,'_').slice(0,180),mime,size:bytes.length,bytes};});
  if(files.reduce((s,f)=>s+f.size,0)>10*1024*1024)fail(413,'첨부파일 총 용량은 10MB 이하입니다.');
  return withTransaction(async client=>{
-  const actor=await rpaActor(identity,client);await allowedProject(client,actor,body.projectId);
+  const actor=await rpaActor(identity,client);const project=await allowedProject(client,actor,body.projectId);
   const existing=(await client.query('select id::text,created_by from agent_portal.rpa_requests where idempotency_key=$1',[body.key])).rows[0];
   if(existing){if(String(existing.created_by)!==String(actor.id))fail(409,'다른 접수에 사용된 키입니다.');return {id:existing.id};}
   const payload={title:body.title.trim(),description:body.description.trim(),type:body.type,priority:body.priority,occurredDate:body.occurredDate,notifyEmail:body.notifyEmail.trim().toLowerCase(),log:String(body.log||''),errorStep:String(body.errorStep||'').slice(0,1000),files:files.map(({id,name,size})=>({id,name,size})),history:[{kind:'created',at:new Date().toISOString(),label:'요청 접수',actor:actor.display_name}],mailStatus:'not_requested'};
   const row=(await client.query(`insert into agent_portal.rpa_requests(project_id,created_by,idempotency_key,payload) values($1,$2,$3,$4) returning id::text`,[body.projectId,actor.id,body.key,payload])).rows[0];
   for(const f of files)await client.query('insert into agent_portal.rpa_request_files(id,request_id,name,mime_type,byte_size,content) values($1,$2,$3,$4,$5,$6)',[f.id,row.id,f.name,f.mime,f.size,f.bytes]);
+  const recipients=(await client.query("select distinct lower(email) as email from agent_portal.users where is_active=true and app_role in ('admin','team_leader','team_member')")).rows;
+  payload.id=row.id;payload.createdAt=payload.history[0].at;payload.requester=actor.display_name;
+  payload.workflowMailToken=randomUUID();
+  payload.stageMailJobs=recipients.map(({email})=>{const id=randomUUID();return {id,token:payload.workflowMailToken,status:'pending',attempts:0,mail:stageMail('received',payload,project.payload,email,id)};});
+  payload.stageMailStatus=recipients.length?'pending':'failed';
+  await client.query('update agent_portal.rpa_requests set payload=$2 where id=$1',[row.id,payload]);
   return row;
  });
 }

@@ -5,6 +5,7 @@ import {getPool} from './db/pool.mjs';
 import {mailAppOrigin} from './mail-config.mjs';
 import {MailDiagnosticError} from './mail-diagnostics.mjs';
 import {updateWorkerHealth,reportWorkerFailure} from './work-mail-health.mjs';
+import {agentGuidance,detailHtml} from '../shared/notification-content.mjs';
 
 export function mailKey(item) {
   return createHash('sha256').update(JSON.stringify([
@@ -19,11 +20,14 @@ export function mailPayload(item, recipient, baseUrl, id) {
   if(url.protocol!=='https:' || url.username || url.password) throw new Error('MAIL_APP_URL_INVALID');
   url.pathname='/'; url.search=''; url.hash='';
   url.searchParams.set('workProject',item.projectNo);
+  const guide=agentGuidance(item);
+  const context=detailHtml([['요청 배경 / 과제 설명',item.description],['요청 시 완료 요청일',item.requestedDate]]);
   const escape = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  if(item.projectNo==='TEST')return {notificationId:id,recipient,subject:'[연결 테스트 · 업무 처리 불필요] AX Portal 메일 발송 확인',htmlBody:'<h2>메일 연결 테스트입니다</h2><p>관리자가 직접 실행한 연결 확인 메일입니다. 실제 과제 접수나 승인 요청이 아니며, 처리할 업무는 없습니다.</p><p>이 메일을 받으셨다면 Power Automate 메일 연결이 정상입니다.</p>'};
   return {
     notificationId:id, recipient,
     subject:`[AX Portal] ${item.title} · ${item.projectName} (${item.projectNo})`,
-    htmlBody:`<p>${escape(item.projectName)} (${escape(item.projectNo)})</p>${item.recipientRole?`<p>담당 역할: ${escape(item.recipientRole)}</p>`:''}<h3>${escape(item.title)}</h3><p>${escape(item.body)}</p><p><a href="${escape(url.href)}">포털에서 담당 업무 확인</a></p><p>승인과 문서 수정은 포털 로그인 후 진행해 주세요.</p>`,
+    htmlBody:`<h2>${escape(item.title)}</h2><p>${escape(guide.reason)}</p>${detailHtml([['과제',`${item.projectNo} · ${item.projectName}`],['요청자',item.requester],['현재 처리 단계',guide.stage],['수신자 역할',item.recipientRole],['검토 대상',guide.documents],['처리 안내 / 보완 사유',item.body]])}${context}<h3>지금 처리할 일</h3><p>${escape(guide.instruction)}</p><p><a href="${escape(url.href)}">${escape(guide.cta)} →</a></p><p>로그인 후 현재 본인에게 배정된 업무 화면으로 연결됩니다. 이미 처리된 업무는 현재 과제 상태를 확인해 주세요.</p>`,
   };
 }
 

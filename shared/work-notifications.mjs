@@ -10,6 +10,7 @@ import { ardLiteGaps,ardLiteDocumentComplete } from "./fast-track.mjs";
 import {intakeRequired} from './intake-standard.mjs';
 import {isProjectParty} from './project-actors.mjs';
 import {canManageAssessment} from './document-role-policy.mjs';
+import {agentGuidance} from './notification-content.mjs';
 
 const same = (left, right) =>
   left !== undefined &&
@@ -264,7 +265,7 @@ export function buildWorkNotifications(projects, actor) {
         isProjectParty(project,actor,'owner') ? 'Project Owner' :
         actor.appRole === 'team_leader' ? 'AI 활성화팀장' : 'Admin'
       );
-      return [{...notification,recipientRole:role}];
+      return [{...notification,...agentGuidance(notification),requester:project.requester,description:project.description,requestedDate:project.requestedDate,recipientRole:role}];
     })
     .sort((left, right) => {
       const toneOrder = { danger: 0, warning: 1, info: 2 };

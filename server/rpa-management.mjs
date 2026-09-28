@@ -1,8 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {validatePics,picFields} from '../shared/rpa-pics.mjs';
 import {syncRpaPics} from './rpa-pics.mjs';
-import {completionMail} from '../shared/rpa-progress.mjs';
-import {stageMail} from '../shared/rpa-stage-mail.mjs';
+import {stageMail} from '../shared/rpa-notifications.mjs';
 import {workflowAction,workflowTransition} from '../shared/rpa-workflow.mjs';
 import {withTransaction} from './db/pool.mjs';
 import {rpaActor} from './rpa-portal.mjs';
@@ -29,6 +28,8 @@ export async function updateRpaRequest(identity,body){
   }
   if(result.values.verification)Object.assign(result.values.verification,{at:now,actor:actor.display_name,actorEmail:actor.email});
   const payload={...old,...result.values,onHold:false};
+  payload.id=String(row.id);payload.createdAt=new Date(row.created_at).toISOString();
+  if(!payload.requester)payload.requester=(await c.query('select display_name from agent_portal.users where id=$1',[row.created_by])).rows[0]?.display_name;
   if(action==='finalize')payload.completedAt=now;
   const snapshot={stage:row.status,status:result.status,assignee:payload.assignee,assigneeEmail:payload.assigneeEmail,expectedAt:payload.expectedAt,analysis:payload.analysis||'',resolution:payload.resolution||'',comment:payload.verification?.comment||'',decision:payload.verification?.decision||'',reason:payload.verification?.reason||''};
   const label=({assign:'접수 완료 · 담당 개발자 및 반영 일정 지정',resolve:'조치·개발 완료 · 현업 검증 요청',verify:body.decision==='rejected'?'현업 검증 반려 · 조치·개발중으로 복귀':'현업 검증 완료 · 개발자 최종 확인 대기',finalize:'개발자 최종 확인 · 조치 완료'})[action];
@@ -47,7 +48,7 @@ export async function updateRpaRequest(identity,body){
   if(action==='finalize'){
    const links=(await c.query('select email from agent_portal.rpa_pic_links where project_id=$1',[row.project_id])).rows;
    const recipients=[...new Set((links.length?links.map(l=>l.email):[old.notifyEmail]).map(v=>String(v||'').trim().toLowerCase()).filter(v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)))];
-   payload.completionMailJobs=recipients.map(email=>({id:randomUUID(),status:'pending',attempts:0,mail:completionMail(payload,project,email,randomUUID())}));
+   payload.completionMailJobs=recipients.map(email=>({id:randomUUID(),status:'pending',attempts:0,mail:stageMail('completed',payload,project,email,randomUUID())}));
    payload.mailStatus=recipients.length?'pending':'failed';
   }
   await c.query('update agent_portal.rpa_requests set payload=$2,status=$3,updated_at=now() where id=$1',[body.id,payload,result.status]);

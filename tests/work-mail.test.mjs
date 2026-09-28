@@ -45,7 +45,7 @@ test('live mail isolates each recipient, project, role, title, body and project 
   if(no!=='2026-052')assert.ok(!match.payload.htmlBody.includes('FEA 작성을 완료'));
  }
  assert.ok(!queued.find(q=>q.actorId==='1'&&q.payload.subject.includes('2026-051')));
- assert.ok(queued.find(q=>q.actorId==='12').payload.htmlBody.includes('담당 역할: Project Owner'));
+ assert.match(queued.find(q=>q.actorId==='12').payload.htmlBody,/수신자 역할[\s\S]*Project Owner/);
  assert.ok(queued.find(q=>q.actorId==='1'&&q.payload.subject.includes('2026-050')).payload.htmlBody.includes('AI Agent와 함께 요구 정의서를 작성'));
 });
 
@@ -58,7 +58,7 @@ test('before delivery stale content and recipient are rebuilt from the current a
  const payload=await currentJobPayload(client,job,liveEnv,load);
  assert.equal(payload.recipient,'leader@example.com');
  assert.ok(payload.subject.includes('G1 착수 판정'));
- assert.ok(payload.htmlBody.includes('Calendar (2026-033)'));
+ assert.ok(payload.htmlBody.includes('2026-033 · Calendar'));
  assert.ok(!payload.htmlBody.includes('wrong'));
  const reassigned={...roleActors[6],email:'current-developer@example.com'};
  const doc=buildWorkNotifications(roleProjects,{id:'22',appRole:'team_member'})[0];

@@ -33,6 +33,10 @@ try{
  assert.equal((await listRpa(identity('general_user'))).projects.length,1);checks++;
  const body={projectId:p.id,title:'Isolated request',description:'Fixture only',type:'오류 수정',priority:'normal',occurredDate:'2026-09-23',notifyEmail:'general_user@example.invalid',key:randomUUID(),files:[{name:'test.txt',base64:Buffer.from('fixture').toString('base64')}]};
  const created=await createRpaRequest(identity('general_user'),body);
+ const receivedMails=[];
+ await runRpaMailCycle({PORTAL_MAIL_MODE:'live',PORTAL_APP_URL:'https://portal.example.com'},async mail=>{receivedMails.push(mail);return {status:'sent',code:'MOCK'};});
+ assert.deepEqual(receivedMails.map(m=>m.recipient).sort(),['admin@example.invalid','team_leader@example.invalid','team_member@example.invalid'].sort());
+ assert.ok(receivedMails.every(m=>m.htmlBody.includes(`rpaRequest=${created.id}`)&&m.htmlBody.includes('Fixture only')&&m.subject.includes('신규 유지보수 접수')));checks+=2;
  assert.equal((await createRpaRequest(identity('general_user'),body)).id,created.id);checks++;
  const d=await listRpa(identity('general_user'));assert.equal(d.requests.length,1);assert.equal(d.requests[0].requester,'general_user');checks++;
  const file=d.requests[0].files[0].id;assert.equal((await readRpaFile(identity('general_user'),file)).content.toString(),'fixture');checks++;
