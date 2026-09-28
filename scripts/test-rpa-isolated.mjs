@@ -69,11 +69,14 @@ try{
  await assert.rejects(()=>update('team_member','finalize'),e=>e.status===403);checks++;
  let sent=0;const mockSend=async mail=>{sent++;assert.equal(mail.recipient,'general_user@example.invalid');assert.ok(mail.htmlBody.includes('Fix revised'));return {status:'sent',code:'MOCK'};};
  await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},mockSend);await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},mockSend);assert.equal(sent,1);checks++;
- const master={fields:{'과제번호':'QA-NEW','과제명':'Fixture','부서':'QA','PIC':'Test','개발자':'Developer / Another Developer','운영 PC':'QA'}};
+ const master={developerIds:['5','6'],fields:{'과제번호':'QA-NEW','과제명':'Fixture','부서':'QA','PIC':'Test','개발자':'bts / bp_solution','운영 PC':'QA'}};
  await assert.rejects(()=>createRpaMaster(identity('general_user'),master),e=>e.status===403);checks++;
- const newMaster=await createRpaMaster(identity('team_member'),{fields:{...master.fields,'월':'O','토':'O','실행 시간':'10:00','월 실행 시간':'09:00, 15:00','토 실행 시간':'15:30'}});checks++;
+ for(const id of ['1','2','3','4','999']){await assert.rejects(()=>createRpaMaster(identity('admin'),{...master,developerIds:[id]}),e=>e.status===400);checks++;}
+ const roster=(await listRpa(identity('admin'))).developerRoster;
+ assert.deepEqual(roster.map(u=>u.id).sort(),['5','6']);checks++;
+ const newMaster=await createRpaMaster(identity('team_member'),{developerIds:master.developerIds,fields:{...master.fields,'월':'O','토':'O','실행 시간':'10:00','월 실행 시간':'09:00, 15:00','토 실행 시간':'15:30'}});checks++;
  const savedMaster=(await listRpa(identity('admin'))).projects.find(p=>p.id===newMaster.id);
- assert.equal(savedMaster.developer,'Developer / Another Developer');checks++;
+ assert.equal(savedMaster.developer,'bts / bp_solution');assert.deepEqual(savedMaster.developerIds,['5','6']);checks+=2;
  assert.ok((await listRpa(identity('admin'))).people.includes('team_member'));assert.deepEqual((await listRpa(identity('general_user'))).people,[]);checks+=2;
  assert.equal(savedMaster.fields['월 실행 시간'],'09:00, 15:00');assert.equal(savedMaster.fields['토 실행 시간'],'15:30');checks+=2;
  assert.equal(savedMaster.fields['토'],'O');assert.equal(savedMaster.fields['실행 시간'],'10:00');assert.equal(savedMaster.history[0].kind,'master');checks+=3;
@@ -112,7 +115,8 @@ try{
  await query('insert into agent_portal.rpa_projects(id,project_code,payload,source_hash) values($1,$2,$3,$4)',[excluded.id,excluded.code,excluded,'test']);
  await linkRpaPic(identity('admin'),{projectId:excluded.id,pic:'PIC',email:'general_user@example.invalid',reason:'fixture'});
  assert.equal((await listRpa(identity('admin'))).hiddenProjects.length,1);
- assert.equal((await listRpa(identity('general_user'))).hiddenProjects.length,0);
+ assert.equal((await listRpa(identity('general_user'))).hiddenProjects.length,1);
+ assert.equal((await listRpa(identity('bts'))).hiddenProjects.length,0);checks++;
  assert.equal((await listRpa(identity('general_user'))).projects.some(x=>x.id===excluded.id),false);checks+=3;
  const visibility={hidden:false,items:[{id:excluded.id,revision:0}]};
  for(const role of ['general_user','bts','bp_solution']){await assert.rejects(()=>setRpaVisibility(identity(role),visibility),e=>e.status===403);checks++;}
@@ -128,7 +132,7 @@ try{
  assert.equal(savedHidden.visibility.hidden,true);assert.equal(savedHidden.status,excluded.status);assert.equal(savedHidden.history.at(-1).kind,'visibility');checks+=3;
  console.log(JSON.stringify({passed:checks,storage:'temporary tables only',persistentChanges:0}));
  const deletion={id:newMaster.id,revision:5,confirmCode:master.fields['과제번호'],reason:'Isolated delete test'};
- const unified=await createRpaMaster(identity('admin'),{fields:{...master.fields,'과제번호':'QA-PAIRS'},pics:[{pic:'One',email:'general_user@example.invalid'},{pic:'Two',email:'bts@example.invalid'}]});
+ const unified=await createRpaMaster(identity('admin'),{developerIds:master.developerIds,fields:{...master.fields,'과제번호':'QA-PAIRS'},pics:[{pic:'One',email:'general_user@example.invalid'},{pic:'Two',email:'bts@example.invalid'}]});
  for(const role of ['general_user','bts']){assert.ok((await listRpa(identity(role))).projects.some(p=>p.id===unified.id));checks++;}
  await updateRpaMaster(identity('team_member'),{id:unified.id,revision:0,fields:{'과제명':'Pairs changed'},pics:[{pic:'One',email:'bp_solution@example.invalid'},{pic:'Two',email:''}],reason:'Reassign PIC'});
  for(const role of ['general_user','bts']){assert.equal((await listRpa(identity(role))).projects.some(p=>p.id===unified.id),false);checks++;}

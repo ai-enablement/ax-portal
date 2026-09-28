@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {rpaDeveloperRoster} from './rpa-developer-roster.mjs';
 import {withSharedUsers} from './shared-accounts.mjs';
 import {isRpaHidden} from '../shared/rpa-visibility.mjs';
 import {workflowAction} from '../shared/rpa-workflow.mjs';
@@ -29,8 +30,9 @@ export async function listRpa(identity){
  const links=canLinkRpaPic(actor.app_role)?(await pool.query('select project_id as "projectId",pic,email from agent_portal.rpa_pic_links order by project_id,pic')).rows:[];
  const developerAccounts=canReadAllRpa(actor.app_role)?(await pool.query("select string_agg(u.display_name,' / ' order by u.display_name) as label,coalesce(u.email,login.email) as value from agent_portal.users u left join agent_portal.users login on login.id=u.shared_account_id where u.is_active=true and (u.shared_account_id is null or (login.is_active and login.app_role=u.app_role)) and coalesce(u.email,login.email) is not null group by coalesce(u.email,login.email) order by label")).rows:[];
  const people=canReadAllRpa(actor.app_role)?(await pool.query('select display_name from agent_portal.users order by display_name')).rows.map(u=>u.display_name):[];
+ const developerRoster=canReadAllRpa(actor.app_role)?await rpaDeveloperRoster(pool):[];
  const hiddenProjects=projects.filter(isRpaHidden),visibleProjects=projects.filter(p=>!isRpaHidden(p));
- return {projects:visibleProjects,hiddenProjects:canReadAllRpa(actor.app_role)?hiddenProjects:[],requestProjects:hiddenProjects.filter(p=>requests.some(r=>r.projectId===p.id)),requests,links,people,developerAccounts,canReadAll:canReadAllRpa(actor.app_role),canLink:canLinkRpaPic(actor.app_role),actor:{name:actor.display_name,email:actor.email},mailEnabled:['live','test'].includes(process.env.PORTAL_MAIL_MODE)&&!!process.env.POWER_AUTOMATE_MAIL_URL};
+ return {developerRoster,projects:visibleProjects,hiddenProjects,requestProjects:hiddenProjects.filter(p=>requests.some(r=>r.projectId===p.id)),requests,links,people,developerAccounts,canReadAll:canReadAllRpa(actor.app_role),canLink:canLinkRpaPic(actor.app_role),actor:{name:actor.display_name,email:actor.email},mailEnabled:['live','test'].includes(process.env.PORTAL_MAIL_MODE)&&!!process.env.POWER_AUTOMATE_MAIL_URL};
 }
 export async function createRpaRequest(identity,body){
  const error=validateRpaRequest(body);if(error)fail(400,error);

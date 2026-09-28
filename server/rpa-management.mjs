@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {resolveRpaDevelopers} from './rpa-developer-roster.mjs';
 import {validatePics,picFields} from '../shared/rpa-pics.mjs';
 import {syncRpaPics} from './rpa-pics.mjs';
 import {stageMail} from '../shared/rpa-notifications.mjs';
@@ -59,6 +60,8 @@ export async function createRpaMaster(identity,body){
  return withTransaction(async c=>{
   const actor=await rpaActor(identity,c);manager(actor);
   let f=body.fields;if(!f||typeof f!=='object'||Array.isArray(f))fail(400,'과제 정보를 확인해 주세요.');
+  const developers=await resolveRpaDevelopers(c,body.developerIds);
+  f={...f,'개발자':developers.map(u=>u.name).join(' / ')};
   const pairs=body.pics===undefined?null:validatePics(body.pics);if(pairs)f={...f,...picFields(pairs)};
   for(const k of ['과제번호','과제명','부서','PIC','개발자','운영 PC'])if(!String(f[k]||'').trim())fail(400,`${k} 항목을 입력해 주세요.`);
   for(const v of Object.values(f))if(typeof v!=='string'||v.length>10000)fail(400,'입력 길이를 확인해 주세요.');
@@ -67,7 +70,7 @@ export async function createRpaMaster(identity,body){
   await c.query('select pg_advisory_xact_lock(hashtext($1))',['rpa-master:'+code]);
   if((await c.query('select id from agent_portal.rpa_projects where project_code=$1',[code])).rowCount)fail(409,'이미 등록된 과제번호입니다.');
   const id='portal:'+randomUUID(),now=new Date().toISOString();
-  const p={id,code,name:f['과제명'].trim(),company:f['법인']||'',department:f['부서'],pics:f.PIC.split(/[/,;\n]/).map(s=>s.trim()).filter(Boolean),developer:f['개발자'],status:f['진행 상태']||'',fields:f,sourceSheet:'포털 직접 등록',sourceRow:'—',history:[{kind:'master',at:now,label:'RPA 과제 마스터 등록',actor:actor.display_name,actorEmail:actor.email}]};
+  const p={developerIds:developers.map(u=>u.id),developers,id,code,name:f['과제명'].trim(),company:f['법인']||'',department:f['부서'],pics:f.PIC.split(/[/,;\n]/).map(s=>s.trim()).filter(Boolean),developer:f['개발자'],status:f['진행 상태']||'',fields:f,sourceSheet:'포털 직접 등록',sourceRow:'—',history:[{kind:'master',at:now,label:'RPA 과제 마스터 등록',actor:actor.display_name,actorEmail:actor.email}]};
   await c.query('insert into agent_portal.rpa_projects(id,project_code,payload,source_hash) values($1,$2,$3,$4)',[id,code,p,'portal']);
   if(pairs){const synced=await syncRpaPics(c,p,pairs,actor,'과제 등록');await c.query('update agent_portal.rpa_projects set payload=$2 where id=$1',[id,synced]);}
   return {id};
@@ -100,6 +103,9 @@ export async function updateRpaMaster(identity,body){
   if((body.revision??0)!==(old.revision??0))fail(409,'다른 사용자가 수정했습니다. 새로고침 후 다시 시도해 주세요.');
   let input=body.fields;
   if(!input||typeof input!=='object'||Array.isArray(input))fail(400,'과제 정보를 확인해 주세요.');
+  const developers=body.developerIds!==undefined?await resolveRpaDevelopers(c,body.developerIds):null;
+  if(developers)input={...input,'개발자':developers.map(u=>u.name).join(' / ')};
+  else if(input['개발자']!==undefined&&input['개발자']!==old.fields?.['개발자'])fail(400,'등록된 계정 목록에서 담당 개발자를 선택해 주세요.');
   const pairs=body.pics===undefined?null:validatePics(body.pics);if(pairs)input={...input,...picFields(pairs)};
   const allowed=['과제번호','과제명','법인','본부','부서','접수타입','PIC','현업 이메일','개발자','운영 PC','진행 상태','현업배포일자','사용 화면','주기','실행 방법','실행일','실행 시간','개발공수(DAY)','월 작업 MH (25일)','비고','월','화','수','목','금','토','일',...RPA_DAYS.map(timeKey)];
   for(const [k,v] of Object.entries(input))if(!allowed.includes(k)||typeof v!=='string'||v.length>10000)fail(400,'입력 내용을 확인해 주세요.');
@@ -112,8 +118,9 @@ export async function updateRpaMaster(identity,body){
   const links=(await c.query('select pic from agent_portal.rpa_pic_links where project_id=$1',[body.id])).rows;
   if(!pairs&&links.some(l=>!pics.includes(l.pic)))fail(409,'계정 연결된 PIC는 PIC 이름·이메일 목록에서 변경해 주세요.');
   const changes=Object.fromEntries(Object.entries(input).filter(([k,v])=>String(old.fields?.[k]??'')!==v).map(([k,v])=>[k,{before:old.fields?.[k]??'',after:v}]));
+  if(developers)changes['담당 개발자 계정']={before:old.developers||[],after:developers};
   if(!Object.keys(changes).length&&!pairs)return {saved:true,id:old.id};
-  const p={...old,name:f['과제명'].trim(),company:f['법인']||'',department:f['부서'],pics,developer:f['개발자'],status:f['진행 상태']||'',fields:f,revision:(old.revision??0)+1,history:[...(old.history||[]),{kind:'master_updated',label:'RPA 과제 정보 수정',at:new Date().toISOString(),actor:actor.display_name,actorEmail:actor.email,reason:body.reason.trim(),changes}]};
+  const p={...old,...(developers?{developerIds:developers.map(u=>u.id),developers}:{}),name:f['과제명'].trim(),company:f['법인']||'',department:f['부서'],pics,developer:f['개발자'],status:f['진행 상태']||'',fields:f,revision:(old.revision??0)+1,history:[...(old.history||[]),{kind:'master_updated',label:'RPA 과제 정보 수정',at:new Date().toISOString(),actor:actor.display_name,actorEmail:actor.email,reason:body.reason.trim(),changes}]};
   const synced=pairs?await syncRpaPics(c,{...p,pics:old.pics},pairs,actor,body.reason.trim()):p;
   await c.query('update agent_portal.rpa_projects set payload=$2 where id=$1',[body.id,synced]);
   return {saved:true,id:old.id};

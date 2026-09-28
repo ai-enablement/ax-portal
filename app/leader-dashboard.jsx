@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import {CaretLeft,CaretRight,X,PencilSimple,ArrowSquareOut} from '@phosphor-icons/react';
 import {kstDate,formatKst} from '../shared/portal-time.mjs';
-import {calendarDays,dashboardSummary,fiscalRange,scheduleStatus,validDay} from '../shared/leader-dashboard.mjs';
+import {calendarDays,dashboardSummary,fiscalRange,scheduleStatus,validDay,projectPeriod} from '../shared/leader-dashboard.mjs';
 import './leader-dashboard.css';
 
 const statuses={done:'완료',prog:'진행중',plan:'예정',late:'지연',unknown:'일정 미입력'};
@@ -22,20 +22,20 @@ export default function LeaderDashboard({identity,devRole,onProject}) {
     try {
       const res=await fetch('/api/database/projects',{cache:'no-store',headers,signal});
       const data=await res.json();if(!res.ok)throw Error(data.error||'과제를 불러오지 못했습니다.');
-      setProjects((data.projects||[]).map(p=>({...p,start:validDay(p.receivedDate)?p.receivedDate:'',end:validDay(p.committedDate)?p.committedDate:''})));setError('');
+      setProjects((data.projects||[]).map(p=>({...p,...projectPeriod(p)})));setError('');
     }catch(e){if(e.name!=='AbortError')setError(e.message);}finally{if(!signal?.aborted)setLoading(false);}
   }
   useEffect(()=>{const controller=new AbortController();void refresh(controller.signal);return()=>controller.abort();},[devRole]); // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- refresh updates state only after the network request resolves.
   const categoryProjects=projects.filter(p=>category==='전체'||p.category==='D2B');
   const developers=[...new Map(categoryProjects.flatMap(p=>(p.developerIds||[]).map((id,i)=>[String(id),p.developerNames?.[i]||id]))).entries()];
   const filtered=categoryProjects.filter(p=>developer==='전체'||p.developerIds?.map(String).includes(developer));
-  const dated=filtered.filter(p=>validDay(p.start)&&validDay(p.end)&&p.end>=p.start);
+  const dated=filtered.filter(p=>validDay(p.start)&&(!validDay(p.end)||p.end>=p.start)).map(p=>({...p,end:p.end||(p.start>today?p.start:today)}));
   const range=mode==='custom'?custom:mode==='all'&&dated.length?{start:dated.reduce((a,p)=>p.start<a?p.start:a,dated[0].start),end:dated.reduce((a,p)=>p.end>a?p.end:a,dated[0].end)}:fiscalRange(year);
   const rangeValid=validDay(range.start)&&validDay(range.end)&&range.end>=range.start;
   const summary=dashboardSummary(filtered,range,today);
   const scoped=rangeValid?summary.scoped:[];
-  const missing=filtered.filter(p=>!validDay(p.start)||!validDay(p.end)||p.end<p.start);
-  const ending=[...scoped].filter(p=>p.manualProgress!==100).sort((a,b)=>a.end.localeCompare(b.end)).slice(0,5);
+  const missing=filtered.filter(p=>!validDay(p.start)||(validDay(p.end)&&p.end<p.start));
+  const ending=[...scoped].filter(p=>validDay(p.end)&&p.manualProgress!==100).sort((a,b)=>a.end.localeCompare(b.end)).slice(0,5);
   const visible=scoped.filter(p=>selectedStatuses.includes(scheduleStatus(p,today)));
   const tableProjects=[...visible,...(selectedStatuses.includes('unknown')?missing:[])];
   if(group==='developer')tableProjects.sort((a,b)=>(a.developerNames?.join(' · ')||'미배정').localeCompare(b.developerNames?.join(' · ')||'미배정','ko'));
@@ -52,13 +52,13 @@ export default function LeaderDashboard({identity,devRole,onProject}) {
     {mode==='custom'&&<div className="ld-filter-row"><label>시작일 <input type="date" value={custom.start} onChange={e=>setCustom({...custom,start:e.target.value})}/></label><label>종료일 <input type="date" value={custom.end} onChange={e=>setCustom({...custom,end:e.target.value})}/></label>{!rangeValid&&<span role="alert">시작일 이후의 종료일을 선택해 주세요.</span>}</div>}
     <div className="ld-filter-row"><b>개발자</b><button className={`ld-chip ${developer==='전체'?'on':''}`} aria-pressed={developer==='전체'} onClick={()=>setDeveloper('전체')}>전체 {categoryProjects.length}</button>{developers.map(([id,name])=><button key={id} className={`ld-chip ${developer===id?'on':''}`} aria-pressed={developer===id} onClick={()=>setDeveloper(id)}>{name} <small>{categoryProjects.filter(p=>p.developerIds?.map(String).includes(id)).length}</small></button>)}</div></div>
     <div className="ld-kpis">{metrics.map(([label,value,unit,tone,hint],i)=><article key={label} className={`ld-kpi ${tone}`}><small>{label}</small><div className="ld-value">{rangeValid?(value??'—'):'—'}<small>{value==null?'':unit}</small></div>{i<2&&<progress value={rangeValid?(value??0):0} max="100"/>}<p>{hint}</p></article>)}</div>
-    {(missing.length>0||summary.missingProgress>0)&&<div className="ld-quality">일정 미입력 {missing.length}개는 기간 집계에서 제외 · 진척률 미입력 {summary.missingProgress}개는 가중 평균에서 제외됩니다. <button onClick={()=>setView('table')}>미입력 과제 확인</button></div>}
+    {(missing.length>0||summary.missingProgress>0||summary.unconfirmed>0)&&<div className="ld-quality">접수일 누락·일정 오류 {missing.length}개는 기간 집계에서 제외 · 마감일 미확정 {summary.unconfirmed}개와 진척률 미입력 {summary.missingProgress}개는 가중 평균에서 제외됩니다. <button onClick={()=>setView('table')}>미입력 과제 확인</button></div>}
     <section className="ld-panel"><h2>종료 임박 일정 <small>종료일이 가까운 순 · 지연 건 우선</small></h2><div className="ld-ending">{ending.map(p=>{const days=calendarDays(today,p.end)-1;return <button key={p.no} className={`ld-end ${days<0?'over':days<=14?'soon':''}`} onClick={()=>setEditing(p)}><div><strong>{days<0?`${-days}일 초과`:`D-${days}`}</strong><small>{p.end}</small></div><b>{p.name}</b><small>{p.developerNames?.join(' · ')||'담당자 미배정'} · {percent(p)}</small><progress max="100" value={p.manualProgress??0}/></button>;})}{!ending.length&&<p className="ld-empty">선택 기간에 종료 예정인 과제가 없습니다.</p>}</div></section>
     <section className="ld-panel"><div className="ld-toolbar"><h2>전체 일정</h2><div className="ld-segment"><button className={view==='gantt'?'on':''} aria-pressed={view==='gantt'} onClick={()=>setView('gantt')}>간트 차트</button><button className={view==='table'?'on':''} aria-pressed={view==='table'} onClick={()=>setView('table')}>과제 상세</button></div></div><div className="ld-toolbar"><div className="ld-status"><small>상태</small>{Object.entries(statuses).map(([key,label])=><button key={key} className={`ld-chip ${selectedStatuses.includes(key)?'on':''}`} aria-pressed={selectedStatuses.includes(key)} onClick={()=>toggleStatus(key)}><span style={{background:colors[key]}}/>{label}</button>)}</div><div className="ld-segment"><button className={group==='agent'?'on':''} aria-pressed={group==='agent'} onClick={()=>setGroup('agent')}>에이전트별</button><button className={group==='developer'?'on':''} aria-pressed={group==='developer'} onClick={()=>setGroup('developer')}>개발자별</button></div></div>
     {view==='gantt'&&rangeValid?<Gantt projects={visible} range={range} today={today} group={group} onSelect={setEditing}/>:<div className="ld-table-wrap"><table><thead><tr>{['과제','카테고리','담당 개발자','최초 접수일','G2 확정 마감일','진척률','상태','작업'].map(t=><th key={t}>{t}</th>)}</tr></thead><tbody>{tableProjects.map(p=><tr key={p.no}><td><small>{p.no}</small><b>{p.name}</b></td><td>{p.category}</td><td>{p.developerNames?.join(' · ')||'미배정'}</td><td>{p.start||'미입력'}</td><td>{p.end||'미확정'}</td><td>{percent(p)}</td><td>{statuses[scheduleStatus(p,today)]}</td><td><button onClick={()=>setEditing(p)}>{canEdit(p)?'진척률 입력':'상세 보기'}</button></td></tr>)}</tbody></table>{!tableProjects.length&&<p className="ld-empty">표시할 과제가 없습니다.</p>}</div>}
-    {view==='gantt'&&missing.length>0&&<details className="ld-missing"><summary>일정 미입력 과제 {missing.length}개 · 최초 접수일 또는 G2 확정 마감일 필요</summary>{missing.map(p=><div key={p.no}><span>{p.no} · {p.name}</span><small>{percent(p)}</small><button onClick={()=>setEditing(p)}>{canEdit(p)?'진척률 입력':'상세 보기'}</button></div>)}</details>}
-    <div className="ld-legend">{Object.entries(statuses).filter(([key])=>key!=='unknown').map(([key,label])=><span key={key}><i style={{background:colors[key]}}/>{label}</span>)}<span>오늘 {today}</span></div></section>
-    <footer className="ld-footer"><p>진척률 = Σ(담당자 입력 진척률 × 과제 기간 일수) ÷ Σ과제 기간 일수. 선택 기간과 겹치는 과제의 전체 과제 기간을 사용합니다.</p><p>일정 경과율 = 선택 기간 중 오늘까지 지난 일수 ÷ 선택 기간 전체 일수. 시작일·종료일을 포함한 달력 일수, KST 기준입니다.</p><p>과제 기간은 최초 접수일 ~ G2 확정 마감일입니다. 전체 / D2B 및 개발자 선택이 모든 지표와 일정에 적용됩니다.</p></footer>
+    {view==='gantt'&&missing.length>0&&<details className="ld-missing"><summary>일정 미입력 과제 {missing.length}개 · 최초 접수일 누락 또는 날짜 순서 확인 필요</summary>{missing.map(p=><div key={p.no}><span>{p.no} · {p.name}</span><small>{percent(p)}</small><button onClick={()=>setEditing(p)}>{canEdit(p)?'진척률 입력':'상세 보기'}</button></div>)}</details>}
+    <div className="ld-legend">{Object.entries(statuses).filter(([key])=>key!=='unknown').map(([key,label])=><span key={key}><i style={{background:colors[key]}}/>{label}</span>)}<span>오늘 {today}</span><span className="ld-open-legend">점선: 이후 일정 미정 (마감일 미확정)</span></div></section>
+    <footer className="ld-footer"><p>진척률 = Σ(담당자 입력 진척률 × 과제 기간 일수) ÷ Σ과제 기간 일수. 선택 기간과 겹치는 과제의 전체 과제 기간을 사용합니다.</p><p>일정 경과율 = 선택 기간 중 오늘까지 지난 일수 ÷ 선택 기간 전체 일수. 시작일·종료일을 포함한 달력 일수, KST 기준입니다.</p><p>과제 기간은 최초 접수일 ~ G2 확정 마감일입니다. 마감일 미확정 과제는 접수일부터 오늘까지 실선, 이후는 점선으로 표시하며 가중 평균과 종료 임박 집계에서 제외합니다. 전체 / D2B 및 개발자 선택이 모든 지표와 일정에 적용됩니다.</p></footer>
     </>}
     {editing&&<ProgressDialog key={editing.no} project={editing} editable={canEdit(editing)} headers={headers} onClose={()=>setEditing(null)} onProject={()=>onProject(editing.no)} onSaved={async()=>{setEditing(null);setMessage('진척률이 저장되었습니다.');await refresh();}}/>}
   </div>;
@@ -71,7 +71,19 @@ function Gantt({projects,range,today,group,onSelect}) {
   const months=[];for(let date=range.start;date<=range.end;){const next=new Date(`${date.slice(0,7)}-01T00:00:00Z`);next.setUTCMonth(next.getUTCMonth()+1);const end=next.toISOString().slice(0,10);months.push({date,days:Math.min(calendarDays(date,range.end),calendarDays(date,end)-1)});date=end;}
   const rows=group==='agent'?projects.map(p=>({project:p,label:p.name,key:p.no})):projects.flatMap(p=>(p.developerNames?.length?p.developerNames:['미배정']).map((name,i)=>({project:p,label:`${name} · ${p.name}`,key:`${p.no}:${i}`}))).sort((a,b)=>a.label.localeCompare(b.label,'ko'));
   return <div className="ld-gantt" tabIndex={0} aria-label="개발 일정 간트 차트, 좌우 스크롤 가능"><div style={{width:width+260,minWidth:'100%'}}><div className="ld-gantt-head"><div>에이전트</div><div className="ld-months" style={{width}}>{months.map(m=><span key={m.date} style={{width:`${m.days/total*100}%`}}>{m.date.slice(0,4)}년 {Number(m.date.slice(5,7))}월</span>)}</div></div><div className="ld-gantt-head ld-weeks"><div>최초 접수일 ~ G2 확정 마감일</div><div style={{width,position:'relative'}}>{weeks.map(date=><span key={date} style={{left:`${(calendarDays(range.start,date)-1)/total*100}%`}}>{Number(date.slice(5,7))}/{Number(date.slice(8))}</span>)}</div></div>
-  {rows.map(({project:p,label,key})=>{const status=scheduleStatus(p,today),start=p.start<range.start?range.start:p.start,end=p.end>range.end?range.end:p.end,left=(calendarDays(range.start,start)-1)/total*100,barWidth=calendarDays(start,end)/total*100;const completedEnd=Date.parse(p.start)+calendarDays(p.start,p.end)*(p.manualProgress??0)/100*86400000;const completedVisible=Math.max(0,Math.min(calendarDays(start,end)*86400000,completedEnd-Date.parse(start)))/(calendarDays(start,end)*86400000)*100;return <div className="ld-gantt-row" key={key}><button className="ld-gantt-name" title={label} onClick={()=>onSelect(p)}><span style={{background:colors[status]}}/>{label}</button><div className="ld-track" style={{width,backgroundSize:`${7/total*100}% 100%`}}><button className="ld-bar" aria-label={`${p.name}, ${percent(p)}, ${p.start}부터 ${p.end}`} onClick={()=>onSelect(p)} style={{left:`${left}%`,width:`${barWidth}%`,background:`${colors[status]}40`}}><span style={{width:`${completedVisible}%`,background:colors[status]}}/><small>{percent(p)} · {p.developerNames?.join(', ')||'미배정'}</small></button>{today>=range.start&&today<=range.end&&<i className="ld-today" style={{left:`${(calendarDays(range.start,today)-1)/total*100}%`}}/>}</div></div>;})}
+  {rows.map(({project:p,label,key})=>{
+    const status=scheduleStatus(p,today),openEnd=!validDay(p.end);
+    const start=p.start<range.start?range.start:p.start;
+    const actualEnd=openEnd?today:p.end,end=actualEnd>range.end?range.end:actualEnd;
+    const left=(calendarDays(range.start,start)-1)/total*100,barWidth=Math.max(0,calendarDays(start,end))/total*100;
+    const completedEnd=openEnd?0:Date.parse(p.start)+calendarDays(p.start,p.end)*(p.manualProgress??0)/100*86400000;
+    const completedVisible=openEnd?100:Math.max(0,Math.min(calendarDays(start,end)*86400000,completedEnd-Date.parse(start)))/(calendarDays(start,end)*86400000)*100;
+    const tailStart=[plusDay(today,1),p.start,range.start].sort().at(-1),tailLeft=(calendarDays(range.start,tailStart)-1)/total*100;
+    return <div className="ld-gantt-row" key={key}><button className="ld-gantt-name" title={label} onClick={()=>onSelect(p)}><span style={{background:colors[status]}}/><b className="ld-task-name">{label}</b>{openEnd&&<small className="ld-open-badge">마감 미정</small>}</button><div className="ld-track" style={{width,backgroundSize:`${7/total*100}% 100%`}}>
+      {barWidth>0&&<button className="ld-bar" aria-label={`${p.name}, ${percent(p)}, ${p.start}부터 ${openEnd?'오늘까지, 이후 일정 미정':p.end}`} onClick={()=>onSelect(p)} style={{left:`${left}%`,width:`${barWidth}%`,background:`${colors[status]}40`}}><span style={{width:`${completedVisible}%`,background:colors[status]}}/><small>{openEnd?`${statuses[status]} · 마감 미정`:percent(p)} · {p.developerNames?.join(', ')||'미배정'}</small></button>}
+      {openEnd&&tailStart<=range.end&&<button className="ld-open-tail" aria-label={`${p.name}, 이후 일정 미정`} onClick={()=>onSelect(p)} style={{left:`${tailLeft}%`,width:`${100-tailLeft}%`}}><small>이후 일정 미정</small></button>}
+      {today>=range.start&&today<=range.end&&<i className="ld-today" style={{left:`${(calendarDays(range.start,today)-1)/total*100}%`}}/>}</div></div>;
+  })}
   {!rows.length&&<p className="ld-empty">선택 조건에 맞는 개발 일정이 없습니다. 미입력 과제의 최초 접수일과 마감일을 확인해 주세요.</p>}
   </div></div>;
 }

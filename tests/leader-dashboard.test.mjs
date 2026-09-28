@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dashboardSummary,fiscalRange,calendarDays,validDay,validateProgressChange,scheduleStatus} from '../shared/leader-dashboard.mjs';
+import {dashboardSummary,fiscalRange,calendarDays,validDay,validateProgressChange,scheduleStatus,projectPeriod} from '../shared/leader-dashboard.mjs';
 import {saveProjectProgress} from '../server/project-progress.mjs';
 import {getPool,closePool} from '../server/db/pool.mjs';
+test('period uses original intake date, never manually entered development start',()=>{
+ assert.deepEqual(projectPeriod({receivedDate:'2026-01-01',developmentStartDate:'2026-05-01',committedDate:'2026-10-31'}),{start:'2026-01-01',end:'2026-10-31'});
+ assert.deepEqual(projectPeriod({developmentStartDate:'2026-05-01',committedDate:'2026-10-31'}),{start:'',end:'2026-10-31'});
+ for(const field of ['start','developmentStartDate','receivedDate'])assert.throws(()=>validateProgressChange({percent:25,note:'',[field]:'2026-05-01'}),/최초 접수일/);
+});
 test('inclusive fiscal calendar and KST date input',()=>{
  assert.equal(dashboardSummary([],fiscalRange(2026),'2026-09-28').elapsed,91);
  assert.equal(calendarDays('2024-02-28','2024-03-01'),3);
@@ -15,6 +20,19 @@ test('manual progress weighted by FULL intake-to-deadline days, excludes missing
  const result=dashboardSummary(projects,{start:'2026-01-05',end:'2026-01-06'},'2026-01-05');
  assert.equal(result.progress,25);assert.equal(result.scoped.length,3);assert.equal(result.missingDates,1);assert.equal(result.missingProgress,1);
  assert.equal(dashboardSummary([],fiscalRange(2026),'2026-09-28').progress,null);
+});
+test('unconfirmed deadlines remain visible but never receive an invented duration weight',()=>{
+ const open={start:'2026-01-01',end:'',manualProgress:90};
+ const confirmed={start:'2026-01-01',end:'2026-10-31',manualProgress:25};
+ const summary=dashboardSummary([open,confirmed],fiscalRange(2026),'2026-09-28');
+ assert.equal(summary.scoped.length,2);assert.equal(summary.unconfirmed,1);
+ assert.equal(summary.progress,25);assert.equal(summary.missingDates,0);
+ assert.equal(summary.missingProgress,0);assert.equal(scheduleStatus(open,'2026-09-28'),'prog');
+ assert.equal(dashboardSummary([open],fiscalRange(2026),'2026-09-28').progress,null);
+ assert.equal(dashboardSummary([open],{start:'2026-01-01',end:'2026-01-31'},'2026-09-28').scoped.length,1);
+ assert.equal(dashboardSummary([open],fiscalRange(2024),'2026-09-28').scoped.length,0);
+ assert.equal(dashboardSummary([open],fiscalRange(2027),'2026-09-28').scoped.length,1);
+ assert.equal(dashboardSummary([{start:'',end:''}],fiscalRange(2026),'2026-09-28').missingDates,1);
 });
 test('status never treats missing progress as completed',()=>{
  assert.equal(scheduleStatus({start:'2026-09-01',end:'2026-09-15'},'2026-09-28'),'late');

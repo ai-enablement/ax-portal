@@ -4,23 +4,26 @@ import {initialPics,picFields} from '../shared/rpa-pics.mjs';
 import {useState} from 'react';
 import {dayTimes,timeKey,scheduleSummary,applySchedulePreset} from '../shared/rpa-schedule.mjs';
 import {isRpaRunDay} from '../shared/rpa-display.mjs';
-import {developerOptions} from '../shared/rpa-developers.mjs';
+import {splitDevelopers} from '../shared/rpa-developers.mjs';
 import {Check,Circle,PlusCircle} from '@phosphor-icons/react';
 
 const keys=['과제번호','과제명','법인','본부','부서','접수타입','PIC','현업 이메일','개발자','운영 PC','현업배포일자','사용 화면','주기','실행 방법','실행일','실행 시간','개발공수(DAY)','월 작업 MH (25일)','비고'];
 const days=['월','화','수','목','금','토','일'];
 const requiredKeys=['과제번호','과제명','부서','PIC','개발자','운영 PC'];
-export default function RpaMasterForm({onSave,onDelete,onCancel,busy,projects=[],people=[],links=[],project=null}){
+export default function RpaMasterForm({onSave,onDelete,onCancel,busy,projects=[],developerRoster=[],links=[],project=null}){
+ const [developerIds,setDeveloperIds]=useState(()=>project?.developerIds||[]),[developersChanged,setDevelopersChanged]=useState(false);
+ const rosterOptions=developerRoster.map(u=>({value:u.id,label:`${u.name} · ${u.email||'MS 계정 미연결'}`}));
  const [pics,setPics]=useState(()=>project?initialPics(project,links):[{pic:'',email:''}]);
  const [deleteReason,setDeleteReason]=useState(''),[confirmCode,setConfirmCode]=useState('');
  const [fields,setFields]=useState(()=>({...Object.fromEntries([...keys,...days].map(k=>[k,days.includes(k)?(isRpaRunDay(project?.fields?.[k])?'O':''):String(project?.fields?.[k]??(k==='과제번호'?project?.code||'':''))])),...Object.fromEntries(days.map(d=>[timeKey(d),dayTimes(project?.fields)[d]]))})),[reason,setReason]=useState('');
  const set=(k,v)=>setFields(prev=>({...prev,[k]:v}));
  const presets=selected=>setFields(prev=>applySchedulePreset(prev,selected));
  function field(key,label=key,{span=1,type='text',placeholder='',options=false,area=false}={}){
-  const list=key==='개발자'?developerOptions(projects,people):options?[...new Set(projects.map(p=>p.fields?.[key]).filter(Boolean))]:[];
+  if(key==='개발자')return <label className={`rpa-master-span-${span}`} key={key}>{label}<span className="rpa-required"> *</span><RpaSelect aria-label={label} options={rosterOptions} multiple required={!project||developersChanged} disabled={busy} value={developerIds.join(' / ')} onChange={e=>{setDeveloperIds(splitDevelopers(e.target.value));setDevelopersChanged(true);}}/>{project&&!developersChanged&&<small>기존 기록: {fields[key]||'미등록'} · 다시 선택하면 등록된 계정으로 변경됩니다.</small>}</label>;
+  const list=options?[...new Set(projects.map(p=>p.fields?.[key]).filter(Boolean))]:[];
   return <label className={`rpa-master-span-${span}`} key={key}>{label}{requiredKeys.includes(key)&&<span className="rpa-required" aria-hidden="true"> *</span>}{area?<textarea rows={3} value={fields[key]} maxLength={10000} placeholder={placeholder} onChange={e=>set(key,e.target.value)}/>:options?<RpaSelect aria-label={label} options={list} multiple={key==='개발자'} allowCustom required={requiredKeys.includes(key)} value={fields[key]} onChange={e=>set(key,e.target.value)}/>:<input readOnly={!!project&&key==='과제번호'} required={requiredKeys.includes(key)} type={type} min={type==='number'?0:undefined} step={type==='number'?'any':undefined} maxLength={10000} value={fields[key]} placeholder={placeholder} onChange={e=>set(key,e.target.value)}/>}</label>;
  }
- return <form className="rpa-form rpa-master-form" onSubmit={e=>{e.preventDefault();if(!busy)onSave({action:project?'master-update':'master',pics,fields:{...fields,...picFields(pics),'실행 시간':days.some(d=>fields[timeKey(d)])?scheduleSummary(fields):fields['실행 시간']},...(project?{id:project.id,revision:project.revision??0,reason}:{})});}}>
+ return <form className="rpa-form rpa-master-form" onSubmit={e=>{e.preventDefault();if(!busy)onSave({...(!project||developersChanged?{developerIds}:{}),action:project?'master-update':'master',pics,fields:{...fields,...picFields(pics),'실행 시간':days.some(d=>fields[timeKey(d)])?scheduleSummary(fields):fields['실행 시간']},...(project?{id:project.id,revision:project.revision??0,reason}:{})});}}>
   <h2>{project?'RPA 과제 정보 수정':'신규 RPA 과제 등록'}</h2>
   <section><h3><Circle weight="fill"/>1. 과제 기본 식별 정보</h3>
    <div className="rpa-master-name-grid">{field('과제번호','과제번호',{placeholder:'예: HQ-0007'})}{field('과제명','과제명',{placeholder:'예: 수출입 선적 서류 자동 검증 및 관세청 유니패스 연동'})}</div>
