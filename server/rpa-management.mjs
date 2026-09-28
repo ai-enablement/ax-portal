@@ -46,3 +46,28 @@ export async function createRpaMaster(identity,body){
   return {id};
  });
 }
+export async function updateRpaMaster(identity,body){
+ return withTransaction(async c=>{
+  const actor=await rpaActor(identity,c);manager(actor);
+  const row=(await c.query('select * from agent_portal.rpa_projects where id=$1 for update',[body.id])).rows[0];
+  if(!row)fail(404,'과제를 찾을 수 없습니다.');
+  const old=row.payload;
+  if((body.revision??0)!==(old.revision??0))fail(409,'다른 사용자가 수정했습니다. 새로고침 후 다시 시도해 주세요.');
+  const input=body.fields;
+  if(!input||typeof input!=='object'||Array.isArray(input))fail(400,'과제 정보를 확인해 주세요.');
+  const allowed=['과제번호','과제명','법인','본부','부서','접수타입','PIC','현업 이메일','개발자','운영 PC','진행 상태','현업배포일자','사용 화면','주기','실행 방법','실행일','실행 시간','개발공수(DAY)','월 작업 MH (25일)','비고','월','화','수','목','금','토','일'];
+  for(const [k,v] of Object.entries(input))if(!allowed.includes(k)||typeof v!=='string'||v.length>10000)fail(400,'입력 내용을 확인해 주세요.');
+  const f={...old.fields,...input};
+  if(f['과제번호']!==old.code)fail(400,'과제번호는 변경할 수 없습니다.');
+  for(const k of ['과제명','부서','PIC','개발자','운영 PC'])if(!String(f[k]||'').trim())fail(400,`${k} 항목을 입력해 주세요.`);
+  if(typeof body.reason!=='string'||!body.reason.trim()||body.reason.length>1000)fail(400,'변경 사유를 입력해 주세요.');
+  const pics=f.PIC.split(/[/,;\n]/).map(s=>s.trim()).filter(Boolean);
+  const links=(await c.query('select pic from agent_portal.rpa_pic_links where project_id=$1',[body.id])).rows;
+  if(links.some(l=>!pics.includes(l.pic)))fail(409,'계정 연결된 PIC는 여기서 제거하거나 이름을 변경할 수 없습니다. PIC 계정 연결을 먼저 확인해 주세요.');
+  const changes=Object.fromEntries(Object.entries(input).filter(([k,v])=>String(old.fields?.[k]??'')!==v).map(([k,v])=>[k,{before:old.fields?.[k]??'',after:v}]));
+  if(!Object.keys(changes).length)return {saved:true,id:old.id};
+  const p={...old,name:f['과제명'].trim(),company:f['법인']||'',department:f['부서'],pics,developer:f['개발자'],status:f['진행 상태']||'',fields:f,revision:(old.revision??0)+1,history:[...(old.history||[]),{kind:'master_updated',label:'RPA 과제 정보 수정',at:new Date().toISOString(),actor:actor.display_name,actorEmail:actor.email,reason:body.reason.trim(),changes}]};
+  await c.query('update agent_portal.rpa_projects set payload=$2 where id=$1',[body.id,p]);
+  return {saved:true,id:old.id};
+ });
+}

@@ -84,31 +84,30 @@
 .rpa-intake-form .rpa-form-actions { border-top:1px solid #e4ebf5; padding-top:16px; }
 .rpa-intake-form .rpa-form-actions>button:first-child { border-color:transparent; }
 @media(max-width:620px){.rpa-request-grid{grid-template-columns:1fr}.rpa-modal:has(.rpa-intake-form){padding:20px 16px}.rpa-request-context{gap:7px 12px}}
-.rpa-table-wrap .rpa-master { min-width: 1660px; table-layout: auto; }
-.rpa-master td { white-space: pre-line; min-width: 90px; }
-.rpa-master td:nth-child(5) { min-width: 240px; max-width: 340px; }
-.rpa-master td:last-child { min-width: 190px; }
+.rpa-table-wrap .rpa-master { min-width:0; width:100%; table-layout:fixed; font-size:12px; }
+.rpa-table-wrap .rpa-master td,.rpa-table-wrap .rpa-master th { padding:10px 8px; min-width:0; white-space:normal; overflow-wrap:anywhere; line-height:1.55; }
+.rpa-table-wrap .rpa-master th { font-size:11px; }
+.rpa-master td:nth-child(1),.rpa-master td:nth-child(10) { white-space:normal; }
 .rpa-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.rpa-master .rpa-row-actions { flex-direction: column; align-items: stretch; }
-.rpa-master-wrap { max-height:70vh; isolation:isolate; }
-.rpa-master th { position:sticky; top:0; z-index:2; }
-.rpa-master th:last-child,.rpa-master td:last-child { position:sticky; right:0; min-width:185px; width:185px; background:#fff; box-shadow:-5px 0 9px -7px #365579; z-index:1; }
-.rpa-master th:last-child { z-index:3; background:#f6f9fd; }
-.rpa-master .rpa-row-actions button { display:flex; align-items:center; justify-content:center; gap:6px; font-size:13px; white-space:nowrap; }
+.rpa-master .rpa-row-actions { flex-direction:column; align-items:stretch; gap:5px; }
+.rpa-table-wrap.rpa-master-wrap { max-height:none; overflow:visible; isolation:isolate; }
+.rpa-master th { position:static; }
+.rpa-master td:last-child { position:static; background:#fff; }
+.rpa-master .rpa-row-actions button { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px; font-size:11px; white-space:normal; padding:5px 4px; min-height:28px; border-radius:5px; max-width:100%; overflow-wrap:anywhere; }
+.rpa-master .rpa-row-actions button svg { width:14px; height:14px; flex-shrink:0; }
 .rpa-master .rpa-action-request { background:#173b67; color:white; border-color:#173b67; }
-.rpa-master .rpa-action-browse { border-color:transparent; padding:5px 2px; font-size:12px; }
+.rpa-master .rpa-action-browse { border-color:transparent; padding:3px 0; font-size:10px; gap:3px; }
 .rpa-count { background:#eaf2ff; color:#24549a; border-radius:4px; padding:2px 5px; }
 .rpa-running { background:#fff5de; color:#965f11; border-radius:4px; padding:2px 4px; }
-.rpa-intake-tag { display:inline-block; padding:3px 8px; border:1px solid #e4e9f1; background:#f3f6fa; color:#456080; border-radius:5px; font-size:12px; white-space:nowrap; }
-.rpa-pc { display:inline-flex; align-items:center; gap:6px; font-size:13px; }
+.rpa-intake-tag { display:inline-block; max-width:100%; padding:3px 5px; border:1px solid #e4e9f1; background:#f3f6fa; color:#456080; border-radius:5px; font-size:12px; white-space:normal; overflow-wrap:anywhere; }
+.rpa-pc { display:inline-flex; align-items:center; gap:4px; font-size:12px; }
 .rpa-pc svg,.rpa-schedule-time svg { flex-shrink:0; color:#7a8ea8; }
-.rpa-schedule { min-width:185px; }
-.rpa-schedule-time { display:flex; align-items:flex-start; gap:6px; white-space:pre-line; font-size:13px; }
-.rpa-weekdays { display:flex; gap:4px; margin-top:6px; }
-.rpa-weekdays span { display:inline-flex; width:22px; height:22px; align-items:center; justify-content:center; border-radius:4px; color:#8796aa; background:#f5f7fa; font-size:12px; }
+.rpa-schedule { min-width:0; }
+.rpa-schedule-time { display:flex; align-items:flex-start; gap:4px; white-space:pre-line; font-size:12px; overflow-wrap:anywhere; }
+.rpa-weekdays { display:flex; flex-wrap:wrap; gap:3px; margin-top:6px; }
+.rpa-weekdays span { display:inline-flex; flex:0 0 19px; width:19px; height:20px; align-items:center; justify-content:center; border-radius:4px; color:#8796aa; background:#f5f7fa; font-size:11px; }
 .rpa-weekdays .active { background:#2563df; color:#fff; font-weight:600; }
 .rpa-scroll-hint { color:#72859e; font-size:12px; margin:10px 0; }
-@media(max-width:540px){.rpa-master th:last-child,.rpa-master td:last-child{min-width:150px;width:150px}.rpa-master .rpa-row-actions button{font-size:12px;padding:8px 4px}.rpa-master .rpa-action-browse{flex-wrap:wrap}}
 .rpa-toolbar label { min-width: 0; display:flex; gap:8px; align-items:center; }
 .rpa-toolbar select { max-width: 460px; width:100%; }
 .rpa-service>.rpa-primary { margin-bottom:16px; }

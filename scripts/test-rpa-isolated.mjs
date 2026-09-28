@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {getPool,closePool} from '../server/db/pool.mjs';
 import {listRpa,createRpaRequest,linkRpaPic,readRpaFile} from '../server/rpa-portal.mjs';
-import {updateRpaRequest,createRpaMaster} from '../server/rpa-management.mjs';
+import {updateRpaRequest,createRpaMaster,updateRpaMaster} from '../server/rpa-management.mjs';
 const pool=getPool(),client=await pool.connect(),originalQuery=pool.query,originalConnect=pool.connect;
 let checks=0;
 try{
@@ -58,6 +58,16 @@ try{
  assert.equal((await listRpa(identity('general_user'))).projects.some(p=>p.id===newMaster.id),false);checks++;
  await linkRpaPic(identity('admin'),{projectId:newMaster.id,pic:'Test',email:'general_user@example.invalid',reason:'new master visibility test'});
  assert.equal((await listRpa(identity('general_user'))).projects.some(p=>p.id===newMaster.id),true);checks++;
+ const patch={id:newMaster.id,revision:0,fields:{...master.fields,'과제명':'Changed'},reason:'Correction'};
+ await assert.rejects(()=>updateRpaMaster(identity('general_user'),patch),e=>e.status===403);checks++;
+ for(const [revision,role]of ['team_member','team_leader','admin'].entries()){
+  await updateRpaMaster(identity(role),{...patch,revision,fields:{...patch.fields,'과제명':'Changed '+role}});checks++;
+ }
+ const edited=(await listRpa(identity('general_user'))).projects.find(p=>p.id===newMaster.id);
+ assert.equal(edited.id,newMaster.id);assert.equal(edited.name,'Changed admin');assert.equal(edited.fields['토'],'O');assert.equal(edited.history.at(-1).changes['과제명'].after,'Changed admin');checks+=4;
+ await assert.rejects(()=>updateRpaMaster(identity('admin'),patch),e=>e.status===409);checks++;
+ await assert.rejects(()=>updateRpaMaster(identity('admin'),{...patch,revision:3,fields:{...patch.fields,PIC:'Other'}}),e=>e.status===409);checks++;
+ await assert.rejects(()=>updateRpaMaster(identity('admin'),{...patch,revision:3,fields:{...patch.fields,'과제번호':'OTHER'}}),e=>e.status===400);checks++;
  await assert.rejects(()=>createRpaMaster(identity('admin'),master),e=>e.status===409);checks++;
  for(const role of ['bts','bp_solution']){assert.equal((await listRpa(identity(role))).requests.length,0);await assert.rejects(()=>readRpaFile(identity(role),file),e=>e.status===404);await assert.rejects(()=>createRpaRequest(identity(role),{...body,key:randomUUID()}),e=>e.status===404);checks+=3;}
  await assert.rejects(()=>createRpaRequest(identity('general_user'),{...body,key:randomUUID(),files:[{name:'bad.png',base64:'aGVsbG8='}]}),e=>e.status===400);checks++;

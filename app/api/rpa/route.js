@@ -1,5 +1,5 @@
 import {resolvePortalIdentity} from '../../../server/auth.mjs';
-import {updateRpaRequest,createRpaMaster} from '../../../server/rpa-management.mjs';
+import {updateRpaRequest,createRpaMaster,updateRpaMaster} from '../../../server/rpa-management.mjs';
 import {isSameOriginRequest} from '../../../server/request-origin.mjs';
 import {listRpa,createRpaRequest,linkRpaPic,readRpaFile} from '../../../server/rpa-portal.mjs';
 export const runtime='nodejs';
@@ -19,6 +19,7 @@ export async function POST(request){try{
  if(body.action==='link')return Response.json(await linkRpaPic(identity,body));
  if(body.action==='update')return Response.json(await updateRpaRequest(identity,body));
  if(body.action==='master')return Response.json(await createRpaMaster(identity,body),{status:201});
+ if(body.action==='master-update')return Response.json(await updateRpaMaster(identity,body));
  if(body.action!=='create')return Response.json({error:'지원하지 않는 작업입니다.'},{status:400});
  return Response.json(await createRpaRequest(identity,body),{status:201});
 }catch(e){return errorResponse(e);}}

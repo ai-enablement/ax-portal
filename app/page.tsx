@@ -173,6 +173,7 @@ const navGroups = [
     items: [
       { id: "home" as View, icon: "⌂", label: "홈" },
       { id: "teamboard" as View, icon: "▥", label: "AI 활성화팀 대시보드" },
+      { id: "governance" as View, icon: "✓", label: "Admin & Governance" },
     ],
   },
   {
@@ -193,7 +194,6 @@ const navGroups = [
     items: [
       { id: "gallery" as View, icon: "▦", label: "Agent Gallery" },
       { id: "rpa" as View, icon: <ArrowsClockwise size={16}/>, label: "RPA Portal" },
-      { id: "governance" as View, icon: "✓", label: "Admin & Governance" },
     ],
   },
 ];
@@ -1696,17 +1696,6 @@ export default function Home() {
                   )}
                 </button>
               ))}
-              {group.label === "SERVICE & CONTROL" && canAccessLlmCost && (
-                <button
-                  type="button"
-                  className="nav-external-link"
-                  onClick={openLlmCostMonitoring}
-                >
-                  <span className="nav-icon">₩</span>
-                  <span className="nav-copy">LLM Cost Monitoring</span>
-                  <ArrowRight size={13} weight="bold" />
-                </button>
-              )}
               {group.label === "SERVICE & CONTROL" && (
                 <button
                   type="button"
@@ -1720,6 +1709,17 @@ export default function Home() {
                 >
                   <span className="nav-icon"><ArrowsClockwise size={16} aria-hidden="true" /></span>
                   <span className="nav-copy">RPA Restart</span>
+                  <ArrowRight size={13} weight="bold" />
+                </button>
+              )}
+              {group.label === "SERVICE & CONTROL" && canAccessLlmCost && (
+                <button
+                  type="button"
+                  className="nav-external-link"
+                  onClick={openLlmCostMonitoring}
+                >
+                  <span className="nav-icon">₩</span>
+                  <span className="nav-copy">LLM Cost Monitoring</span>
                   <ArrowRight size={13} weight="bold" />
                 </button>
               )}
