@@ -1,0 +1,61 @@
+import {randomUUID} from 'node:crypto';
+import {getPool,withTransaction} from './db/pool.mjs';
+import {validateUpload} from './document-files.mjs';
+import {canReadAllRpa,canLinkRpaPic,validateRpaRequest} from '../shared/rpa-policy.mjs';
+const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
+export async function rpaActor(identity,client=getPool()){
+ if(!identity?.email)fail(401,'로그인이 필요합니다.');
+ const actor=(await client.query('select id,email,display_name,app_role,is_active from agent_portal.users where lower(email)=lower($1) and is_active=true',[identity.email])).rows[0];
+ if(!actor)fail(403,'활성 포털 계정이 필요합니다.');
+ // Only the server-resolved, explicitly enabled development switcher can override.
+ // Entra/production callers always use the stored role, never a request-body role.
+ if(process.env.NODE_ENV!=='production'&&identity.source==='development'&&identity.canSwitchRole&&['admin','team_leader','team_member','general_user','bts','bp_solution'].includes(identity.appRole))return {...actor,app_role:identity.appRole};
+ return actor;
+}
+const scope=`($1::boolean or exists(select 1 from agent_portal.rpa_pic_links l where l.project_id=p.id and l.email=$2))`;
+async function allowedProject(client,actor,id){
+ const p=(await client.query(`select p.* from agent_portal.rpa_projects p where p.id=$3 and ${scope}`,[canReadAllRpa(actor.app_role),actor.email.toLowerCase(),id])).rows[0];
+ if(!p)fail(404,'조회 가능한 RPA 과제가 아닙니다.');return p;
+}
+export async function listRpa(identity){
+ const pool=getPool(),actor=await rpaActor(identity,pool),args=[canReadAllRpa(actor.app_role),actor.email.toLowerCase()];
+ const projects=(await pool.query(`select p.payload from agent_portal.rpa_projects p where ${scope} order by p.project_code,p.id`,args)).rows.map(r=>r.payload);
+ const tickets=(await pool.query(`select r.id::text,r.project_id,r.payload,r.status,r.created_at,r.updated_at,u.display_name as requester,u.email as requester_email from agent_portal.rpa_requests r join agent_portal.rpa_projects p on p.id=r.project_id join agent_portal.users u on u.id=r.created_by where ${scope} order by r.created_at desc`,args)).rows;
+ const requests=tickets.map(r=>({...r.payload,id:r.id,projectId:r.project_id,code:`REQ-${new Date(r.created_at).getUTCFullYear()}-${r.id.padStart(6,'0')}`,status:r.payload.onHold?'held':r.status,createdAt:r.created_at,updatedAt:r.updated_at,requester:r.requester,requesterEmail:r.requester_email}));
+ const links=canLinkRpaPic(actor.app_role)?(await pool.query('select project_id as "projectId",pic,email from agent_portal.rpa_pic_links order by project_id,pic')).rows:[];
+ return {projects,requests,links,canReadAll:canReadAllRpa(actor.app_role),canLink:canLinkRpaPic(actor.app_role),actor:{name:actor.display_name,email:actor.email},mailEnabled:false};
+}
+export async function createRpaRequest(identity,body){
+ const error=validateRpaRequest(body);if(error)fail(400,error);
+ if(!Array.isArray(body.files)||body.files.length>5)fail(400,'첨부파일은 최대 5개입니다.');
+ const files=body.files.map(f=>{const bytes=Buffer.from(String(f.base64||''),'base64');let mime;try{mime=validateUpload(String(f.name||''),bytes);}catch(e){fail(400,e.message);}return {id:randomUUID(),name:String(f.name).replace(/[\r\n\\/]/g,'_').slice(0,180),mime,size:bytes.length,bytes};});
+ if(files.reduce((s,f)=>s+f.size,0)>10*1024*1024)fail(413,'첨부파일 총 용량은 10MB 이하입니다.');
+ return withTransaction(async client=>{
+  const actor=await rpaActor(identity,client);await allowedProject(client,actor,body.projectId);
+  const existing=(await client.query('select id::text,created_by from agent_portal.rpa_requests where idempotency_key=$1',[body.key])).rows[0];
+  if(existing){if(String(existing.created_by)!==String(actor.id))fail(409,'다른 접수에 사용된 키입니다.');return {id:existing.id};}
+  const payload={title:body.title.trim(),description:body.description.trim(),type:body.type,priority:body.priority,occurredDate:body.occurredDate,notifyEmail:body.notifyEmail.trim().toLowerCase(),log:String(body.log||''),errorStep:String(body.errorStep||'').slice(0,1000),files:files.map(({id,name,size})=>({id,name,size})),history:[{kind:'created',at:new Date().toISOString(),label:'요청 접수',actor:actor.display_name}],mailStatus:'not_configured'};
+  const row=(await client.query(`insert into agent_portal.rpa_requests(project_id,created_by,idempotency_key,payload) values($1,$2,$3,$4) returning id::text`,[body.projectId,actor.id,body.key,payload])).rows[0];
+  for(const f of files)await client.query('insert into agent_portal.rpa_request_files(id,request_id,name,mime_type,byte_size,content) values($1,$2,$3,$4,$5,$6)',[f.id,row.id,f.name,f.mime,f.size,f.bytes]);
+  return row;
+ });
+}
+export async function linkRpaPic(identity,body){
+ const email=String(body.email||'').trim().toLowerCase(),reason=String(body.reason||'').trim();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||!reason||reason.length>1000)fail(400,'연결할 이메일과 변경 사유를 입력해 주세요.');
+ return withTransaction(async client=>{
+  const actor=await rpaActor(identity,client);if(!canLinkRpaPic(actor.app_role))fail(403,'AI 활성화팀 팀원·팀장 또는 Admin만 PIC 계정을 연결할 수 있습니다.');
+  const p=(await client.query('select payload from agent_portal.rpa_projects where id=$1 for update',[body.projectId])).rows[0];
+  if(!p||!(p.payload.pics.length?p.payload.pics:['PIC 미지정']).includes(body.pic))fail(400,'원본 PIC를 확인해 주세요.');
+  const old=(await client.query('select email from agent_portal.rpa_pic_links where project_id=$1 and pic=$2',[body.projectId,body.pic])).rows[0];
+  await client.query(`insert into agent_portal.rpa_pic_links(project_id,pic,email,changed_by) values($1,$2,$3,$4) on conflict(project_id,pic) do update set email=excluded.email,changed_by=excluded.changed_by,updated_at=now()`,[body.projectId,body.pic,email,actor.id]);
+  await client.query('insert into agent_portal.rpa_pic_history(project_id,pic,previous_email,email,reason,changed_by) values($1,$2,$3,$4,$5,$6)',[body.projectId,body.pic,old?.email||null,email,reason,actor.id]);
+  return {saved:true};
+ });
+}
+export async function readRpaFile(identity,id){
+ if(!/^[\da-f-]{36}$/i.test(id))fail(404,'파일을 찾을 수 없습니다.');
+ const pool=getPool(),actor=await rpaActor(identity,pool);
+ const f=(await pool.query('select f.*,r.project_id from agent_portal.rpa_request_files f join agent_portal.rpa_requests r on r.id=f.request_id where f.id=$1',[id])).rows[0];
+ if(!f)fail(404,'파일을 찾을 수 없습니다.');await allowedProject(pool,actor,f.project_id);return f;
+}

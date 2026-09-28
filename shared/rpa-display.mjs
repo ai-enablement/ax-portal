@@ -1,0 +1,6 @@
+export const MASTER_COLUMNS=['과제번호','법인','본부','부서','과제명','접수타입','현업 PIC','주기','개발자','배포일자','운영 PC','실행방법','실행 시간 및 요일'];
+export const STATUS_LABELS={received:'접수 대기',working:'조치·개발중',testing:'현업 검증',completed:'조치 완료',held:'반려/보류'};
+export const isRpaRunDay=value=>value===true||['O','○','〇','Y','YES','TRUE','1','V','✓'].includes(String(value??'').trim().toUpperCase());
+export function masterCells(p){const f=p.fields||{};return [p.code,p.company,f['본부'],p.department,p.name,f['접수타입'],p.pics?.join('/'),f['주기'],p.developer,f['현업배포일자'],f['운영 PC'],f['실행 방법'],[f['실행 시간'],f['실행일'],['월','화','수','목','금','토','일'].filter(d=>isRpaRunDay(f[d])).join(' · ')].filter(Boolean).join('\n')];}
+export function projectHistory(project,requests){return [...(project.history||[]).map(h=>({...h,kind:h.kind||'master'})),...requests.filter(r=>r.projectId===project.id).flatMap(r=>(r.history||[]).map(h=>({...h,kind:h.kind||'created',requestId:r.id,requestCode:r.code})))].sort((a,b)=>String(b.at).localeCompare(String(a.at)));}
+export function filterRpaRequests(requests,{query='',status='all',priority='all',projectId='all'}){return requests.filter(r=>(status==='all'||r.status===status)&&(priority==='all'||r.priority===priority)&&(projectId==='all'||r.projectId===projectId)&&JSON.stringify(r).toLowerCase().includes(query.toLowerCase()));}

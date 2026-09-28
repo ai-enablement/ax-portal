@@ -8,6 +8,7 @@ import "./team-dashboard-compact.css";
 import "./team-dashboard-readability.css";
 import "./status-badges.css";
 import "./project-management-layout.css";
+import RpaPortal from './rpa-portal';
 import {isImportInProgress, canBackfillDocument, needsImportCompletionRepair} from "../shared/historical-import-policy.mjs";
 import {selectedProjectNumber,currentWorkflowTarget,savedProjectView} from "../shared/project-selection.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -71,6 +72,7 @@ type View =
   | "operations"
   | "hub"
   | "gallery"
+  | "rpa"
   | "governance";
 
 const ACCOUNT_ROLES = {
@@ -190,6 +192,7 @@ const navGroups = [
     label: "SERVICE & CONTROL",
     items: [
       { id: "gallery" as View, icon: "▦", label: "Agent Gallery" },
+      { id: "rpa" as View, icon: <ArrowsClockwise size={16}/>, label: "RPA Portal" },
       { id: "governance" as View, icon: "✓", label: "Admin & Governance" },
     ],
   },
@@ -1251,7 +1254,7 @@ export default function Home() {
       .filter((group) => group.label !== "AGENT LIFECYCLE")
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => allowed.has(item.id)),
+        items: group.items.filter((item) => item.id === 'rpa' || allowed.has(item.id)),
       }))
       .filter((group) => group.items.length > 0);
   }, [role]);
@@ -1917,6 +1920,7 @@ export default function Home() {
             notify={notify}
           />
         )}
+        {view === 'rpa' && identityStatus === 'ready' && <RpaPortal key={`${identity?.userId}:${role}`} devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined} />}
         {view === "gallery" && (
           <Gallery
             query={query}
