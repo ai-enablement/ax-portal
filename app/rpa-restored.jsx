@@ -37,14 +37,14 @@ export function ProjectLog({project,requests,onOpen,onBrowse,onClose}){
   <footer className="rpa-log-footer"><button onClick={()=>onBrowse(project)}>이 과제의 요청 목록 보기 <CaretRight size={14}/></button>{onClose&&<button onClick={onClose}>닫기</button>}</footer>
  </div>;
 }
-export function ProgressEditor({request,developers,onSave,busy,actor}){
+export function ProgressEditor({request,developers,onSave,busy}){
  const [draft,setDraft]=useState(()=>({status:request.status,assignee:request.assignee||'',analysis:request.analysis||'',resolution:request.resolution||'',expectedAt:request.expectedAt?new Date(new Date(request.expectedAt).getTime()+9*3600000).toISOString().slice(0,16):'',reason:''}));
  const change=(key,value)=>setDraft(prev=>({...prev,[key]:value}));
  const next=({received:'working',working:'testing',testing:'completed'})[draft.status];
  const target=draft.status!==request.status?draft.status:(next||draft.status);
  const actionLabel=draft.status!==request.status?`${STATUS_LABELS[target]} 적용`:next?`완료 · ${STATUS_LABELS[next]}로 이동`:draft.status==='held'?'보류 내용 반영':'완료 내용 반영';
  return <form className="rpa-form rpa-progress-editor" onSubmit={async e=>{e.preventDefault();if(busy)return;await onSave({action:'update',id:request.id,version:request.updatedAt,...draft,status:target,expectedAt:draft.expectedAt?draft.expectedAt+':00+09:00':''});}}>
-  <header className="rpa-progress-heading"><h3><ClockCounterClockwise size={18}/>RPA 담당자 유지보수 진행상황 갱신</h3><span>작업자: <strong>{actor?.display_name||actor?.name||actor?.email||'현재 로그인 사용자'}</strong></span></header>
+  <header className="rpa-progress-heading"><h3><ClockCounterClockwise size={18}/>RPA 담당자 유지보수 진행상황 갱신</h3></header>
   <fieldset className="rpa-progress-stages" disabled={busy}><legend>진행 상태 단계 변경</legend><div>{Object.entries(STATUS_LABELS).map(([key,label],i)=><button type="button" key={key} aria-pressed={draft.status===key} onClick={()=>change('status',key)}>{i<4?`${i+1}. `:''}{label}</button>)}</div></fieldset>
   <div className="rpa-form-pair"><label>담당 개발자<RpaSelect aria-label="담당 개발자" allowCustom options={developers} value={draft.assignee} onChange={e=>change('assignee',e.target.value)} disabled={busy}/></label><label>반영 예정 일시 (KST)<input disabled={busy} type="datetime-local" value={draft.expectedAt} onChange={e=>change('expectedAt',e.target.value)}/></label></div>
   <label>원인 분석 결과 (Root Cause)<textarea disabled={busy} rows={3} maxLength={15000} value={draft.analysis} onChange={e=>change('analysis',e.target.value)} placeholder="오류가 발생한 기술적·환경적 원인을 기재해 주세요. 예: 화면 선택자 변경, 타임아웃, 마스터 코드 미등록 등"/></label>
