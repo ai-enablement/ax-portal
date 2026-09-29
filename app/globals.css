@@ -19211,6 +19211,10 @@ body {
 .gallery-queue-pagination { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px; border-top: 1px solid #e1e5eb; }
 .gallery-queue-pagination button { min-height: 40px; padding: 8px 14px; border: 1px solid #ccd6e3; border-radius: 6px; background: #fff; color: #183f6c; font-size: 14px; }
 .gallery-queue-pagination button:disabled { opacity: .45; cursor: default; }
+.top-actions .portal-logout { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; min-height: 36px; padding: 7px 10px; border: 1px solid #d6dfeb; border-radius: 6px; background: #fff; color: #183f6c; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.top-actions .portal-logout:hover:not(:disabled) { background: #f1f5fa; border-color: #9bafc9; }
+.top-actions .portal-logout:focus-visible { outline: 2px solid #285ecb; outline-offset: 3px; }
+.top-actions .portal-logout:disabled { opacity: .55; cursor: default; }
 @media (max-width: 1000px) {
   .gallery-page .gallery-review-workspace { grid-template-columns: 1fr; }
 }

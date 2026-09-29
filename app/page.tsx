@@ -22,6 +22,7 @@ import NativeAgentWorkspace from './native-agent-workspace';
 import ProjectDeadline from './project-deadline';
 import LeaderDashboard from './leader-dashboard';
 import D2BAccessManagement from './d2b-access-management';
+import LogoutButton from './logout-button';
 import ProjectCategoryEditor from './project-category';
 import ArdReview from './ard-review';
 import HistoricalAdmin from './historical-admin';
@@ -1899,6 +1900,7 @@ export default function Home() {
                 </div>
               </section>
             )}
+            <LogoutButton development={Boolean(identity?.canSwitchRole)} />
             <div className="avatar">
               {identity?.displayName?.trim().charAt(0) ||
                 (role === ACCOUNT_ROLES.admin ? "A" : "U")}
