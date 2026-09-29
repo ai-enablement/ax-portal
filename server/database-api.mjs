@@ -2,6 +2,8 @@ import { getPool, withTransaction } from "./db/pool.mjs";
 import {withSharedUsers,sharedAccountFields} from './shared-accounts.mjs';
 import {projectActorIds,isProjectDeveloper} from '../shared/project-actors.mjs';
 import {saveProjectProgress} from './project-progress.mjs';
+import {effectiveProgress,completeDeploymentProgress} from '../shared/deployment-progress.mjs';
+import {leaderDashboardScope} from './leader-dashboard-access.mjs';
 import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {draftProjectCode} from './project-numbering.mjs';
 import {categoryChange} from '../shared/project-category.mjs';
@@ -819,6 +821,7 @@ function portalProjectFromRow(row) {
     category: row.projectCategory || "개별 접수",
     description: row.projectSummary || runtime.description || "",
     journeyStep,
+    manualProgress:effectiveProgress({...runtime,journeyStep}),
     stage: displayStage({...runtime,journeyStep}),
     progress: Number(row.progressPercent || 0),
     nextAction: row.nextAction || runtime.nextAction || "다음 작업 확인 필요",
@@ -848,6 +851,25 @@ async function listOperationalProjects(identity) {
   const result=await listNotificationProjectsForActor(pool, actor);
   if(result.body?.projects)result.body.projects=result.body.projects.map(project=>redactAssessmentContent(project,actor.app_role));
   return result;
+}
+
+async function listLeaderDashboardProjects(identity) {
+ const pool=getPool(),actor=await findUser(pool,identity);
+ if(!actor?.is_active)return {status:403,body:{error:'Active portal account is required.'}};
+ const scope=leaderDashboardScope(actor);
+ if(scope!=='D2B'){
+  if(actor.app_role==='general_user')return {status:403,body:{error:'리더용 대시보드 접근 권한이 없습니다.'}};
+  const result=await listOperationalProjects(identity);
+  return {...result,body:{...result.body,dashboardScope:scope}};
+ }
+ // Do not return documents, participant emails or non-D2B projects to dashboard-only viewers.
+ const result=await pool.query(`select p.project_code as no,p.project_name as name,p.project_category as category,
+ p.created_at as created,p.committed_completion_date as deadline,p.current_stage_code as stage,
+ ir.raw_answers->'portalState' as state,
+ coalesce((select jsonb_agg(u.display_name order by pm.assigned_at) from agent_portal.project_members pm join agent_portal.users u on u.id=pm.user_id where pm.project_id=p.id and pm.relationship='developer' and pm.ended_at is null),'[]'::jsonb) as developers
+ from agent_portal.projects p left join agent_portal.intake_requests ir on ir.project_id=p.id
+ where p.deleted_at is null and p.project_category='D2B' order by p.updated_at desc`);
+ return {status:200,body:{dashboardScope:scope,projects:result.rows.map(r=>({no:r.no,name:r.name,category:r.category,receivedDate:r.state?.receivedDate||kstDate(r.created),committedDate:r.deadline?kstDate(r.deadline):r.state?.committedDate||'',manualProgress:effectiveProgress({...r.state,journeyStep:portalJourneyStep(r.stage)}),developerNames:r.developers,developerIds:[],source:'database'}))}};
 }
 
 // Internal worker only. Reuse the same visibility predicate and DB projection as the UI.
@@ -1313,6 +1335,8 @@ export async function updateOperationalProject(projectCode, body, identity, tran
     }
     try {Object.assign(merged,applyWorkflow(previousState,changes,merged,actor,project));}
     catch(error){if(error instanceof WorkflowError)return {status:error.status,body:{error:error.message}};throw error;}
+    const automaticProgress=completeDeploymentProgress(merged,actor);
+    if(automaticProgress)await client.query("insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,after_data) values($1,$2,'PROJECT_AUTO_PROGRESS','project',$3,$4::jsonb)",[actor.id,project.id,projectCode,JSON.stringify(automaticProgress)]);
     if(changes.gateVote?.gate==='G2')await persistArdApprovalDocument(client,project,merged,actor);
     if(changes.feaDraft||changes.feaCompleted)merged.feaAuthor={id:String(actor.id),name:actor.display_name,at:new Date().toISOString()};
     delete merged.historicalContactUpdate;
@@ -1564,6 +1588,7 @@ async function assignProjectDeveloper(projectCode, body, identity) {
 export async function handleDatabaseRequest({ method, pathname, body = {}, identity }) {
   if (method === "GET" && pathname === "/health") return health();
   if (method === "GET" && pathname === "/projects") return listOperationalProjects(identity);
+  if (method === "GET" && pathname === "/leader-dashboard") return listLeaderDashboardProjects(identity);
   if (method === "POST" && pathname === "/projects") {
     try { return await createOperationalProject(body, identity); }
     catch (error) {

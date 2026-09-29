@@ -1,6 +1,7 @@
 import { resolvePortalIdentity, UI_ROLES } from "../../../../server/auth.mjs";
 import { getPool } from "../../../../server/db/pool.mjs";
 import { ensurePortalUser } from "../../../../server/database-api.mjs";
+import {leaderDashboardScope} from '../../../../server/leader-dashboard-access.mjs';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export async function GET(request) {
     email: portalUser.email,
     displayName: portalUser.display_name || identity.displayName,
     appRole: portalUser.app_role,
+    leaderDashboardScope:leaderDashboardScope(portalUser),
     accountRole: UI_ROLES[portalUser.app_role],
   };
   return Response.json(effectiveIdentity, {

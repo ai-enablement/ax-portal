@@ -99,6 +99,7 @@ const ACCOUNT_APP_ROLES: Record<AccountRole, "team_leader" | "team_member" | "bt
 type PortalIdentity = {
   userId: string;
   sharedUserIds?: string[];
+  leaderDashboardScope?: 'all' | 'D2B';
   email: string;
   displayName: string;
   objectId: string;
@@ -1275,6 +1276,7 @@ export default function Home() {
             ? new Set<View>(nav.map((item) => item.id))
             : new Set<View>(["governance", "hub", "gallery"]);
 
+    if(identity?.leaderDashboardScope==='D2B')allowed.add('teamboard');
     return navGroups
       .filter((group) => group.label !== "AGENT LIFECYCLE")
       .map((group) => ({
@@ -1282,7 +1284,7 @@ export default function Home() {
         items: group.items.filter((item) => item.id === 'rpa' || allowed.has(item.id)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [role]);
+  }, [role,identity?.leaderDashboardScope]);
 
   const notify = (message: string) => {
     setToast(message);
@@ -1936,7 +1938,7 @@ export default function Home() {
             notify={notify}
           />
         )}
-        {view === "teamboard" && role !== ACCOUNT_ROLES.user && <LeaderDashboard key={`${identity?.userId}:${role}`} identity={identity} devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined} onProject={(projectNo:string)=>openWorkflow('home',projectNo)}/>}
+        {view === "teamboard" && (role !== ACCOUNT_ROLES.user || identity?.leaderDashboardScope==='D2B') && <LeaderDashboard key={`${identity?.userId}:${role}:${identity?.leaderDashboardScope}`} identity={identity} devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined} onProject={(projectNo:string)=>openWorkflow('home',projectNo)}/>}
         {view === "operations" &&
           (adminProjectItems.some((project) => project.journeyStep >= 9) ? (
             <OperationsImprovement
