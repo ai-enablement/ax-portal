@@ -1418,7 +1418,7 @@ async function deleteOperationalProject(projectCode, identity) {
   });
 }
 
-async function listTeamWorkload(identity) {
+async function listTeamWorkload(identity, membersOnly = false) {
   const pool = getPool();
   const actor = await findUser(pool, identity);
   if (!actor || !actor.is_active || !teamWorkspaceRoles.has(actor.app_role)) {
@@ -1437,7 +1437,7 @@ async function listTeamWorkload(identity) {
                    when 'bts' then 3 when 'bp_solution' then 4 else 5 end,
                  u.display_name, u.email`,
     ),
-    pool.query(
+    membersOnly ? Promise.resolve({ rows: [] }) : pool.query(
       `select p.project_code as id, p.project_name as title,
               p.project_category as category,
               coalesce(rt.team_name, '미지정') as "requestTeam",
@@ -1642,6 +1642,7 @@ export async function handleDatabaseRequest({ method, pathname, body = {}, ident
   }
   if (method === "GET" && pathname === "/governance/role-history") return listRoleHistory(identity);
   if (method === "GET" && pathname === "/team/workload") return listTeamWorkload(identity);
+  if (method === "GET" && pathname === "/team/developers") return listTeamWorkload(identity, true);
   if (method === "PUT" && pathname.startsWith("/team/projects/") && pathname.endsWith("/developer")) {
     const parts = pathname.split("/").filter(Boolean);
     const projectCode = decodeURIComponent(parts.at(-2) || "");

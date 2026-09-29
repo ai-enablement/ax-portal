@@ -8,14 +8,14 @@ export async function runRpaMailCycle(env=process.env,send=deliverMail){
  const client=await getPool().connect();let locked=false;
  try{
   locked=(await client.query('select pg_try_advisory_lock(8291710) as locked')).rows[0].locked;if(!locked)return;
-  const rows=(await client.query("select id,payload from agent_portal.rpa_requests where exists(select 1 from jsonb_array_elements(coalesce(payload->'completionMailJobs','[]'::jsonb) || coalesce(payload->'stageMailJobs','[]'::jsonb)) job where job->>'status' in ('pending','sending')) order by id limit 20")).rows;
+  const rows=(await client.query("select id,payload from agent_portal.rpa_requests where payload->>'deletedAt' is null and exists(select 1 from jsonb_array_elements(coalesce(payload->'completionMailJobs','[]'::jsonb) || coalesce(payload->'stageMailJobs','[]'::jsonb)) job where job->>'status' in ('pending','sending')) order by id limit 20")).rows;
   for(const row of rows)for(const key of ['stageMailJobs','completionMailJobs'])for(const candidate of row.payload[key]||[]){
    if(!['pending','sending'].includes(candidate.status))continue;
    const statusKey=key==='stageMailJobs'?'stageMailStatus':'mailStatus',prefix=key==='stageMailJobs'?'단계 알림':'완료';
    // Re-read under a short row lock; never overwrite newer stage/history data.
    const mutate=async fn=>withTransaction(async c=>{
     const fresh=(await c.query('select payload from agent_portal.rpa_requests where id=$1 for update',[row.id])).rows[0];
-    if(!fresh)return null;
+    if(!fresh||fresh.payload.deletedAt)return null;
     const payload=fresh.payload,jobs=payload[key]||[],job=jobs.find(j=>j.id===candidate.id);if(!job)return null;
     const result=fn(job,payload);if(!result)return null;
     payload[statusKey]=aggregate(jobs);

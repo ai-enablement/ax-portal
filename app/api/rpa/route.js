@@ -1,7 +1,7 @@
 import {resolvePortalIdentity} from '../../../server/auth.mjs';
 import {setRpaVisibility} from '../../../server/rpa-visibility.mjs';
 import {rpaNotifications} from '../../../shared/rpa-notifications.mjs';
-import {updateRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../../../server/rpa-management.mjs';
+import {updateRpaRequest,deleteRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../../../server/rpa-management.mjs';
 import {isSameOriginRequest} from '../../../server/request-origin.mjs';
 import {listRpa,createRpaRequest,linkRpaPic,readRpaFile,updateRpaPics} from '../../../server/rpa-portal.mjs';
 export const runtime='nodejs';
@@ -21,6 +21,7 @@ export async function POST(request){try{
  let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{return Response.json({error:'잘못된 요청입니다.'},{status:400});}
  if(body.action==='link')return Response.json(await linkRpaPic(identity,body));
  if(body.action==='pics')return Response.json(await updateRpaPics(identity,body));
+ if(body.action==='request-delete')return Response.json(await deleteRpaRequest(identity,body));
  if(body.action==='update')return Response.json(await updateRpaRequest(identity,body));
  if(body.action==='master')return Response.json(await createRpaMaster(identity,body),{status:201});
  if(body.action==='master-update')return Response.json(await updateRpaMaster(identity,body));

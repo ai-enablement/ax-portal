@@ -15,7 +15,7 @@ export async function updateRpaRequest(identity,body){
  return withTransaction(async c=>{
   const actor=await rpaActor(identity,c);
   const row=(await c.query('select * from agent_portal.rpa_requests where id=$1 for update',[body.id])).rows[0];
-  if(!row)fail(404,'요청을 찾을 수 없습니다.');
+  if(!row||row.payload.deletedAt)fail(404,'요청을 찾을 수 없습니다.');
   const project=(await c.query('select payload from agent_portal.rpa_projects where id=$1',[row.project_id])).rows[0]?.payload;
   if(!project||project.deletedAt)fail(404,'과제를 찾을 수 없습니다.');
   if(!body.version||new Date(row.updated_at).toISOString()!==new Date(body.version).toISOString())fail(409,'다른 사용자가 수정했습니다. 새로고침 후 다시 시도해 주세요.');
@@ -23,8 +23,8 @@ export async function updateRpaRequest(identity,body){
   if(!action||body.operation!==action)fail(403,'현재 단계의 담당자만 해당 작업을 완료할 수 있습니다.');
   const result=workflowTransition(row.status,old,action,body),now=new Date().toISOString();
   if(action==='assign'){
-   const user=(await c.query('select email,display_name from agent_portal.users where lower(email)=$1 and is_active=true',[result.values.assigneeEmail])).rows[0];
-   if(!user)fail(400,'Admin & Governance의 활성 계정을 선택해 주세요.');
+   const user=(await c.query('select email,display_name from agent_portal.users where lower(email)=$1 and is_active=true and app_role in (\'admin\',\'team_leader\',\'team_member\')',[result.values.assigneeEmail])).rows[0];
+   if(!user)fail(400,'AI 활성화팀 팀원·팀장 또는 Admin의 활성 계정을 선택해 주세요.');
    result.values.assignee=user.display_name;
   }
   if(result.values.verification)Object.assign(result.values.verification,{at:now,actor:actor.display_name,actorEmail:actor.email});
@@ -53,6 +53,23 @@ export async function updateRpaRequest(identity,body){
    payload.mailStatus=recipients.length?'pending':'failed';
   }
   await c.query('update agent_portal.rpa_requests set payload=$2,status=$3,updated_at=now() where id=$1',[body.id,payload,result.status]);
+  return {saved:true};
+ });
+}
+export async function deleteRpaRequest(identity,body){
+ return withTransaction(async c=>{
+  const actor=await rpaActor(identity,c);manager(actor);
+  const row=(await c.query('select * from agent_portal.rpa_requests where id=$1 for update',[body.id])).rows[0];
+  if(!row||row.payload.deletedAt)fail(404,'요청을 찾을 수 없습니다.');
+  if(!body.version||new Date(row.updated_at).toISOString()!==new Date(body.version).toISOString())fail(409,'다른 사용자가 수정했습니다. 새로고침 후 다시 시도해 주세요.');
+  const code=`REQ-${new Date(row.created_at).getUTCFullYear()}-${String(row.id).padStart(6,'0')}`;
+  const reason=String(body.reason||'').trim();
+  if(body.confirmCode!==code||!reason||reason.length>1000)fail(400,'요청 번호와 삭제 사유를 확인해 주세요.');
+  const old=row.payload;
+  if(['stageMailJobs','completionMailJobs'].some(key=>(old[key]||[]).some(j=>j.status==='sending')))fail(409,'알림 메일 발송 중입니다. 잠시 후 다시 삭제해 주세요.');
+  const at=new Date().toISOString(),payload={...old,deletedAt:at,deletedBy:actor.email,deletionReason:reason,workflowMailToken:randomUUID(),history:[...(old.history||[]),{kind:'deleted',label:'유지보수 요청 삭제 (보관)',actor:actor.display_name,actorEmail:actor.email,at,reason}]};
+  for(const key of ['stageMailJobs','completionMailJobs'])payload[key]=(old[key]||[]).map(j=>j.status==='pending'?{...j,status:'cancelled'}:j);
+  await c.query('update agent_portal.rpa_requests set payload=$2,updated_at=now() where id=$1',[body.id,payload]);
   return {saved:true};
  });
 }
@@ -85,7 +102,7 @@ export async function deleteRpaMaster(identity,body){
   if(body.revision!==(old.revision??0))fail(409,'과제 정보가 변경되었습니다. 새로고침 후 다시 시도해 주세요.');
   if(body.confirmCode!==old.code)fail(400,'삭제할 과제번호를 정확히 입력해 주세요.');
   const reason=String(body.reason||'').trim();if(!reason||reason.length>1000)fail(400,'삭제 사유를 입력해 주세요.');
-  const open=(await c.query("select id from agent_portal.rpa_requests where project_id=$1 and (status<>'completed' or payload->>'completedAt' is null) limit 1",[body.id])).rows;
+  const open=(await c.query("select id from agent_portal.rpa_requests where project_id=$1 and payload->>'deletedAt' is null and (status<>'completed' or payload->>'completedAt' is null) limit 1",[body.id])).rows;
   if(open.length)fail(409,'진행 중인 유지보수 요청이 있어 삭제할 수 없습니다. 요청을 먼저 완료해 주세요.');
   const at=new Date().toISOString();
   const payload={...old,deletedAt:at,deletedBy:actor.email,deletionReason:reason,revision:(old.revision??0)+1,history:[...(old.history||[]),{kind:'master_deleted',label:'RPA 과제 삭제 (보관)',actor:actor.display_name,actorEmail:actor.email,at,reason}]};

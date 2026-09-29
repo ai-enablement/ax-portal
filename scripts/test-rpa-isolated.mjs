@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {setRpaVisibility} from '../server/rpa-visibility.mjs';
 import {getPool,closePool} from '../server/db/pool.mjs';
 import {listRpa,createRpaRequest,linkRpaPic,readRpaFile,updateRpaPics} from '../server/rpa-portal.mjs';
-import {updateRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../server/rpa-management.mjs';
+import {updateRpaRequest,deleteRpaRequest,createRpaMaster,updateRpaMaster,deleteRpaMaster} from '../server/rpa-management.mjs';
 import {runRpaMailCycle} from '../server/rpa-mail.mjs';
 const pool=getPool(),client=await pool.connect(),originalQuery=pool.query,originalConnect=pool.connect;
 let checks=0;
@@ -47,7 +47,7 @@ try{
  const checkStage=async(recipient,subject)=>{const count=stageSent.length;const send=async mail=>{stageSent.push(mail);return {status:'sent',code:'MOCK'};};await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},send);await runRpaMailCycle({PORTAL_MAIL_MODE:'live'},send);assert.equal(stageSent.length,count+1);assert.equal(stageSent.at(-1).recipient,recipient);assert.ok(stageSent.at(-1).subject.includes(subject));checks+=3;};
  await assert.rejects(()=>update('general_user','assign',{}),e=>e.status===403);checks++;
  await assert.rejects(()=>update('admin','assign',{assigneeEmail:'team_member@example.invalid'}),e=>e.status===400);checks++;
- await update('team_leader','assign',{assigneeEmail:'team_member@example.invalid',expectedAt:'2026-10-01T15:00:00+09:00'});checks++;
+ await update('team_leader','assign',{assigneeEmail:'team_member@example.invalid',expectedAt:'2026-10-01'});checks++;
  await checkStage('team_member@example.invalid','조치 요청');
  await assert.rejects(()=>update('admin','resolve',{analysis:'Cause',resolution:'Fix'}),e=>e.status===403);checks++;
  await assert.rejects(()=>update('team_member','finalize'),e=>e.status===403);checks++;
@@ -151,5 +151,21 @@ try{
  await assert.rejects(()=>updateRpaMaster(identity('admin'),{...patch,revision:6}),e=>e.status===404);checks++;
  await assert.rejects(()=>createRpaRequest(identity('admin'),{...body,projectId:newMaster.id,key:randomUUID(),files:[]}),e=>e.status===404);checks++;
  await assert.rejects(()=>deleteRpaMaster(identity('admin'),{...deletion,revision:6}),e=>e.status===404);checks++;
+ console.log(JSON.stringify({passed:checks,storage:'temporary tables only',persistentChanges:0}));
+ for(const managerRole of ['admin','team_leader','team_member']){
+  const fixture=await createRpaRequest(identity('admin'),{...body,key:randomUUID()});
+  const ticket=(await listRpa(identity('admin'))).requests.find(r=>r.id===fixture.id);
+  const deletionBody={id:ticket.id,version:ticket.updatedAt,confirmCode:ticket.code,reason:'Temporary deletion test'};
+  for(const role of ['general_user','bts','bp_solution'])await assert.rejects(()=>deleteRpaRequest(identity(role),deletionBody),e=>e.status===403);
+  await assert.rejects(()=>deleteRpaRequest(identity(managerRole),{...deletionBody,confirmCode:'wrong'}),e=>e.status===400);
+  await assert.rejects(()=>deleteRpaRequest(identity(managerRole),{...deletionBody,reason:''}),e=>e.status===400);
+  await assert.rejects(()=>deleteRpaRequest(identity(managerRole),{...deletionBody,version:'2000-01-01'}),e=>e.status===409);
+  await deleteRpaRequest(identity(managerRole),deletionBody);
+  assert.equal((await listRpa(identity('admin'))).requests.some(r=>r.id===ticket.id),false);
+  await assert.rejects(()=>readRpaFile(identity('admin'),ticket.files[0].id),e=>e.status===404);
+  await assert.rejects(()=>updateRpaRequest(identity(managerRole),{...deletionBody,operation:'assign'}),e=>e.status===404);
+  const saved=(await query('select payload from agent_portal.rpa_requests where id=$1',[ticket.id])).rows[0].payload;
+  assert.equal(saved.history.at(-1).kind,'deleted');assert.ok(saved.stageMailJobs.every(j=>j.status==='cancelled'));checks+=11;
+ }
  console.log(JSON.stringify({passed:checks,storage:'temporary tables only',persistentChanges:0}));
 }finally{pool.query=originalQuery;pool.connect=originalConnect;client.release();await closePool();}

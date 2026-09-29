@@ -4,11 +4,11 @@ import {MAIL_LABELS} from '../shared/rpa-progress.mjs';
 import {useState} from 'react';
 import {CaretRight,Desktop,Clock,PlusCircle,ClockCounterClockwise,ListBullets,PencilSimple,CheckCircle,WarningCircle} from '@phosphor-icons/react';
 import {MASTER_COLUMNS,STATUS_LABELS,masterCells,projectHistory,isRpaRunDay} from '../shared/rpa-display.mjs';
-import {formatKst} from '../shared/portal-time.mjs';
+import {formatKst,kstDate} from '../shared/portal-time.mjs';
 const show=v=>v===null||v===undefined||v===''?'미등록':String(v);
 export function RequestHistory({history}){
- const labels={stage:'작성 단계',comment:'현업 코멘트',decision:'검증 결과',reason:'반려 사유',assigneeEmail:'개발자 계정',status:'다음 단계',assignee:'담당 개발자',analysis:'원인 분석 결과',resolution:'조치 내용 및 수정 내역',expectedAt:'반영 예정 일시',mailStatus:'메일 발송 상태'};
- const value=(key,v)=>['status','stage'].includes(key)?(STATUS_LABELS[v]||show(v)):key==='decision'?(v==='approved'?'완료':v==='rejected'?'반려':show(v)):key==='mailStatus'?(MAIL_LABELS[v]||show(v)):key==='expectedAt'&&v?formatKst(v):show(v);
+ const labels={stage:'작성 단계',comment:'현업 코멘트',decision:'검증 결과',reason:'반려 사유',assigneeEmail:'개발자 계정',status:'다음 단계',assignee:'담당 개발자',analysis:'원인 분석 결과',resolution:'조치 내용 및 수정 내역',expectedAt:'반영 예정일',mailStatus:'메일 발송 상태'};
+ const value=(key,v)=>['status','stage'].includes(key)?(STATUS_LABELS[v]||show(v)):key==='decision'?(v==='approved'?'완료':v==='rejected'?'반려':show(v)):key==='mailStatus'?(MAIL_LABELS[v]||show(v)):key==='expectedAt'&&v?kstDate(v):show(v);
  return <ol className="rpa-history">{history.map((h,i)=><li key={i}><details><summary><strong>{h.label}</strong><span>{h.actor} · {formatKst(h.at)}</span></summary>{h.reason&&<p>{h.reason}</p>}{h.snapshot&&<dl className="rpa-fields">{Object.entries(h.snapshot).map(([k,v])=><div key={k}><dt>{labels[k]||k}</dt><dd>{value(k,v)}</dd></div>)}</dl>}{h.changes&&<dl className="rpa-fields">{Object.entries(h.changes).map(([k,v])=><div key={k}><dt>{labels[k]||k} 변경</dt><dd>이전: {value(k,v.before)}<br/>이후: {value(k,v.after)}</dd></div>)}</dl>}{!h.snapshot&&!h.changes&&<p className="rpa-muted">이 이력에는 상세 내용이 기록되어 있지 않습니다.</p>}</details></li>)}</ol>;
 }
 export function RequestTable({requests,open}){
@@ -45,19 +45,23 @@ export function ProjectLog({project,requests,onOpen,onBrowse,onClose}){
 }
 export function ProgressEditor({request,developers,onSave,busy}){
  const action=request.allowedAction,locked=!action;
- const [draft,setDraft]=useState({assigneeEmail:request.assigneeEmail||'',expectedAt:request.expectedAt?new Date(new Date(request.expectedAt).getTime()+9*3600000).toISOString().slice(0,16):'',analysis:request.analysis||'',resolution:request.resolution||'',comment:'',reason:'',decision:'approved'});
+ const [draft,setDraft]=useState({assigneeEmail:request.assigneeEmail||'',expectedAt:request.expectedAt?kstDate(request.expectedAt):'',analysis:request.analysis||'',resolution:request.resolution||'',comment:'',reason:'',decision:'approved'});
  const change=(k,v)=>setDraft(prev=>({...prev,[k]:v}));
  const label=({assign:'접수 완료 · 조치·개발중으로 이동',resolve:'조치 완료 · 현업 검증 요청',verify:draft.decision==='rejected'?'반려 · 조치·개발중으로 이동':'검증 완료 · 개발자 최종 확인 요청',finalize:'최종 확인 · 조치 완료'})[action];
- return <form className="rpa-form rpa-progress-editor" onSubmit={async e=>{e.preventDefault();if(busy||locked)return;await onSave({action:'update',operation:action,id:request.id,version:request.updatedAt,...draft,expectedAt:draft.expectedAt?draft.expectedAt+':00+09:00':''});}}>
+ return <><form className="rpa-form rpa-progress-editor" onSubmit={async e=>{e.preventDefault();if(busy||locked)return;await onSave({action:'update',operation:action,id:request.id,version:request.updatedAt,...draft});}}>
  <header className="rpa-progress-heading"><h3><ClockCounterClockwise size={18}/>RPA 유지보수 진행 상황</h3></header>
  {request.stageMailStatus&&<p className="rpa-muted">다음 담당자 알림: {MAIL_LABELS[request.stageMailStatus]||request.stageMailStatus}</p>}
  <fieldset className="rpa-progress-stages" disabled><legend>현재 진행 단계</legend><div>{Object.entries(STATUS_LABELS).filter(([k])=>k!=='held').map(([k,v],i)=><button type="button" key={k} aria-pressed={request.status===k}>{i+1}. {v}</button>)}</div></fieldset>
  {locked&&<p className="rpa-muted">{request.completedAt?'최종 완료 · 읽기 전용':request.status==='completed'?'담당 개발자의 최종 확인 대기':'현재 단계 담당자만 작성할 수 있습니다.'}</p>}
- <div className="rpa-form-pair">{action==='assign'?<label>담당 개발자<RpaSelect required aria-label="담당 개발자" options={developers} value={draft.assigneeEmail} onChange={e=>change('assigneeEmail',e.target.value)} disabled={busy}/></label>:<div>담당 개발자<strong style={{display:'block'}}>{request.assignee||'미배정'}</strong></div>}<label>반영 예정 일시 (KST)<input required={action==='assign'} disabled={busy||action!=='assign'} type="datetime-local" value={draft.expectedAt} onChange={e=>change('expectedAt',e.target.value)}/></label></div>
+ <div className="rpa-form-pair">{action==='assign'?<label>담당 개발자<RpaSelect required aria-label="담당 개발자" options={developers} value={draft.assigneeEmail} onChange={e=>change('assigneeEmail',e.target.value)} disabled={busy}/></label>:<div>담당 개발자<strong style={{display:'block'}}>{request.assignee||'미배정'}</strong></div>}<label>반영 예정일<input required={action==='assign'} disabled={busy||action!=='assign'} type="date" value={draft.expectedAt} onChange={e=>change('expectedAt',e.target.value)}/></label></div>
  {request.status!=='received'&&<><label>원인 분석 결과<textarea required={action==='resolve'} disabled={busy||action!=='resolve'} rows={3} value={draft.analysis} maxLength={15000} onChange={e=>change('analysis',e.target.value)}/></label><label>조치 내용 및 수정 내역<textarea required={action==='resolve'} disabled={busy||action!=='resolve'} rows={3} value={draft.resolution} maxLength={15000} onChange={e=>change('resolution',e.target.value)}/></label></>}
  {action==='verify'&&<><p className="rpa-muted">조치 내용을 확인한 뒤 요청하신 대로 처리되었으면 완료해 주세요. 그렇지 않으면 반려를 선택하고 사유를 작성해 주세요.</p><label>검증 결과<RpaSelect value={draft.decision} onChange={e=>change('decision',e.target.value)} disabled={busy}><option value="approved">검증 완료</option><option value="rejected">반려</option></RpaSelect></label><label>코멘트 (선택)<textarea maxLength={15000} value={draft.comment} onChange={e=>change('comment',e.target.value)} disabled={busy}/></label>{draft.decision==='rejected'&&<label>반려 사유<textarea required maxLength={15000} value={draft.reason} onChange={e=>change('reason',e.target.value)} disabled={busy}/></label>}</>}
  {request.verification&&<div className="rpa-source"><strong>현업 검증: {request.verification.decision==='approved'?'완료':'반려'}</strong><p>{request.verification.actor} · {formatKst(request.verification.at)}</p><p>{request.verification.comment||'코멘트 없음'}</p>{request.verification.reason&&<p>반려 사유: {request.verification.reason}</p>}</div>}
  {request.completedAt&&<p className="rpa-muted">완료 메일: {MAIL_LABELS[request.mailStatus]||'미발송'}</p>}
  <footer className="rpa-progress-footer"><p>각 단계의 작성 내용과 처리자가 수정 이력에 기록됩니다.</p>{action&&<button className="rpa-progress-complete" disabled={busy} type="submit"><CheckCircle size={18}/>{busy?'반영 중…':label}<CaretRight size={18}/></button>}</footer>
- </form>;
+ </form>{request.canDelete&&<RequestDelete request={request} onSave={onSave} busy={busy}/>}</>;
+}
+function RequestDelete({request,onSave,busy}){
+ const [open,setOpen]=useState(false),[confirmCode,setConfirmCode]=useState(''),[reason,setReason]=useState('');
+ return <section className="rpa-source"><button type="button" disabled={busy} onClick={()=>setOpen(!open)} aria-expanded={open}>요청 삭제</button>{open&&<form className="rpa-form" onSubmit={async e=>{e.preventDefault();if(busy||confirmCode!==request.code||!reason.trim())return;await onSave({action:'request-delete',id:request.id,version:request.updatedAt,confirmCode,reason});}}><p>과제 둘러보기와 진행 현황에서 제외합니다. 원본과 수정 이력은 보관되며, 대기 중인 알림은 취소됩니다.</p><label>확인용 요청 번호: {request.code}<input required value={confirmCode} disabled={busy} onChange={e=>setConfirmCode(e.target.value)}/></label><label>삭제 사유<textarea required maxLength={1000} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)}/></label><button type="submit" disabled={busy||confirmCode!==request.code||!reason.trim()}>{busy?'처리 중…':'요청 삭제 확인'}</button></form>}</section>;
 }

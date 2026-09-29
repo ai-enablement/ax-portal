@@ -17,7 +17,7 @@ export async function rpaActor(identity,client=getPool()){
  if(process.env.NODE_ENV!=='production'&&identity.source==='development'&&identity.canSwitchRole&&['admin','team_leader','team_member','general_user','bts','bp_solution'].includes(identity.appRole))return {...actor,app_role:identity.appRole};
  return withSharedUsers(client,actor);
 }
-const scope=`(p.payload->>'deletedAt' is null and ($1::boolean or exists(select 1 from agent_portal.rpa_pic_links l where l.project_id=p.id and l.email=$2) or exists(select 1 from agent_portal.rpa_requests assigned where assigned.project_id=p.id and lower(assigned.payload->>'assigneeEmail')=$2)))`;
+const scope=`(p.payload->>'deletedAt' is null and ($1::boolean or exists(select 1 from agent_portal.rpa_pic_links l where l.project_id=p.id and l.email=$2) or exists(select 1 from agent_portal.rpa_requests assigned where assigned.project_id=p.id and assigned.payload->>'deletedAt' is null and lower(assigned.payload->>'assigneeEmail')=$2)))`;
 async function allowedProject(client,actor,id){
  const p=(await client.query(`select p.* from agent_portal.rpa_projects p where p.id=$3 and ${scope} for share`,[canReadAllRpa(actor.app_role),actor.email.toLowerCase(),id])).rows[0];
  if(!p)fail(404,'조회 가능한 RPA 과제가 아닙니다.');return p;
@@ -25,10 +25,10 @@ async function allowedProject(client,actor,id){
 export async function listRpa(identity){
  const pool=getPool(),actor=await rpaActor(identity,pool),args=[canReadAllRpa(actor.app_role),actor.email.toLowerCase()];
  const projects=(await pool.query(`select p.payload from agent_portal.rpa_projects p where ${scope} order by p.project_code,p.id`,args)).rows.map(r=>r.payload);
- const tickets=(await pool.query(`select r.id::text,r.project_id,r.created_by,r.payload,r.status,r.created_at,r.updated_at,u.display_name as requester,u.email as requester_email from agent_portal.rpa_requests r join agent_portal.rpa_projects p on p.id=r.project_id join agent_portal.users u on u.id=r.created_by where ${scope} order by r.created_at desc`,args)).rows;
- const requests=tickets.map(r=>{const payload={...r.payload};delete payload.completionMailJobs;delete payload.stageMailJobs;delete payload.workflowMailToken;return {...payload,allowedAction:workflowAction(r.status,payload,actor,r.created_by),id:r.id,projectId:r.project_id,code:`REQ-${new Date(r.created_at).getUTCFullYear()}-${r.id.padStart(6,'0')}`,resumeStatus:r.status,status:r.payload.onHold?'held':r.status,createdAt:r.created_at,updatedAt:r.updated_at,requester:r.requester,requesterEmail:r.requester_email};});
+ const tickets=(await pool.query(`select r.id::text,r.project_id,r.created_by,r.payload,r.status,r.created_at,r.updated_at,u.display_name as requester,u.email as requester_email from agent_portal.rpa_requests r join agent_portal.rpa_projects p on p.id=r.project_id join agent_portal.users u on u.id=r.created_by where r.payload->>'deletedAt' is null and ${scope} order by r.created_at desc`,args)).rows;
+ const requests=tickets.map(r=>{const payload={...r.payload};delete payload.completionMailJobs;delete payload.stageMailJobs;delete payload.workflowMailToken;return {...payload,canDelete:canReadAllRpa(actor.app_role),allowedAction:workflowAction(r.status,payload,actor,r.created_by),id:r.id,projectId:r.project_id,code:`REQ-${new Date(r.created_at).getUTCFullYear()}-${r.id.padStart(6,'0')}`,resumeStatus:r.status,status:r.payload.onHold?'held':r.status,createdAt:r.created_at,updatedAt:r.updated_at,requester:r.requester,requesterEmail:r.requester_email};});
  const links=canLinkRpaPic(actor.app_role)?(await pool.query('select project_id as "projectId",pic,email from agent_portal.rpa_pic_links order by project_id,pic')).rows:[];
- const developerAccounts=canReadAllRpa(actor.app_role)?(await pool.query("select string_agg(u.display_name,' / ' order by u.display_name) as label,coalesce(u.email,login.email) as value from agent_portal.users u left join agent_portal.users login on login.id=u.shared_account_id where u.is_active=true and (u.shared_account_id is null or (login.is_active and login.app_role=u.app_role)) and coalesce(u.email,login.email) is not null group by coalesce(u.email,login.email) order by label")).rows:[];
+ const developerAccounts=canReadAllRpa(actor.app_role)?(await pool.query("select string_agg(u.display_name,' / ' order by u.display_name) as label,coalesce(u.email,login.email) as value from agent_portal.users u left join agent_portal.users login on login.id=u.shared_account_id where u.is_active=true and u.app_role in ('admin','team_leader','team_member') and (u.shared_account_id is null or (login.is_active and login.app_role=u.app_role)) and coalesce(u.email,login.email) is not null group by coalesce(u.email,login.email) order by label")).rows:[];
  const people=canReadAllRpa(actor.app_role)?(await pool.query('select display_name from agent_portal.users order by display_name')).rows.map(u=>u.display_name):[];
  const developerRoster=canReadAllRpa(actor.app_role)?await rpaDeveloperRoster(pool):[];
  const hiddenProjects=projects.filter(isRpaHidden),visibleProjects=projects.filter(p=>!isRpaHidden(p));
@@ -72,7 +72,7 @@ export async function linkRpaPic(identity,body){
 export async function readRpaFile(identity,id){
  if(!/^[\da-f-]{36}$/i.test(id))fail(404,'파일을 찾을 수 없습니다.');
  const pool=getPool(),actor=await rpaActor(identity,pool);
- const f=(await pool.query('select f.*,r.project_id from agent_portal.rpa_request_files f join agent_portal.rpa_requests r on r.id=f.request_id where f.id=$1',[id])).rows[0];
+ const f=(await pool.query("select f.*,r.project_id from agent_portal.rpa_request_files f join agent_portal.rpa_requests r on r.id=f.request_id where f.id=$1 and r.payload->>'deletedAt' is null",[id])).rows[0];
  if(!f)fail(404,'파일을 찾을 수 없습니다.');await allowedProject(pool,actor,f.project_id);return f;
 }
 export async function updateRpaPics(identity,body){
