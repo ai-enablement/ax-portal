@@ -178,7 +178,7 @@ const navGroups = [
     label: "WORKSPACE",
     items: [
       { id: "home" as View, icon: "⌂", label: "홈" },
-      { id: "teamboard" as View, icon: "▥", label: "리더용 대시보드" },
+      { id: "teamboard" as View, icon: "▥", label: "대시보드" },
       { id: "governance" as View, icon: "✓", label: "Admin & Governance" },
     ],
   },
@@ -1277,7 +1277,7 @@ export default function Home() {
             ? new Set<View>(nav.map((item) => item.id))
             : new Set<View>(["governance", "hub", "gallery"]);
 
-    if(identity?.leaderDashboardScope==='D2B')allowed.add('teamboard');
+    allowed.add('teamboard');
     return navGroups
       .filter((group) => group.label !== "AGENT LIFECYCLE")
       .map((group) => ({
@@ -1939,7 +1939,7 @@ export default function Home() {
             notify={notify}
           />
         )}
-        {view === "teamboard" && (role !== ACCOUNT_ROLES.user || identity?.leaderDashboardScope==='D2B') && <LeaderDashboard key={`${identity?.userId}:${role}:${identity?.leaderDashboardScope}`} identity={identity} devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined} onProject={(projectNo:string)=>openWorkflow('home',projectNo)}/>}
+        {view === "teamboard" && <LeaderDashboard key={`${identity?.userId}:${role}:${identity?.leaderDashboardScope}`} identity={identity} devRole={identity?.canSwitchRole ? ACCOUNT_APP_ROLES[role] : undefined} onProject={(projectNo:string)=>openWorkflow('home',projectNo)}/>}
         {view === "operations" &&
           (adminProjectItems.some((project) => project.journeyStep >= 9) ? (
             <OperationsImprovement

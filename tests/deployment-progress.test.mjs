@@ -36,11 +36,11 @@ test('D2B access requires an active exact email assignment from the database',as
 test('dashboard endpoint scopes D2B in SQL and UI hides developer filters',()=>{
  const server=readFileSync(new URL('../server/database-api.mjs',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/leader-dashboard.jsx',import.meta.url),'utf8');
- assert.match(server,/p\.deleted_at is null and p\.project_category='D2B'/);
+ assert.match(server,/p\.deleted_at is null and \(p\.requester_id=\$1 or p\.owner_id=\$1 or \(\$2::boolean and p\.project_category='D2B'\)\)/);
  assert.match(server,/const automaticProgress=completeDeploymentProgress\(merged,actor\)/);
  assert.match(ui,/fetch\('\/api\/database\/leader-dashboard'/);
- assert.match(ui,/d2bOnly\?\['D2B'\]:\['전체','D2B'\]/);
- assert.match(ui,/category!=='D2B'&&<div className="ld-filter-row"><b>개발자/);
+ assert.match(ui,/options.tabs.map/);
+ assert.match(ui,/options.developerFilter&&<div className="ld-filter-row"><b>개발자/);
  assert.match(ui,/className="ld-today-key"/);
 });
 test('approved Shari and Naomi accounts are seeded once, not hardcoded in access checks',async()=>{

@@ -4,6 +4,7 @@ import {projectActorIds,isProjectDeveloper} from '../shared/project-actors.mjs';
 import {saveProjectProgress} from './project-progress.mjs';
 import {effectiveProgress,completeDeploymentProgress} from '../shared/deployment-progress.mjs';
 import {leaderDashboardScope,manageD2BAccess} from './leader-dashboard-access.mjs';
+import {dashboardScopeFor} from '../shared/dashboard-visibility.mjs';
 import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {draftProjectCode} from './project-numbering.mjs';
 import {categoryChange} from '../shared/project-category.mjs';
@@ -853,23 +854,24 @@ async function listOperationalProjects(identity) {
   return result;
 }
 
-async function listLeaderDashboardProjects(identity) {
- const pool=getPool(),actor=await findUser(pool,identity);
+export async function listLeaderDashboardProjects(identity,dependencies={}) {
+ const pool=dependencies.pool||getPool(),actor=await (dependencies.findUser||findUser)(pool,identity);
  if(!actor?.is_active)return {status:403,body:{error:'Active portal account is required.'}};
-  const scope=await leaderDashboardScope(actor,pool);
- if(scope!=='D2B'){
-  if(actor.app_role==='general_user')return {status:403,body:{error:'리더용 대시보드 접근 권한이 없습니다.'}};
-  const result=await listOperationalProjects(identity);
+  const scope=dashboardScopeFor(actor.app_role,await leaderDashboardScope(actor,pool));
+ if(scope==='all'){
+  const result=await (dependencies.listOperationalProjects||listOperationalProjects)(identity);
   return {...result,body:{...result.body,dashboardScope:scope}};
  }
- // Do not return documents, participant emails or non-D2B projects to dashboard-only viewers.
+ // Only party-owned projects, plus all D2B projects for explicitly registered viewers.
+ // Return summary fields only, never documents or participant emails.
  const result=await pool.query(`select p.project_code as no,p.project_name as name,p.project_category as category,
  p.created_at as created,p.committed_completion_date as deadline,p.current_stage_code as stage,
+ (p.requester_id=$1 or p.owner_id=$1) as personal,
  ir.raw_answers->'portalState' as state,
  coalesce((select jsonb_agg(u.display_name order by pm.assigned_at) from agent_portal.project_members pm join agent_portal.users u on u.id=pm.user_id where pm.project_id=p.id and pm.relationship='developer' and pm.ended_at is null),'[]'::jsonb) as developers
  from agent_portal.projects p left join agent_portal.intake_requests ir on ir.project_id=p.id
- where p.deleted_at is null and p.project_category='D2B' order by p.updated_at desc`);
- return {status:200,body:{dashboardScope:scope,projects:result.rows.map(r=>({no:r.no,name:r.name,category:r.category,receivedDate:r.state?.receivedDate||kstDate(r.created),committedDate:r.deadline?kstDate(r.deadline):r.state?.committedDate||'',manualProgress:effectiveProgress({...r.state,journeyStep:portalJourneyStep(r.stage)}),developerNames:r.developers,developerIds:[],source:'database'}))}};
+ where p.deleted_at is null and (p.requester_id=$1 or p.owner_id=$1 or ($2::boolean and p.project_category='D2B')) order by p.updated_at desc`,[actor.id,scope==='D2B']);
+ return {status:200,body:{dashboardScope:scope,projects:result.rows.map(r=>({no:r.no,name:r.name,category:r.category,isPersonalProject:r.personal===true,receivedDate:r.state?.receivedDate||kstDate(r.created),committedDate:r.deadline?kstDate(r.deadline):r.state?.committedDate||'',manualProgress:effectiveProgress({...r.state,journeyStep:portalJourneyStep(r.stage)}),developerNames:r.developers,developerIds:[],source:'database'}))}};
 }
 
 // Internal worker only. Reuse the same visibility predicate and DB projection as the UI.
