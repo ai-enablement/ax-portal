@@ -3,7 +3,7 @@ import {projectActorIds,matchesProjectActor} from '../shared/project-actors.mjs'
 import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {isProjectCode} from '../shared/project-code.mjs';
 import {assignCompletedIntNumber} from './project-numbering.mjs';
-import {finalDocument,withArdApprovals,legacyArdMarkdown,withIntContacts} from '../shared/final-document.mjs';
+import {finalDocument,withArdApprovals,legacyArdMarkdown,withIntContacts,ardPartiesApproved} from '../shared/final-document.mjs';
 import {documentComplete} from '../shared/workflow-v31.mjs';
 import {getPool,withTransaction} from './db/pool.mjs';
 import {documentAccess} from './document-files.mjs';
@@ -94,7 +94,7 @@ export async function nativeAgentRequest(identity,code,document,path,method,data
  }
  if(path==='/portal/access'){
   const step=Number(ctx.state.journeyStep||0),target=steps[document];
-  const body={mode:ctx.canReadStage?'full':ctx.canReadFinal?'final':canReadRecommendation(ctx.actor.app_role)&&target<=step?'recommendation':'status',hasFinal:ctx.canReadFinal,status:ctx.complete||step>target?'완료':step===target?'진행 중':'예정',canEdit:ctx.canEdit};
+  const body={mode:ctx.canReadStage?'full':ctx.canReadFinal?'final':canReadRecommendation(ctx.actor.app_role)&&target<=step?'recommendation':'status',hasFinal:ctx.canReadFinal,status:document==='ARD'&&[3,4].includes(step)&&!ardPartiesApproved(ctx.state)?(ctx.rework?'보완 작성 중':ctx.complete?'작성 완료 · 요구자·Owner 승인 대기':'작성 중'):ctx.complete||step>target?'완료':step===target?'진행 중':'예정',canEdit:ctx.canEdit};
   if(ctx.canReadFinal&&ctx.state.nativeAgentArtifacts?.[document]?.source==='admin_historical_upload')body.mode='final';
   if(body.mode==='recommendation'){
    const saved=(await pool.query('select payload from agent_portal.native_agent_sessions where project_id=$1',[ctx.project.id])).rows[0]?.payload;

@@ -12,8 +12,16 @@ test('ARD parties approve before G2 leader and only then enter design',()=>{
  let s=state();assert.throws(()=>vote(s,'team_leader',actor(3,'team_leader')));
  s=vote(s,'requester',actor(1));assert.equal(s.journeyStep,3);
  s=vote(s,'owner',actor(2));assert.equal(s.journeyStep,4);
+ assert.equal(s.workflowApprovals.G2.requester.actorId,'1');assert.equal(s.workflowApprovals.G2.owner.actorId,'2');
  assert.throws(()=>vote(s,'team_leader',actor(3,'team_leader')),/마감일/);
  s.committedDate='2026-10-01';s=vote(s,'team_leader',actor(3,'team_leader'));assert.equal(s.journeyStep,5);
+});
+
+test('draft and import-open ARD cannot be approved; nonparties cannot sign',()=>{
+ assert.throws(()=>vote({...state(),nativeAgentArtifacts:{}},'requester',actor(1)),/최종본/);
+ assert.throws(()=>vote({...state(),historicalImport:true},'requester',actor(1)),/이관 완료/);
+ assert.throws(()=>vote(state(),'requester',actor(9,'admin')),/담당자/);
+ assert.throws(()=>vote({...state(),historicalImport:true,historicalImportFinalizedAt:'2026-09-29',historicalCompletedThrough:{step:3},nativeAgentArtifacts:{ARD:{version:2,status:'draft'}}},'requester',actor(1)),/최종본/);
 });
 test('completed ARD parties and assigned developer can read only final, not chat or drafts',()=>{
  for(const [id,member] of [[1,false],[2,false],[4,true]]){

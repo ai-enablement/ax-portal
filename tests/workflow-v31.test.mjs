@@ -21,6 +21,20 @@ function doc(code){
 const gateState=(step=4)=>({journeyStep:step,committedDate:'2026-10-01',workflowTrack:'MEDIUM',developerIds:['5'],historicalDocuments:{3:{documents:{ARD:doc('ARD')}},5:{documents:{EVR:doc('EVR')}}},markdownDocuments:{DES:{phases:{design:{version:1}}},EVD:{phases:{development_evaluation:{version:1},deployment_rollout:{version:2}}}},gateChecks:{G3:{criteriaPassed:true,zeroViolations:true,evidence:'평가 v1 전건 확인'},G4:{criteriaPassed:true,evidence:'사용 20건 오류 0건 만족도 4.5, 종료 조건 충족'}},uatRecord:{completed:true,cases:5,actorId:'1'}});
 const vote=(gate,role)=>({gateVote:{gate,role,decision:'APPROVED'}});
 
+test('G4 evidence is submitted once, locked server-side and reopened only after rework',()=>{
+ const initial={...gateState(8),gateChecks:{}};
+ assert.throws(()=>run(initial,{gateChecks:{G4:{criteriaPassed:false,evidence:'미완료'}}},developer),/종료 기준/);
+ const saved=run(initial,{gateChecks:{G4:{criteriaPassed:true,evidence:'파일럿 확인'}}},developer);
+ assert.equal(saved.gateChecks.G4.submittedBy,'5');
+ assert.ok(saved.gateChecks.G4.submittedAt);
+ assert.throws(()=>run(saved,{gateChecks:{G4:{criteriaPassed:true,evidence:'임의 덮어쓰기'}}},developer),/읽기 전용/);
+ const rejected=run(saved,{gateVote:{gate:'G4',role:'owner',decision:'REWORK',reason:'지표 보완'}},owner);
+ assert.throws(()=>run(rejected,vote('G4','team_leader')),/다시 저장/);
+ const revised=run(rejected,{gateChecks:{G4:{criteriaPassed:true,evidence:'보완한 파일럿 지표'}}},developer);
+ assert.deepEqual(revised.workflowApprovals.G4,{});
+ assert.ok(revised.workflowApprovalHistory.some(h=>h.gate==='G4'));
+});
+
 test('a recorded gate decision cannot be overwritten while other approvers are pending',()=>{
  for(const [gate,step] of [['G2',4],['G3',6],['G4',8]]){
   const s={...gateState(step),workflowApprovals:{[gate]:{team_leader:{decision:'APPROVED',actorId:'3',at:'2026-09-07'}}}};
@@ -102,9 +116,11 @@ test('G4 waits for owner and leader and pilot evidence',()=>{
  s=run(s,vote('G4','owner'),owner);assert.equal(s.journeyStep,8);
  s=run(s,vote('G4','team_leader'));assert.equal(s.journeyStep,9);
 });
-test('a rework vote blocks transition until that role approves again',()=>{
+test('ARD rework returns to definition and requires resubmission before both approvals',()=>{
  let s=run(gateState(),{gateVote:{gate:'G2',role:'owner',decision:'REWORK',reason:'범위 보완'}},owner);
- s=run(s,vote('G2','requester'),requester);assert.throws(()=>run(s,vote('G2','team_leader')),/먼저/);assert.equal(s.journeyStep,4);
+ assert.equal(s.journeyStep,3);assert.throws(()=>run(s,vote('G2','requester'),requester),/보완 작성/);
+ s=run(s,{historicalDocuments:{...s.historicalDocuments,3:{...s.historicalDocuments[3],updatedAt:'2026-09-29'}}},admin);
+ s=run(s,vote('G2','requester'),requester);assert.equal(s.journeyStep,3);
  s=run(s,vote('G2','owner'),owner);s=run(s,vote('G2','team_leader'));assert.equal(s.journeyStep,5);
 });
 test('team leader can request documented rework at every regular gate',()=>{

@@ -1,9 +1,15 @@
 // API lists are ordered by last update. Selection must never be an array offset.
+import {documentComplete} from './workflow-v31.mjs';
+import {ardPartiesApproved} from './final-document.mjs';
 export function selectedProjectNumber(projects, selectedNo) {
   return projects.some(project=>project.no===selectedNo)?selectedNo:(projects[0]?.no||'');
 }
 export function currentWorkflowTarget(project,target) {
-  if(!target || target.projectNo!==project.no || target.journeyStep!==project.journeyStep)return null;
+  if(!target || target.projectNo!==project.no)return null;
+  // Existing G2 imports may still need ARD party review. Navigate to its final
+  // document, while server-side approval authorization remains unchanged.
+  if(project.journeyStep===4&&target.journeyStep===3&&!ardPartiesApproved(project)&&documentComplete(project,3,'ARD')&&!(project.historicalImport&&!project.historicalImportFinalizedAt))return target;
+  if(target.journeyStep!==project.journeyStep)return null;
   if(target.deliveryPhase && target.deliveryPhase!==(project.deliveryPhase||'design'))return null;
   return target;
 }

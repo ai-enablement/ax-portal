@@ -77,7 +77,7 @@ function currentGateNotification(project, actor, relations, gate) {
   const rework = Object.values(approvals).find((vote) => vote?.decision === "REWORK");
 
   if (rework && (gate === 'G1' ? relations.feaAuthor : gate==='G2'?relations.requirementsAuthor:relations.author)) {
-    const editStep = { G1: 1, G2: 3, G3: 5, G4: 7 }[gate];
+    const editStep = { G1: 1, G2: 3, G3: 5, G4: 8 }[gate];
     return item(
       project,
       `${gate} 보완 요청 반영`,
@@ -90,17 +90,20 @@ function currentGateNotification(project, actor, relations, gate) {
 
   // Wait for the author to resubmit rather than prompting other approvers.
   if (rework) return null;
+  if(gate==='G4'&&gateGaps(gate,project).length){
+    return relations.author?item(project,'G4 파일럿 근거 작성',`파일럿 결과 및 확산 조건을 저장해 주세요. 저장 및 필수 조건 완료 후 Owner·팀장에게 승인 요청이 전달됩니다. 미완료: ${gateGaps(gate,project).join(' · ')}`,8,'warning'):null;
+  }
   if(gate==='G2'){
     const pending=['requester','owner'].filter(role=>approvals[role]?.decision!=='APPROVED');
     const party=pending.find(role=>relations[role]);
-    if(party&&documentComplete(project,3,'ARD'))return {...item(project,'ARD 요구 정의 승인','작성 완료된 요구 정의서를 읽고 요구 정의 화면에서 승인해 주세요.',3,'danger'),recipientRole:party==='owner'?'Project Owner':'요구자'};
+    if(party&&documentComplete(project,3,'ARD'))return {...item(project,'ARD 요구 정의 승인','작성 완료된 요구 정의서를 읽고 요구 정의 화면에서 승인 또는 보완 요청해 주세요. 요구자·Owner 모두 승인하면 요구 정의가 완료되고 G2 팀장 승인으로 이동합니다.',3,'danger'),approvalRound:`ARD:${project.nativeAgentArtifacts?.ARD?.contentVersion||project.nativeAgentArtifacts?.ARD?.version||project.historicalDocuments?.[3]?.updatedAt||'legacy'}`,recipientRole:party==='owner'?'Project Owner':'요구자'};
     if(pending.length)return null;
   }
 
   const role = gateRoleForActor(project, actor, relations, gate);
   if (!role || approvals[role]?.decision) return null;
   const gaps = gateGaps(gate, project);
-  return { ...item(
+  return { ...(gate==='G4'?{approvalRound:project.gateChecks?.G4?.submittedAt||'legacy-ready'}:{}), ...item(
     project,
     `${gate} 승인 요청`,
     gaps.length
@@ -179,7 +182,7 @@ function projectNotification(project, actor) {
 
   if (step === 3) {
     if (relations.requirementsAuthor && !documentComplete(project, 3, "ARD")) {
-      return item(project, "ARD 요구 정의 작성", "AI Agent와 함께 요구 정의서를 작성하고, 내용을 확인한 후 G2 승인을 요청해 주세요.", 3, "danger");
+      return item(project, "ARD 요구 정의 작성", "AI Agent와 함께 요구 정의서를 작성 완료하여 요구자·Owner에게 검토를 요청해 주세요. 두 역할의 승인 후 요구 정의가 완료되고 G2 팀장 승인으로 이동합니다.", 3, "danger");
     }
     return currentGateNotification(project,actor,relations,'G2');
   }

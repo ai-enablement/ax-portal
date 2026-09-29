@@ -21,7 +21,8 @@ test('historical lifecycle alerts use real parties and never the bulk import cre
  const cases=[
   [0,{},['1']], [1,{},['5','99']], [2,{},['5']], [3,{},['5','99']], [4,{nativeAgentArtifacts:{ARD:{status:'complete',version:1}}},['1','2']],
   [5,{deliveryPhase:'design'},['3']], [5,{deliveryPhase:'development'},['1','3']],
-  [6,{workflowTrack:'HIGH',uatRecord:{completed:true}},['4','5']], [7,{},['3']], [8,{},['2','5']],
+  [6,{workflowTrack:'HIGH',uatRecord:{completed:true}},['4','5']], [7,{},['3']], [8,{},['3']],
+  [8,{gateChecks:{G4:{criteriaPassed:true,evidence:'파일럿 확인'}},markdownDocuments:{EVD:{phases:{deployment_rollout:{version:2,status:'complete'}}}}},['2','5']],
   [2,{g1Resolution:{decision:'GO'},developerIds:[]},['99']],
   [2,{g1Resolution:{decision:'DROP',reason:'보완'}},['5','99']]
  ];

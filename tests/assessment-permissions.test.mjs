@@ -24,7 +24,7 @@ test('server FEA/ARD access matrix, membership never overrides restricted conten
   const full=['admin','team_leader'].includes(role);
   assert.equal(access.body.mode,full?'full':role==='general_user'?'status':'recommendation');
   assert.doesNotMatch(JSON.stringify(access.body),/PRIVATE/);
-  assert.equal(access.body.status,'진행 중');
+  assert.equal(access.body.status,doc==='ARD'?'작성 중':'진행 중');
   if(full)assert.equal((await nativeAgentRequest(identity,'2026-043',doc,'/portal/history','GET',{},0,deps)).status,200);
   else for(const [path,method] of [['/api/bootstrap','GET'],['/portal/history','GET'],['/portal/version/1','GET'],['/portal/verify-complete','POST'],['/portal/finish','POST'],[`/api/${doc.toLowerCase()}/repeat`,'POST'],[`/api/export/2026-043/${doc}?fmt=md`,'GET']])await assert.rejects(nativeAgentRequest(identity,'2026-043',doc,path,method,{},0,deps),e=>e.status===403);
  }

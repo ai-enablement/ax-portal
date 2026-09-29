@@ -50,6 +50,8 @@ export function historicalGateComplete(gate,state){
   return state.historicalImport===true&&Number.isFinite(baseline)&&Number.isFinite(gateStep)&&gateStep<baseline;
 }
 export function documentComplete(state,stage,code){
+  // An explicitly reopened ARD must not inherit completion from its import baseline.
+  if(code==='ARD'&&state.nativeAgentArtifacts?.ARD?.status==='draft')return false;
   if(state.nativeAgentArtifacts?.[code]?.status==='complete'&&Number(state.nativeAgentArtifacts[code].version)>0)return true;
   if(isHistoricalDocumentComplete(state,stage,code))return true;
   const d=state.historicalDocuments?.[stage]?.documents?.[code];

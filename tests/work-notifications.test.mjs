@@ -68,7 +68,7 @@ test('INT belongs to requester for new projects and finalized historical imports
 test('G1 through G4 notify pending configured approval roles, never an unrelated admin',()=>{
  const actors=[{id:'11',appRole:'general_user'},{id:'12',appRole:'general_user'},{id:'21',appRole:'team_member'},{id:'31',appRole:'team_leader'},{id:'41',appRole:'team_member'},{id:'1',appRole:'admin'}];
  for(const [gate,journeyStep,expected] of [['G1',2,['31']],['G2',4,['11','12']],['G3',6,['31','41']],['G4',8,['12','31']]]){
-  const p={...base,journeyStep,nativeAgentArtifacts:{ARD:{status:'complete',version:1}},workflowTrack:'HIGH',securityReviewerId:'41',uatRecord:{completed:true}};
+  const p={...base,journeyStep,nativeAgentArtifacts:{ARD:{status:'complete',version:1}},workflowTrack:'HIGH',securityReviewerId:'41',uatRecord:{completed:true},gateChecks:{G4:{criteriaPassed:true,evidence:'파일럿 확인'}},markdownDocuments:{EVD:{phases:{deployment_rollout:{version:2,status:'complete'}}}}};
   assert.deepEqual(actors.filter(a=>buildWorkNotifications([p],a).length).map(a=>a.id),expected);
   p.g1Resolution={decision:'GO'};
   p.workflowApprovals={[gate]:Object.fromEntries(['requester','owner','team_leader','security_reviewer'].map(r=>[r,{decision:'APPROVED'}]))};

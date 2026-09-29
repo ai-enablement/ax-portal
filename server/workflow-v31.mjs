@@ -1,4 +1,5 @@
 import {allApproved,requiredApprovers,eligibleRole,gateGaps,gateBasis,projectTrack,documentComplete,designDocumentComplete,developmentEvdComplete,releaseEvdComplete,isLowRoute,GATE_STEPS,displayStage} from '../shared/workflow-v31.mjs';
+import {pilotEvidenceLocked,pilotEvidenceReady} from '../shared/pilot-review.mjs';
 import {isImportInProgress,needsImportCompletionRepair} from '../shared/historical-import-policy.mjs';
 import {ardLiteGaps,ardLiteDocumentComplete,fastTrackRequestGaps,FAST_TRACK_STATUSES} from '../shared/fast-track.mjs';
 import {intakeRequired,feaRequired} from '../shared/intake-standard.mjs';
@@ -172,6 +173,11 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     const gate=step<=6?'G3':'G4';
     if(Object.keys(changes.gateChecks).some(k=>k!==gate))deny('현재 게이트의 근거만 수정할 수 있습니다.');
     merged.gateChecks={...previous.gateChecks,[gate]:changes.gateChecks[gate]};
+    if(gate==='G4'){
+      if(pilotEvidenceLocked(previous))deny('저장된 파일럿 검증 근거는 읽기 전용입니다. 승인자의 보완 요청 후 다시 작성할 수 있습니다.',409);
+      if(!pilotEvidenceReady(merged))deny('파일럿 종료 기준 충족을 확인하고 종료 판정 근거를 입력해 주세요.');
+      merged.gateChecks.G4={criteriaPassed:true,evidence:String(changes.gateChecks.G4.evidence).trim(),submittedAt:now,submittedBy:String(actor.id),submittedByName:actor.display_name};
+    }
   }
   if(changes.uatConfirm){
     if(![5,6].includes(step)||!eligibleRole('requester',actor,project,merged))deny('해당 과제 요구자만 UAT 완료를 확인할 수 있습니다.',403);
@@ -216,11 +222,14 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     if(gate==='G2'&&role==='team_leader'&&!ardPartiesApproved(merged))deny('요구자와 Project Owner가 요구 정의서에 먼저 승인해야 합니다.');
     if(!['APPROVED','REWORK'].includes(decision))deny('유효한 승인 결과가 필요합니다.');
     if(decision==='REWORK'&&!String(reason||'').trim())deny('보완 사유를 입력해 주세요.');
+    if(ardParty&&decision==='APPROVED'&&Object.values(merged.workflowApprovals?.G2||{}).some(v=>v?.decision==='REWORK'))deny('요구 정의서 보완 작성 및 재검토 요청 후 승인할 수 있습니다.');
+    if(gate==='G4'&&decision==='APPROVED'&&Object.values(merged.workflowApprovals?.G4||{}).some(v=>v?.decision==='REWORK'))deny('개발 담당자가 보완 내용을 다시 저장한 뒤 승인할 수 있습니다.');
     const gaps=ardParty?(documentComplete(merged,3,'ARD')?[]:['ARD 작성 최종본 완료']):gateGaps(gate,merged);
     if(decision==='APPROVED'&&gaps.length)deny(gaps.join(' · '));
     merged.workflowApprovals[gate]||={};
     merged.workflowApprovals[gate][role]={decision,reason:String(reason||''),actorId:String(actor.id),actorName:actor.display_name,at:now};
-    if(ardParty&&step===3&&ardPartiesApproved(merged))merged.journeyStep=4;
+    if(ardParty&&decision==='REWORK')merged.journeyStep=3;
+    else if(ardParty&&step===3&&ardPartiesApproved(merged))merged.journeyStep=4;
     else if(allApproved(gate,merged))merged.journeyStep=step+1;
   }
   if(changes.lowRouteAction)deny('하 트랙은 개발·평가와 G3·G4 승인을 거쳐 배포해야 합니다.');
@@ -238,8 +247,9 @@ export function applyWorkflow(previous,changes,merged,actor,project,now=new Date
     const lowJump=step===2&&next===5&&merged.lowRoute?.enabled&&merged.deliveryPhase==='development';
     const fastJump=step===0&&next===5&&merged.fastTrack?.status===FAST_TRACK_STATUSES.GF_APPROVED;
     const regularizedJump=step===7&&next===9&&merged.fastTrack?.status===FAST_TRACK_STATUSES.REGULARIZED;
-    if(!lowJump&&!fastJump&&!regularizedJump&&next!==step+1)deny('현재 단계를 완료한 뒤 다음 단계로 진행해 주세요.');
-    if([4,6,8].includes(step)&&!allApproved(Object.keys(GATE_STEPS).find(k=>GATE_STEPS[k]===step),merged))deny('필수 승인자 전원의 승인이 필요합니다.');
+    const ardReworkReturn=step===4&&next===3&&changes.gateVote?.gate==='G2'&&['requester','owner'].includes(changes.gateVote.role)&&changes.gateVote.decision==='REWORK';
+    if(!lowJump&&!fastJump&&!regularizedJump&&!ardReworkReturn&&next!==step+1)deny('현재 단계를 완료한 뒤 다음 단계로 진행해 주세요.');
+    if(!ardReworkReturn&&[4,6,8].includes(step)&&!allApproved(Object.keys(GATE_STEPS).find(k=>GATE_STEPS[k]===step),merged))deny('필수 승인자 전원의 승인이 필요합니다.');
     if(step===2&&(!['GO','CONDITIONAL'].includes(merged.g1Resolution?.decision)||!merged.developerIds?.length))deny('팀장 G1 승인과 Admin 개발 담당자 배정이 필요합니다.');
     if(step===3&&!documentComplete(merged,3,'ARD'))deny('ARD 필수 항목을 완료해 주세요.');
     if(step===3&&!ardPartiesApproved(merged))deny('요구자와 Project Owner의 ARD 승인이 필요합니다.');

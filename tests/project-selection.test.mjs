@@ -5,6 +5,15 @@ import {selectedProjectNumber,currentWorkflowTarget,savedProjectView} from '../s
 const regular={no:'2026-033',journeyStep:5,deliveryPhase:'design'};
 const fast={no:'FAST',journeyStep:5,fastTrack:{requested:true}};
 
+test('pending ARD review links open definition from G2, never from later stages',()=>{
+ const target={projectNo:'ARD',journeyStep:3};
+ const p={no:'ARD',journeyStep:4,nativeAgentArtifacts:{ARD:{version:1,status:'complete'}}};
+ assert.equal(currentWorkflowTarget(p,target),target);
+ assert.equal(currentWorkflowTarget({...p,journeyStep:5},target),null);
+ assert.equal(currentWorkflowTarget({...p,historicalImport:true},target),null);
+ assert.equal(currentWorkflowTarget({...p,workflowApprovals:{G2:{requester:{decision:'APPROVED'},owner:{decision:'APPROVED'}}}},target),null);
+});
+
 test('partial INT save preserves stage projections but cannot revive removed approval state',()=>{
  const old={...regular,source:'database',requesterId:'12',uatRecord:{completed:true},intakeAnswers:['업무']};
  const next=savedProjectView(old,{no:regular.no,intakeAnswers:['보완'],intakeDetails:{}});

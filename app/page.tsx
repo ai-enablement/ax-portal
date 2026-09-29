@@ -7593,7 +7593,7 @@ function UserDashboard({
           ) : current.source === "database" && isLowRoute(current) && ([3,4].includes(selectedJourney)||(selectedJourney===5&&selectedDeliveryPhase==='design')) ? (
             <EmptyDataPage title="하 트랙 적용 제외" description="하 트랙은 G1 승인 후 개발·평가로 이동하며, 이후 G3·배포·확산·G4 절차를 진행합니다." />
           ) : current.source === "database" && [2,4,6,8].includes(selectedJourney) ? (
-            <WorkflowGate key={current.no + ":" + selectedJourney + ":" + JSON.stringify(current.workflowApprovals)} project={current} gate={{2:"G1",4:"G2",6:"G3",8:"G4"}[selectedJourney]} identity={identity} people={teamAccounts} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />
+            <WorkflowGate key={current.no + ":" + selectedJourney + ":" + JSON.stringify(current.workflowApprovals)} project={current} gate={{2:"G1",4:"G2",6:"G3",8:"G4"}[selectedJourney]} identity={identity} people={teamAccounts} onOpenRequirements={()=>setSelectedJourney(3)} onSave={(change: Partial<UserProject>) => onUpdateProject(current.no,change)} />
           ) : current.source === "database" && selectedJourney > effectiveJourneyStep ? (
             <EmptyDataPage
               title="아직 진행할 수 없는 단계입니다."

@@ -6,12 +6,22 @@ import {mailAppOrigin} from './mail-config.mjs';
 import {MailDiagnosticError} from './mail-diagnostics.mjs';
 import {updateWorkerHealth,reportWorkerFailure} from './work-mail-health.mjs';
 import {agentGuidance,detailHtml} from '../shared/notification-content.mjs';
+import {isProjectDeveloper} from '../shared/project-actors.mjs';
+
+// Enforce the import recipient boundary both when queuing and immediately
+// before sending. A role such as Owner, leader or Admin is not an assignment.
+export function mailNotifications(projects,actor){
+ return buildWorkNotifications((projects||[]).filter(project=>
+   !project.historicalImport||project.historicalImportFinalizedAt||isProjectDeveloper(project,actor)
+ ),actor);
+}
 
 export function mailKey(item) {
   return createHash('sha256').update(JSON.stringify([
     item.projectNo,item.journeyStep,item.deliveryPhase||'',item.title,
     // A different rework reason is a new actionable request.
     item.title.includes('보완 요청') ? item.body : '',
+    ...(item.approvalRound?[item.approvalRound]:[]),
   ])).digest('hex');
 }
 
@@ -38,7 +48,7 @@ export async function currentJobPayload(client, job, env=process.env, loadProjec
   if(!actor?.email)return null;
   const result=await loadProjects(client,actor);
   if(result.status!==200)throw new Error('MAIL_PROJECT_LOOKUP_FAILED');
-  const items=buildWorkNotifications(result.body.projects,{id:String(actor.id),email:actor.email,appRole:actor.app_role});
+  const items=mailNotifications(result.body.projects,{id:String(actor.id),email:actor.email,appRole:actor.app_role,sharedUserIds:result.body.sharedUserIds});
   const current=items.find(item=>mailKey(item)===job.notification_key);
   if(!current)return null;
   const recipient=env.PORTAL_MAIL_MODE==='test'?env.PORTAL_MAIL_TEST_RECIPIENT:actor.email;
@@ -99,7 +109,7 @@ export async function scanWorkMail(client, env=process.env, loadProjects=listNot
     const result=await loadProjects(client,actor);
     if(result.status && result.status!==200)throw new Error('MAIL_PROJECT_LOOKUP_FAILED');
     stage='notification_calculation';
-    const items=buildWorkNotifications(result.body.projects,{id:String(actor.id),email:actor.email,appRole:actor.app_role,sharedUserIds:result.body.sharedUserIds});
+    const items=mailNotifications(result.body.projects,{id:String(actor.id),email:actor.email,appRole:actor.app_role,sharedUserIds:result.body.sharedUserIds});
     const keys=actor.email?items.map(mailKey):[];
     stage='queue_write';
     await client.query('begin');transaction=true;
