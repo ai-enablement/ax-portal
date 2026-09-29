@@ -3,7 +3,7 @@ import {withSharedUsers,sharedAccountFields} from './shared-accounts.mjs';
 import {projectActorIds,isProjectDeveloper} from '../shared/project-actors.mjs';
 import {saveProjectProgress} from './project-progress.mjs';
 import {effectiveProgress,completeDeploymentProgress} from '../shared/deployment-progress.mjs';
-import {leaderDashboardScope} from './leader-dashboard-access.mjs';
+import {leaderDashboardScope,manageD2BAccess} from './leader-dashboard-access.mjs';
 import {formatKst,kstDate} from '../shared/portal-time.mjs';
 import {draftProjectCode} from './project-numbering.mjs';
 import {categoryChange} from '../shared/project-category.mjs';
@@ -856,7 +856,7 @@ async function listOperationalProjects(identity) {
 async function listLeaderDashboardProjects(identity) {
  const pool=getPool(),actor=await findUser(pool,identity);
  if(!actor?.is_active)return {status:403,body:{error:'Active portal account is required.'}};
- const scope=leaderDashboardScope(actor);
+  const scope=await leaderDashboardScope(actor,pool);
  if(scope!=='D2B'){
   if(actor.app_role==='general_user')return {status:403,body:{error:'리더용 대시보드 접근 권한이 없습니다.'}};
   const result=await listOperationalProjects(identity);
@@ -1586,6 +1586,8 @@ async function assignProjectDeveloper(projectCode, body, identity) {
 }
 
 export async function handleDatabaseRequest({ method, pathname, body = {}, identity }) {
+  const d2bRoute=pathname.match(/^\/governance\/d2b-access(?:\/(\d+))?$/);
+  if(d2bRoute)return withTransaction(async client=>manageD2BAccess(client,await findUser(client,identity),method,d2bRoute[1],body));
   if (method === "GET" && pathname === "/health") return health();
   if (method === "GET" && pathname === "/projects") return listOperationalProjects(identity);
   if (method === "GET" && pathname === "/leader-dashboard") return listLeaderDashboardProjects(identity);

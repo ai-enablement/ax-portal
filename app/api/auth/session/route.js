@@ -26,7 +26,7 @@ export async function GET(request) {
     email: portalUser.email,
     displayName: portalUser.display_name || identity.displayName,
     appRole: portalUser.app_role,
-    leaderDashboardScope:leaderDashboardScope(portalUser),
+    leaderDashboardScope:await leaderDashboardScope(portalUser,getPool()),
     accountRole: UI_ROLES[portalUser.app_role],
   };
   return Response.json(effectiveIdentity, {

@@ -21,6 +21,7 @@ import IntakeAgentPanel from "./intake-agent-panel";
 import NativeAgentWorkspace from './native-agent-workspace';
 import ProjectDeadline from './project-deadline';
 import LeaderDashboard from './leader-dashboard';
+import D2BAccessManagement from './d2b-access-management';
 import ProjectCategoryEditor from './project-category';
 import ArdReview from './ard-review';
 import HistoricalAdmin from './historical-admin';
@@ -14774,7 +14775,7 @@ function Governance({
   const [accounts, setAccounts] = useState<GovernanceUser[]>([]);
   const [roleHistory, setRoleHistory] = useState<RoleHistory[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
-  const [accountFilter, setAccountFilter] = useState<"all" | "ai" | "bts" | "bp" | "admin">("all");
+  const [accountFilter, setAccountFilter] = useState<"all" | "ai" | "bts" | "bp" | "admin" | "d2b">("all");
   const [accountDraft, setAccountDraft] = useState({ displayName: "", email: "", appRole: "team_member" });
   const [accountError, setAccountError] = useState("");
   const [selectedRoleAccount, setSelectedRoleAccount] = useState<GovernanceUser | null>(null);
@@ -14975,8 +14976,9 @@ function Governance({
                 <button className={accountFilter === "bts" ? "active" : ""} onClick={() => setAccountFilter("bts")}>BTS {accounts.filter((item) => item.appRole === "bts").length}</button>
                 <button className={accountFilter === "bp" ? "active" : ""} onClick={() => setAccountFilter("bp")}>비피 솔루션 {accounts.filter((item) => item.appRole === "bp_solution").length}</button>
                 <button className={accountFilter === "admin" ? "active" : ""} onClick={() => setAccountFilter("admin")}>admin {accounts.filter((item) => item.appRole === "admin").length}</button>
+                <button className={accountFilter === "d2b" ? "active" : ""} onClick={() => setAccountFilter("d2b")}>D2B</button>
               </div>
-              <label>
+              {accountFilter !== "d2b" && <label>
                 ⌕{" "}
                 <input
                   aria-label="MS 계정 검색"
@@ -14984,8 +14986,9 @@ function Governance({
                   value={accountSearch}
                   onChange={(event) => setAccountSearch(event.target.value)}
                 />
-              </label>
+              </label>}
             </div>
+            {accountFilter === "d2b" ? <D2BAccessManagement /> : <>
             {(isLeader || isAdmin) && (
               <div className="governance-account-form">
                 <div><b>프로젝트 수행 계정 등록</b><small>BTS와 비피 솔루션은 이메일 없이 이름만으로도 등록할 수 있습니다.</small></div>
@@ -15051,6 +15054,7 @@ function Governance({
                 </div>
               ))}
             </div>
+            </>}
           </div>
         )}
         {tab === "Agent 과제 관리" && (

@@ -28,7 +28,7 @@ export default function LeaderDashboard({identity,devRole,onProject}) {
       const data=await res.json();if(!res.ok)throw Error(data.error||'과제를 불러오지 못했습니다.');
       setDashboardScope(data.dashboardScope||'all');
       setProjects((data.projects||[]).map(p=>({...p,...projectPeriod(p)})));setError('');
-    }catch(e){if(e.name!=='AbortError')setError(e.message);}finally{if(!signal?.aborted)setLoading(false);}
+    }catch(e){if(e.name!=='AbortError'){setProjects([]);setEditing(null);setError(e.message);}}finally{if(!signal?.aborted)setLoading(false);}
   }
   useEffect(()=>{const controller=new AbortController();void refresh(controller.signal);return()=>controller.abort();},[devRole]); // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- refresh updates state only after the network request resolves.
   const categoryProjects=projects.filter(p=>category==='전체'||p.category==='D2B');

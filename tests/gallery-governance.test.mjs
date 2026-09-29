@@ -62,7 +62,7 @@ test("admin can manage published Gallery agents and uses the leader workspace", 
 });
 
 test("governance account filters exclude the general-user filter and are interactive", () => {
-  assert.match(page, /useState<"all" \| "ai" \| "bts" \| "bp" \| "admin">\("all"\)/);
+  assert.match(page, /useState<"all" \| "ai" \| "bts" \| "bp" \| "admin" \| "d2b">\("all"\)/);
   assert.match(page, /setAccountFilter\("all"\)/);
   assert.match(page, /setAccountFilter\("ai"\)/);
   assert.match(page, /setAccountFilter\("admin"\)/);
