@@ -3,7 +3,7 @@ export const sameDeveloperIds=(a,b)=>JSON.stringify(ids(a))===JSON.stringify(ids
 export async function changeProjectDevelopers(client,project,actor,action){
  const fail=(status,error)=>({status,body:{error}});
  if(!['admin','team_leader'].includes(actor.app_role))return fail(403,'팀장과 Admin만 개발 담당자를 변경할 수 있습니다.');
- if(project.current_stage_code!=='G2')return fail(409,'개발 착수 승인(G2) 단계에서만 개발 담당자를 변경할 수 있습니다.');
+ if(!['G2','DES','G3','PILOT','G4','OPS'].includes(project.current_stage_code))return fail(409,'개발 착수 승인(G2) 단계부터 개발 담당자를 변경할 수 있습니다.');
  const reason=String(action?.reason||'').trim();
  if(!reason||reason.length>2000)return fail(400,'변경 사유를 1~2000자로 입력해 주세요.');
  if(!Array.isArray(action.developerIds)||!action.developerIds.length||action.developerIds.some(id=>!/^\d+$/.test(String(id))||Number(id)<=0))return fail(400,'개발 담당자를 한 명 이상 선택해 주세요.');

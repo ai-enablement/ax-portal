@@ -10,11 +10,11 @@ function client(){const writes=[];return {writes,query:async(sql,args)=>{
  if(sql.startsWith('select now()'))return {rows:[{at:'2026-09-10T01:00:00Z'}]};
  writes.push({sql,args});return {rows:[],rowCount:1};
 }};}
-test('only G2 permits leader and admin changes without altering stage or votes',async()=>{
+test('G2 and later stages permit leader and admin changes without altering stage or votes',async()=>{
  for(const journeyStep of [0,1,2,3,4,5,6,7,8,9])for(const historicalImport of [false,true])for(const app_role of ['admin','team_leader']){
   const state={journeyStep,historicalImport,workflowApprovals:{G2:{owner:{decision:'APPROVED'}}},developerAssignmentHistory:[]};
   const db=client();const result=await changeProjectDevelopers(db,{id:1,project_code:'2026-043',current_stage_code:['INT','FEA','G1','ARD','G2','DES','G3','PILOT','G4','OPS'][journeyStep],runtime_state:state},{...actor,app_role},action);
-  if(journeyStep!==4){assert.equal(result.status,409);assert.equal(db.writes.length,0);continue;}
+  if(journeyStep<4){assert.equal(result.status,409);assert.equal(db.writes.length,0);continue;}
   assert.equal(result.status,200);const p=result.body.project;
   assert.equal(p.journeyStep,journeyStep);assert.deepEqual(p.workflowApprovals,state.workflowApprovals);
   assert.deepEqual(p.developerIds,['2']);assert.deepEqual(p.developerAssignmentHistory[0],{at:'2026-09-10T01:00:00.000Z',actorId:'9',actorName:'Admin',reason:action.reason,before:[{id:'1',name:'Old'}],after:[{id:'2',name:'New'}]});
@@ -22,8 +22,9 @@ test('only G2 permits leader and admin changes without altering stage or votes',
  }
 });
 test('other roles, missing reasons, empty selections, conflicts and no-op changes are blocked without writes',async()=>{
+ for(const current_stage_code of ['G2','DES','G3','PILOT','G4','OPS'])
  for(const [who,request,status] of [...['general_user','team_member','bts','bp_solution'].map(app_role=>[{...actor,app_role},action,403]),[actor,{...action,reason:' '},400],[actor,{...action,developerIds:[]},400],[actor,{...action,expectedIds:['5']},409],[actor,{...action,developerIds:['1']},400]]){
-  const db=client();assert.equal((await changeProjectDevelopers(db,{id:1,current_stage_code:'G2'},who,request)).status,status);assert.equal(db.writes.length,0);
+  const db=client();assert.equal((await changeProjectDevelopers(db,{id:1,current_stage_code},who,request)).status,status);assert.equal(db.writes.length,0);
  }
 });
 test('real DB reassignment persists history and audit atomically, then rolls back',{skip:process.env.PORTAL_DEVELOPER_DB_TEST!=='1'},async()=>{
