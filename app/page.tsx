@@ -7343,21 +7343,21 @@ function UserDashboard({
           <p className="eyebrow">
             {isProjectContributor
               ? isLeader
-                ? "AI ACTIVATION TEAM PROJECTS"
+                ? "AI ENABLEMENT CENTER PROJECTS"
                 : "MY ASSIGNED AGENT PROJECTS"
               : "MY AGENT REQUESTS"}
           </p>
           <h1>
             {isProjectContributor
               ? isLeader
-                ? "팀이 관리하는 Agent 과제를 한 화면에서 감독합니다."
+                ? "담당 Agent 과제의 진행 현황을 한눈에 확인합니다."
                 : "내가 담당한 Agent 과제를 한 화면에서 관리합니다."
               : "내가 요청한 과제는 지금 어디까지 왔을까요?"}
           </h1>
           <p>
             {isProjectContributor
               ? isLeader
-                ? "팀 전체 진행 이력과 지연 상태를 확인하고, 현재 단계에서 필요한 게이트 승인과 담당자 지정을 처리합니다."
+                ? "Agent 과제의 진행 단계와 일정을 확인하고, 요청 내용 검토부터 승인·보완 요청, 담당자 지정까지 역할에 맞는 업무를 처리합니다."
                 : "개발·리뷰·운영 역할로 배정된 과제를 함께 표시하며, 배정 시점부터 프로젝트 전체 이력을 확인할 수 있습니다."
               : "요청자 또는 프로젝트 Owner로 연결된 과제를 한 화면에서 확인할 수 있습니다."}
           </p>
