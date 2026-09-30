@@ -16,3 +16,10 @@
 .workflow-uat{margin-top:24px;padding:22px;border:1px solid #d5e0ee;border-radius:10px;background:#f7f9fc}
 .workflow-uat p,.workflow-uat li{line-height:1.7}.workflow-uat ol{padding-left:22px}.workflow-uat li+li{margin-top:8px}
 .workflow-uat-reference{padding:14px;background:#fff;border:1px solid #e1e8f0;border-radius:7px;margin:18px 0;white-space:pre-wrap}.workflow-uat-note{font-size:13px;color:#526782}
+.historical-contact-card label{display:flex;flex-direction:column;gap:6px;margin-top:10px;min-width:0}
+.historical-contact-card input{width:100%;box-sizing:border-box}
+.historical-contact-actions{display:flex;gap:10px;flex-wrap:wrap}
+.historical-contact-grid .historical-contact-card{margin-bottom:12px}
+.historical-contact-section .historical-contact-card{display:grid;grid-template-columns:minmax(100px,1fr) minmax(180px,2fr);gap:8px 12px}
+.historical-contact-section .historical-contact-card>strong{grid-column:1/-1}
+@media(max-width:640px){.historical-contact-section .historical-contact-card{grid-template-columns:1fr}}

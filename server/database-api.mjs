@@ -866,11 +866,11 @@ export async function listLeaderDashboardProjects(identity,dependencies={}) {
  // Return summary fields only, never documents or participant emails.
  const result=await pool.query(`select p.project_code as no,p.project_name as name,p.project_category as category,
  p.created_at as created,p.committed_completion_date as deadline,p.current_stage_code as stage,
- (p.requester_id=$1 or p.owner_id=$1) as personal,
+ (p.requester_id=$1 or p.owner_id=$1 or exists(select 1 from agent_portal.project_members party where party.project_id=p.id and party.user_id=$1 and party.relationship='owner' and party.ended_at is null)) as personal,
  ir.raw_answers->'portalState' as state,
  coalesce((select jsonb_agg(u.display_name order by pm.assigned_at) from agent_portal.project_members pm join agent_portal.users u on u.id=pm.user_id where pm.project_id=p.id and pm.relationship='developer' and pm.ended_at is null),'[]'::jsonb) as developers
  from agent_portal.projects p left join agent_portal.intake_requests ir on ir.project_id=p.id
- where p.deleted_at is null and (p.requester_id=$1 or p.owner_id=$1 or ($2::boolean and p.project_category='D2B')) order by p.updated_at desc`,[actor.id,scope==='D2B']);
+ where p.deleted_at is null and (p.requester_id=$1 or p.owner_id=$1 or exists(select 1 from agent_portal.project_members party where party.project_id=p.id and party.user_id=$1 and party.relationship='owner' and party.ended_at is null) or ($2::boolean and p.project_category='D2B')) order by p.updated_at desc`,[actor.id,scope==='D2B']);
  return {status:200,body:{dashboardScope:scope,projects:result.rows.map(r=>({no:r.no,name:r.name,category:r.category,isPersonalProject:r.personal===true,receivedDate:r.state?.receivedDate||kstDate(r.created),committedDate:r.deadline?kstDate(r.deadline):r.state?.committedDate||'',manualProgress:effectiveProgress({...r.state,journeyStep:portalJourneyStep(r.stage)}),developerNames:r.developers,developerIds:[],source:'database'}))}};
 }
 
@@ -1269,7 +1269,7 @@ export async function updateOperationalProject(projectCode, body, identity, tran
     const resumedFeaWrite=canSaveResumedFea(actor,project,previousState,changes);
     const resumedIntakeWrite=canSaveResumedIntake(actor,project,previousState,changes);
     const contactUpdates = 'historicalContactUpdate' in changes ? validateHistoricalContactUpdate(previousState,changes.historicalContactUpdate,actor) : null;
-    if (changedKeys.some(key => ["projectOwnerEmail", "requesterEmail", "ownerMode"].includes(key))) {
+    if (changedKeys.some(key => ["projectOwnerEmail", "requesterEmail", "ownerMode", "projectOwners", "historicalContactsCompleted"].includes(key))) {
       return {status:403,body:{error:"연락처는 계정 연결 정보입니다. 일반 문서 저장으로 변경할 수 없습니다."}};
     }
     if (changedKeys.includes("agentSession")) return {status:403,body:{error:"AI 인터뷰 상태는 전용 서버에서만 변경할 수 있습니다."}};

@@ -5,6 +5,7 @@ export function projectActorIds(actor){return [...new Set([projectActorId(actor)
 export function matchesProjectActor(actor,id){return valid(id)&&projectActorIds(actor).includes(String(id));}
 export function isProjectParty(project,actor,role){
   if(actor?.is_active===false)return false;
+  if(role==='owner'&&Array.isArray(project.projectOwners)&&project.projectOwners.length)return project.projectOwners.some(p=>valid(p.id)?matchesProjectActor(actor,p.id):isContactEmail(p.email)&&normalizeContactEmail(p.email)===normalizeContactEmail(actor?.email));
   const id=role==='requester'?(project.requester_id??project.requesterId):(project.owner_id??project.ownerId);
   // An independently assigned ID remains authoritative; a registrant fallback does not.
   if(project.historicalImport&&(!valid(id)||!valid(project.createdByUserId)||String(id)===String(project.createdByUserId))){

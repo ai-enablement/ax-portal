@@ -81,5 +81,5 @@ test('historical wizard persists contact fields and project list returns owner e
   assert.ok(server.includes('Object.assign(submittedState, contacts)'));
   assert.ok(server.includes('owner_user.email as "ownerEmail"'));
   assert.ok(server.includes('if (!userId) continue;'));
-  assert.ok(server.includes('["projectOwnerEmail", "requesterEmail", "ownerMode"].includes(key)'));
+  assert.ok(server.includes('["projectOwnerEmail", "requesterEmail", "ownerMode", "projectOwners", "historicalContactsCompleted"].includes(key)'));
 });
