@@ -29,6 +29,7 @@ import HistoricalAdmin from './historical-admin';
 import {projectCodeLabel} from '../shared/project-code.mjs';
 import {canOpenCostMonitoring} from '../shared/navigation-policy.mjs';
 import DeveloperAssignment from './developer-assignment';
+import HistoricalContacts from './historical-contacts';
 import FeaV3Editor, { IntakeV3Fields, IntakeV3Summary, FeaV3Fields } from './intake-feasibility-v3';
 import { intakeRequired, intakeSectionRequired, feaRequired } from '../shared/intake-standard.mjs';
 import {WorkflowJourney,WorkflowGate,WorkflowControls} from './workflow-v31';
@@ -7499,6 +7500,7 @@ function UserDashboard({
             </div>
           </header>
 
+          {current.historicalImport&&<HistoricalContacts key={`${current.no}:${current.requesterEmail}:${current.projectOwnerEmail}`} project={current} identity={identity} onSave={(change:Partial<UserProject>)=>onUpdateProject(current.no,change)}/>}
           {current.historicalImport && <section className="historical-import-banner">
             <div><b>{importInProgress ? "과거 이관 · 내용 보완 중" : "과거 이관 완료"}</b><p>{importInProgress ? "확인된 내용만 저장해도 됩니다. 이관 완료 시 기준 문서 단계까지 완료로 인정하고 다음 단계로 이동합니다. 승인 Gate는 생략하지 않습니다." : needsImportCompletionRepair(current) ? "기존 이관 완료 건입니다. 이관 완료 반영을 누르면 누락 항목과 관계없이 기준 문서 단계를 완료 처리합니다." : "이관 기준 문서는 누락 항목이 있어도 완료로 인정됩니다. 이후 단계부터 정식 작성·승인을 진행하며 이전 내용은 계속 보완할 수 있습니다."}</p></div>
             {(importInProgress || needsImportCompletionRepair(current)) && canAuthorHistoricalDocument && <button type="button" className="primary historical-import-complete" disabled={finalizingImport} aria-busy={finalizingImport} onClick={()=>void finishHistoricalImport()}>
@@ -15451,7 +15453,7 @@ function RequestWizard({
   const resolvedRequesterEmail = normalizeContactEmail(isHistorical ? requesterEmail : identity?.email);
   const ownerEmailInput = ownerMode === "SELF" ? (isHistorical && isAiTeam ? requesterEmail : identity?.email || "") : projectOwnerEmail;
   const resolvedOwnerEmail = normalizeContactEmail(ownerEmailInput);
-  const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email) || (isHistorical && !email));
+  const contactsValid = [resolvedRequesterEmail, resolvedOwnerEmail].every(email => isContactEmail(email));
   const suggestedRequestTitle = suggestRequestTitle(answers[0]);
   const requestTitle = manualTitle.trim();
   const canSubmit = !isHistorical ? Boolean(manualTitle.trim() && resolvedProjectOwner && isContactEmail(resolvedOwnerEmail) && identity?.displayName && isContactEmail(resolvedRequesterEmail) && !submitted && (!fastTrackRequested || (fastTrackExternalFactor && fastTrackExternalDeadline && fastTrackExternalReason.trim()))) : Boolean(

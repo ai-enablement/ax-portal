@@ -1,5 +1,6 @@
 import {classifyProject,TRACKS,TRACK_LABELS} from './project-classification.mjs';
 import {validDeadline} from './project-deadline.mjs';
+import {isProjectParty} from './project-actors.mjs';
 import {standardDocuments,sectionHasContent} from './standard-documents.mjs';
 import {intakeRequired,feaRequired} from './intake-standard.mjs';
 import {isHistoricalDocumentComplete} from './historical-import-policy.mjs';
@@ -83,8 +84,7 @@ export function gateGaps(gate,state){
 export function eligibleRole(role,actor,project,state){
   const same=id=>id!=null&&[String(actor.id),...(actor.sharedUserIds||[])].includes(String(id));
   if(!actor.is_active)return false;
-  if(role==='requester')return same(project.requester_id);
-  if(role==='owner')return same(project.owner_id);
+  if(role==='requester'||role==='owner')return isProjectParty({...state,requester_id:project.requester_id,owner_id:project.owner_id},actor,role);
   if(role==='team_leader')return actor.app_role==='team_leader';
   if(role==='security_reviewer')return same(state.securityReviewerId);
   return false;

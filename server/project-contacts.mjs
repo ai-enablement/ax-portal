@@ -51,7 +51,7 @@ export function registrationContacts(state, actor) {
     ? requesterEmail
     : normalizeContactEmail(state.projectOwnerEmail) || emailFromPartyLabel(state.projectOwner || state.owner);
   for (const [label, email] of [['요구자', requesterEmail], ['Project Owner', projectOwnerEmail]]) {
-    if ((email || !state.historicalImport) && !isContactEmail(email)) {
+    if (!isContactEmail(email)) {
       throw new ProjectContactError(`${label}의 올바른 MS 계정 이메일을 입력해 주세요.`);
     }
   }

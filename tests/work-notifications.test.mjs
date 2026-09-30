@@ -47,6 +47,7 @@ test('finalized historical imports resume actual external document and approval 
 });
 
 const base = {
+  createdByUserId: "99",
   no: "2026-101",
   name: "회의 지원 Agent",
   source: "database",

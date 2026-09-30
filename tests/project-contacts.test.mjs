@@ -46,9 +46,10 @@ test('general user requester identity is taken from authenticated account, never
   assert.equal(result.projectOwnerEmail, actor.email);
 });
 
-test('new submissions require owner email; historical records can remain incomplete without using admin email', () => {
+test('new and historical submissions require actual requester and owner emails', () => {
   assert.throws(() => registrationContacts({...state,projectOwnerEmail:''}, actor), error => error.status === 400);
-  assert.equal(registrationContacts({...state,projectOwnerEmail:'',historicalImport:true},actor).projectOwnerEmail, '');
+  assert.throws(()=>registrationContacts({...state,projectOwnerEmail:'',historicalImport:true},actor),error=>error.status===400);
+  assert.throws(()=>registrationContacts({historicalImport:true,requester:'Name',projectOwner:'Owner'},actor),error=>error.status===400);
   assert.throws(() => registrationContacts({...state,projectOwnerEmail:'bad',historicalImport:true},actor), error => error.status === 400);
 });
 

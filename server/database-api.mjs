@@ -1152,7 +1152,9 @@ export async function createOperationalProject(body, identity, transact = withTr
     const projectCode = submittedState.historicalImport
       ? (await client.query(`select agent_portal.next_project_code($1) as code`, [year])).rows[0].code
       : draftProjectCode();
-    const requesterId = await resolveContactUser(client, submittedState.requester, contacts.requesterEmail, catalog.organizationId) || actor.id;
+    const requesterId = await resolveContactUser(client, submittedState.requester, contacts.requesterEmail, catalog.organizationId);
+    if(!requesterId)throw new ProjectContactError('실제 요구자의 MS 계정 이메일을 입력해 주세요.');
+    submittedState.registeredBy={id:String(actor.id),email:actor.email,name:actor.display_name};
     const ownerId = await resolveContactUser(client, submittedState.projectOwner || submittedState.owner, contacts.projectOwnerEmail, catalog.organizationId);
     const journeyStep = Math.max(0, Math.min(portalJourneyStageCodes.length - 1, Number(submittedState.journeyStep) || 0));
     const stageCode = portalStageCode(journeyStep);

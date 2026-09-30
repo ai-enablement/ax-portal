@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mailNotifications,currentJobPayload,mailKey} from '../server/work-mail.mjs';
-const project={no:'2026-TEST',source:'database',name:'Import',historicalImport:true,requesterId:'1',ownerId:'2',developerIds:['3'],journeyStep:3,nativeAgentArtifacts:{ARD:{status:'complete',version:1}}};
+const project={no:'2026-TEST',source:'database',name:'Import',historicalImport:true,createdByUserId:'99',requesterId:'1',ownerId:'2',developerIds:['3'],journeyStep:3,nativeAgentArtifacts:{ARD:{status:'complete',version:1}}};
 test('every import stage excludes nonassigned requester, Owner, leader and Admin from mail',()=>{
  for(let journeyStep=0;journeyStep<=9;journeyStep++){
   const p={...project,journeyStep};

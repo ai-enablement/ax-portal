@@ -21,7 +21,7 @@ test('draft and import-open ARD cannot be approved; nonparties cannot sign',()=>
  assert.throws(()=>vote({...state(),nativeAgentArtifacts:{}},'requester',actor(1)),/최종본/);
  assert.throws(()=>vote({...state(),historicalImport:true},'requester',actor(1)),/이관 완료/);
  assert.throws(()=>vote(state(),'requester',actor(9,'admin')),/담당자/);
- assert.throws(()=>vote({...state(),historicalImport:true,historicalImportFinalizedAt:'2026-09-29',historicalCompletedThrough:{step:3},nativeAgentArtifacts:{ARD:{version:2,status:'draft'}}},'requester',actor(1)),/최종본/);
+ assert.throws(()=>vote({...state(),historicalImport:true,createdByUserId:'99',historicalImportFinalizedAt:'2026-09-29',historicalCompletedThrough:{step:3},nativeAgentArtifacts:{ARD:{version:2,status:'draft'}}},'requester',actor(1)),/최종본/);
 });
 test('completed ARD parties and assigned developer can read only final, not chat or drafts',()=>{
  for(const [id,member] of [[1,false],[2,false],[4,true]]){
