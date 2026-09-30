@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {RPA_INTAKE_RECIPIENTS} from './rpa-intake-recipients.mjs';
 import {rpaDeveloperRoster} from './rpa-developer-roster.mjs';
 import {withSharedUsers} from './shared-accounts.mjs';
 import {isRpaHidden} from '../shared/rpa-visibility.mjs';
@@ -47,7 +48,7 @@ export async function createRpaRequest(identity,body){
   const payload={title:body.title.trim(),description:body.description.trim(),type:body.type,priority:body.priority,occurredDate:body.occurredDate,notifyEmail:body.notifyEmail.trim().toLowerCase(),log:String(body.log||''),errorStep:String(body.errorStep||'').slice(0,1000),files:files.map(({id,name,size})=>({id,name,size})),history:[{kind:'created',at:new Date().toISOString(),label:'요청 접수',actor:actor.display_name}],mailStatus:'not_requested'};
   const row=(await client.query(`insert into agent_portal.rpa_requests(project_id,created_by,idempotency_key,payload) values($1,$2,$3,$4) returning id::text`,[body.projectId,actor.id,body.key,payload])).rows[0];
   for(const f of files)await client.query('insert into agent_portal.rpa_request_files(id,request_id,name,mime_type,byte_size,content) values($1,$2,$3,$4,$5,$6)',[f.id,row.id,f.name,f.mime,f.size,f.bytes]);
-  const recipients=(await client.query("select distinct lower(email) as email from agent_portal.users where is_active=true and app_role in ('admin','team_leader','team_member')")).rows;
+  const recipients=RPA_INTAKE_RECIPIENTS.map(email=>({email}));
   payload.id=row.id;payload.createdAt=payload.history[0].at;payload.requester=actor.display_name;
   payload.workflowMailToken=randomUUID();
   payload.stageMailJobs=recipients.map(({email})=>{const id=randomUUID();return {id,token:payload.workflowMailToken,status:'pending',attempts:0,mail:stageMail('received',payload,project.payload,email,id)};});

@@ -37,7 +37,7 @@ try{
  const created=await createRpaRequest(identity('general_user'),body);
  const receivedMails=[];
  await runRpaMailCycle({PORTAL_MAIL_MODE:'live',PORTAL_APP_URL:'https://portal.example.com'},async mail=>{receivedMails.push(mail);return {status:'sent',code:'MOCK'};});
- assert.deepEqual(receivedMails.map(m=>m.recipient).sort(),['admin@example.invalid','team_leader@example.invalid','team_member@example.invalid'].sort());
+ assert.deepEqual(receivedMails.map(m=>m.recipient).sort(),['siyoung.heo@changshininc.com','miki.kim@thebytesize.ai'].sort());
  assert.ok(receivedMails.every(m=>m.htmlBody.includes(`rpaRequest=${created.id}`)&&m.htmlBody.includes('Fixture only')&&m.subject.includes('신규 유지보수 접수')));checks+=2;
  assert.equal((await createRpaRequest(identity('general_user'),body)).id,created.id);checks++;
  const d=await listRpa(identity('general_user'));assert.equal(d.requests.length,1);assert.equal(d.requests[0].requester,'general_user');checks++;
