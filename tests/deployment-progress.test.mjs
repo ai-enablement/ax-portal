@@ -36,7 +36,7 @@ test('D2B access requires an active exact email assignment from the database',as
 test('dashboard endpoint scopes D2B in SQL and UI hides developer filters',()=>{
  const server=readFileSync(new URL('../server/database-api.mjs',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../app/leader-dashboard.jsx',import.meta.url),'utf8');
- assert.match(server,/p\.deleted_at is null and \(p\.requester_id=\$1 or p\.owner_id=\$1 or \(\$2::boolean and p\.project_category='D2B'\)\)/);
+ assert.match(server,/p\.deleted_at is null and \(p\.requester_id=\$1 or p\.owner_id=\$1 or exists\(select 1 from agent_portal.project_members party where party.project_id=p.id and party.user_id=\$1 and party.relationship='owner' and party.ended_at is null\) or \(\$2::boolean and p\.project_category='D2B'\)\)/);
  assert.match(server,/const automaticProgress=completeDeploymentProgress\(merged,actor\)/);
  assert.match(ui,/fetch\('\/api\/database\/leader-dashboard'/);
  assert.match(ui,/options.tabs.map/);

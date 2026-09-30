@@ -27,7 +27,7 @@ test('dashboard API uses authenticated ID and DB assignment, not client scope; r
   const result=await listLeaderDashboardProjects({dashboardScope:'all'},{pool,findUser:async()=>({id:42,email:'user@example.com',app_role:'general_user',is_active:true})});
   assert.equal(result.body.dashboardScope,assigned?'D2B':'personal');
   assert.deepEqual(calls[1].params,[42,assigned]);
-  assert.match(calls[1].sql,/p.requester_id=\$1 or p.owner_id=\$1 or \(\$2::boolean and p.project_category='D2B'\)/);
+  assert.match(calls[1].sql,/p.requester_id=\$1 or p.owner_id=\$1 or exists\(select 1 from agent_portal.project_members party where party.project_id=p.id and party.user_id=\$1 and party.relationship='owner' and party.ended_at is null\) or \(\$2::boolean and p.project_category='D2B'\)/);
   assert.equal(result.body.projects[0].isPersonalProject,true);
   assert.doesNotMatch(JSON.stringify(result.body),/secret|markdownDocuments|private/);
  }
