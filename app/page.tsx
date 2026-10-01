@@ -1533,7 +1533,7 @@ export default function Home() {
       const currentStageTitle = historical && journeyStep === 5
         ? deliveryPhase === "development" ? "개발·평가" : "설계"
         : currentStage.title;
-      const assignedDevelopers = historical
+      const assignedDevelopers = historical || registration?.fastTrackRequest?.requested
         ? teamAccounts.filter((account) =>
             (registration?.developerIds ?? []).includes(account.id),
           )
@@ -15509,7 +15509,7 @@ function RequestWizard({
         receivedDate,
         currentJourneyStep: historicalJourneyStep,
         currentDeliveryPhase: historicalJourneyStep >= 5 ? historicalDeliveryPhase : undefined,
-        developerIds: historicalDeveloperIds,
+        developerIds: isHistorical || (canApplyFastTrack && fastTrackRequested) ? historicalDeveloperIds : [],
         clientRequestId: submissionRequestId.current,
         g1Decision: requiresHistoricalG1Record ? historicalG1Decision : undefined,
         g1Reason: requiresHistoricalG1Record ? historicalG1Reason.trim() : undefined,
@@ -15641,6 +15641,7 @@ function RequestWizard({
               <dl><div><dt>이름</dt><dd>{identity?.displayName || "로그인 정보를 확인해 주세요"}</dd></div><div><dt>이메일</dt><dd>{identity?.email || "로그인이 필요합니다"}</dd></div></dl>
             </section>
             <ProjectOwnerField mode={ownerMode} onModeChange={setOwnerMode} requester={requesterOwnerLabel} owner={projectOwner} onOwnerChange={setProjectOwner} email={ownerEmailInput} onEmailChange={setProjectOwnerEmail} optionalEmail={false} name="new-project-owner-mode" />
+            {canApplyFastTrack && fastTrackRequested && <fieldset className="historical-developer-options"><legend>Fast Track 개발 담당자 사전 배정</legend><p>복수 선택할 수 있습니다. 배정은 트랙 판정이나 승인을 대신하지 않습니다.</p>{eligibleDevelopers.map(account=><label key={account.id}><input type="checkbox" checked={historicalDeveloperIds.includes(account.id)} onChange={()=>toggleHistoricalDeveloper(account.id)}/>{account.displayName || account.email}</label>)}</fieldset>}
             <p className="new-request-hint"><ChatsCircle size={20} /><span>업무 내용은 등록 후 작성합니다.<small>생성된 과제의 요구 접수 화면으로 이동해 INT 양식과 AI 인터뷰를 이어갑니다.</small></span></p>
             {registrationError && <p role="alert" className="new-request-error">{registrationError}</p>}
             {registrationGaps.length > 0 && <p role="status" className="new-request-validation">등록 전 확인: {registrationGaps.join(" · ")}</p>}

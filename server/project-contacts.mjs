@@ -9,7 +9,7 @@ export function validateHistoricalContactUpdate(state, update, actor) {
   if(!state.historicalImport || !(actor.app_role==='admin'||(actor.app_role!=='general_user'&&assigned)))throw new ProjectContactError('Admin 또는 지정 개발 담당자만 이관 연락처를 보완할 수 있습니다.',403);
   if(!update||typeof update!=='object'||Array.isArray(update))throw new ProjectContactError('연락처 입력을 확인해 주세요.');
   if('parties' in update){
-    if(Object.keys(update).some(k=>!['parties','complete'].includes(k)))throw new ProjectContactError('지원하지 않는 연락처 항목입니다.');
+    if(Object.keys(update).some(k=>!['parties','complete','removedOwnerEmails'].includes(k)))throw new ProjectContactError('지원하지 않는 연락처 항목입니다.');
     const old=historicalParties(state),raw=update.parties;
     if(!raw||!Array.isArray(raw.owners)||!raw.owners.length||raw.owners.length>30)throw new ProjectContactError('Project Owner를 한 명 이상 입력해 주세요.');
     const clean=p=>({name:String(p?.name||'').trim(),email:normalizeContactEmail(p?.email)});
@@ -18,7 +18,8 @@ export function validateHistoricalContactUpdate(state, update, actor) {
     if(new Set(owners.map(p=>p.email)).size!==owners.length)throw new ProjectContactError('Owner 이메일이 중복됩니다.');
     if(old.requester.email&&old.requester.email!==requester.email)throw new ProjectContactError('이미 연결된 요구자 이메일은 변경할 수 없습니다.',409);
     if(old.requester.name&&old.requester.name!==requester.name)throw new ProjectContactError('기존 요구자 이름은 유지해 주세요.',409);
-    for(const p of old.owners)if(!owners.some(n=>(!p.name||n.name===p.name)&&(!p.email||n.email===p.email)))throw new ProjectContactError('기존 Owner의 이름과 연결 이메일은 유지해 주세요.',409);
+    const removed=Array.isArray(update.removedOwnerEmails)?update.removedOwnerEmails.map(normalizeContactEmail):[];
+    for(const p of old.owners)if(!(p.email&&removed.includes(p.email))&&!owners.some(n=>(!p.name||n.name===p.name)&&(!p.email||n.email===p.email)))throw new ProjectContactError('기존 Owner의 이름과 연결 이메일은 유지해 주세요.',409);
     return {parties:{requester,owners},complete:update.complete===true};
   }
   const result={};

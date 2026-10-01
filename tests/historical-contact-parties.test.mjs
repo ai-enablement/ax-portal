@@ -28,3 +28,9 @@ test('all owners are persisted as active members and completion is stored',async
  for(const owner of state.projectOwners)assert.equal(isProjectParty(state,{id:owner.id,email:owner.email},'owner'),true);
  assert.equal(isProjectParty(state,{id:1,email:'admin@example.com'},'owner'),false);
 });
+test('explicit owner removal keeps at least one owner and does not change requester',()=>{
+ const state={historicalImport:true,requester:'요구자',requesterEmail:parties.requester.email,projectOwners:parties.owners};
+ const update={parties:{...parties,owners:[parties.owners[1]]},removedOwnerEmails:[parties.owners[0].email],complete:true};
+ assert.equal(validateHistoricalContactUpdate(state,update,actor).parties.owners.length,1);
+ assert.throws(()=>validateHistoricalContactUpdate(state,{...update,parties:{...parties,owners:[]}},actor));
+});

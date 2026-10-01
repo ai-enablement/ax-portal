@@ -1107,6 +1107,7 @@ export async function createOperationalProject(body, identity, transact = withTr
     const actor = await findUser(client, identity);
     if (!actor || !actor.is_active) return { status: 403, body: { error: "Project creation permission is required." } };
     assertFastTrackApplicant(submittedState, actor.app_role);
+    if(!submittedState.historicalImport && submittedState.developerIds?.length && !(submittedState.fastTrack?.requested && ['admin','team_leader'].includes(actor.app_role)))return {status:403,body:{error:'신규 접수 시 개발자 사전 배정은 팀장·Admin의 Fast Track 신청에서만 가능합니다.'}};
     if (submittedState.historicalImport && actor.app_role === "general_user") {
       return { status: 403, body: { error: "Historical project import requires an AI delivery role." } };
     }
@@ -1180,6 +1181,7 @@ export async function createOperationalProject(body, identity, transact = withTr
       );
     }
     const developers = await syncProjectDevelopers(client, project.id, state.developerIds, actor.id);
+    if(new Set(state.developerIds||[]).size!==developers.length)throw new ProjectContactError('활성화된 개발 담당자를 선택해 주세요.');
     state.developerIds = developers.map((user) => String(user.id));
     state.developerNames = developers.map((user) => user.name);
     for (let index = 0; index <= journeyStep; index += 1) {
