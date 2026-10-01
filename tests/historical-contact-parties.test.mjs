@@ -5,6 +5,17 @@ import {isProjectParty} from '../shared/project-actors.mjs';
 import {validateHistoricalContactUpdate,linkHistoricalContacts} from '../server/project-contacts.mjs';
 const actor={id:1,app_role:'admin'};
 const parties={requester:{name:'요구자',email:'requester@example.com'},owners:[{name:'Owner A',email:'a@example.com'},{name:'Owner B',email:'b@example.com'}]};
+test('legacy department labels never create another Owner',()=>{
+ const owners=historicalParties({projectOwner:'김성웅 / 경영기획팀',projectOwnerEmail:'owner@example.com'}).owners;
+ assert.deepEqual(owners,[{name:'김성웅',email:'owner@example.com'}]);
+ assert.equal(historicalParties({projectOwner:'Owner · Department'}).owners.length,1);
+});
+test('a stored owner without an email can be explicitly removed',()=>{
+ const state={historicalImport:true,requester:'요구자',requesterEmail:parties.requester.email,projectOwners:[parties.owners[0],{name:'경영기획팀',email:''}]};
+ const update={parties:{...parties,owners:[parties.owners[0]]},removedOwnerNames:['경영기획팀'],complete:true};
+ assert.equal(validateHistoricalContactUpdate(state,update,actor).parties.owners.length,1);
+ assert.throws(()=>validateHistoricalContactUpdate(state,{...update,removedOwnerNames:[]},actor),e=>e.status===409);
+});
 test('missing names and multiple owners can be completed after import finalization',()=>{
  const state={historicalImport:true,historicalImportFinalizedAt:'2026-09-30',requester:'미등록',projectOwner:'미등록'};
  assert.equal(historicalParties(state).requester.name,'');
