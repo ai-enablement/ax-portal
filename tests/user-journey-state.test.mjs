@@ -233,7 +233,7 @@ test("assigns multiple registered developers while importing a historical projec
   assert.ok(page.includes("historicalDeveloperIds.length > 0"));
   assert.ok(page.includes("개발 담당자 지정"));
   assert.ok(page.includes('type="checkbox"'));
-  assert.ok(page.includes("developerIds: historicalDeveloperIds"));
+  assert.ok(page.includes("developerIds: isHistorical || (canApplyFastTrack && fastTrackRequested) ? historicalDeveloperIds : []"));
   assert.ok(page.includes("developerNames"));
   assert.ok(page.includes("const eligibleDevelopers = teamAccounts"));
   assert.ok(page.includes("일반 User를 제외한 등록 계정"));
