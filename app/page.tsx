@@ -24,6 +24,7 @@ import LeaderDashboard from './leader-dashboard';
 import D2BAccessManagement from './d2b-access-management';
 import LogoutButton from './logout-button';
 import LaunchOnboarding from './launch-onboarding';
+import GovernanceProjectPeople from './governance-project-people';
 import ProjectCategoryEditor from './project-category';
 import ArdReview from './ard-review';
 import HistoricalAdmin from './historical-admin';
@@ -1088,6 +1089,12 @@ export default function Home() {
     };
   }, [identityStatus, role, loadRetries.projects]);
 
+  useEffect(() => {
+    const refresh = () => setLoadRetries(v => ({...v, projects:v.projects+1}));
+    window.addEventListener('portal-project-people-saved', refresh);
+    return () => window.removeEventListener('portal-project-people-saved', refresh);
+  }, []);
+
   useEffect(()=>{
     if(identityStatus!=='ready')return;
     const controller=new AbortController();
@@ -1141,7 +1148,7 @@ export default function Home() {
       active = false;
       controller.abort();
     };
-  }, [identityStatus, role]);
+  }, [identityStatus, role, loadRetries.projects]);
 
   const userProjectItems = useMemo<UserProject[]>(
     () => {
@@ -14904,8 +14911,6 @@ function Governance({
     onUpdateProject(editingProjectNo, {
       name: adminDraft.name.trim(),
       status: adminDraft.status.trim(),
-      owner: adminDraft.owner.trim(),
-      handler: adminDraft.handler.trim(),
       dueDate: adminDraft.dueDate.trim(),
       nextAction: adminDraft.nextAction.trim(),
     });
@@ -14962,7 +14967,7 @@ function Governance({
       </section>
       <section className="panel admin-panel">
         <div className="admin-tabs">
-          {["계정·역할", "Agent 과제 관리", "권한 정책", "감사 로그"].map((t) => (
+          {["계정·역할", ...(isLeader ? ["Agent 과제 관리"] : []), "권한 정책", "감사 로그"].map((t) => (
             <button
               key={t}
               className={tab === t ? "active" : ""}
@@ -15063,7 +15068,8 @@ function Governance({
             </>}
           </div>
         )}
-        {tab === "Agent 과제 관리" && (
+        {tab === "Agent 과제 관리" && isLeader && (
+          <><GovernanceProjectPeople />{isAdmin && <details><summary>기타 과제 정보 수정·삭제 (Admin)</summary>
           <div className="admin-content admin-project-manager">
             <header>
               <div>
@@ -15082,8 +15088,6 @@ function Governance({
               <div className="admin-project-head">
                 <span>Agent 과제</span>
                 <span>현재 단계</span>
-                <span>Owner</span>
-                <span>담당</span>
                 <span>관리</span>
               </div>
               {adminProjects.map((project) => (
@@ -15093,8 +15097,6 @@ function Governance({
                     <small>{project.no} · {project.status}</small>
                   </span>
                   <span>{userJourney[project.journeyStep]?.title || "운영·개선"}</span>
-                  <span>{project.owner}</span>
-                  <span>{project.handler}</span>
                   <span className="admin-project-actions">
                     {isAdmin ? (
                       <>
@@ -15151,19 +15153,15 @@ function Governance({
                   <label>
                     Project Owner
                     <input
-                      value={adminDraft.owner}
-                      onChange={(event) =>
-                        setAdminDraft({ ...adminDraft, owner: event.target.value })
-                      }
+                      value="상단 DB 담당 계정 관리에서 확인·변경하세요."
+                      readOnly
                     />
                   </label>
                   <label>
                     담당자
                     <input
-                      value={adminDraft.handler}
-                      onChange={(event) =>
-                        setAdminDraft({ ...adminDraft, handler: event.target.value })
-                      }
+                      value="상단 DB 담당 계정 관리에서 확인·변경하세요."
+                      readOnly
                     />
                   </label>
                   <label>
@@ -15199,6 +15197,7 @@ function Governance({
               </section>
             )}
           </div>
+          </details>}</>
         )}
         {tab === "권한 정책" && (
           <div className="admin-content approval-empty-state">

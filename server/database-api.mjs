@@ -1,4 +1,5 @@
 import { getPool, withTransaction } from "./db/pool.mjs";
+import {listGovernanceProjectPeople,saveGovernanceProjectPeople,saveGovernanceOwnerProfile} from './governance-project-people.mjs';
 import {withSharedUsers,sharedAccountFields} from './shared-accounts.mjs';
 import {projectActorIds,isProjectDeveloper} from '../shared/project-actors.mjs';
 import {saveProjectProgress} from './project-progress.mjs';
@@ -1592,6 +1593,11 @@ async function assignProjectDeveloper(projectCode, body, identity) {
 }
 
 export async function handleDatabaseRequest({ method, pathname, body = {}, identity }) {
+  const ownerProfileRoute=pathname.match(/^\/governance\/project-people\/([^/]+)\/owners\/(\d+)$/);
+  if(method==='PATCH'&&ownerProfileRoute)return withTransaction(async client=>saveGovernanceOwnerProfile(client,await findUser(client,identity),decodeURIComponent(ownerProfileRoute[1]),ownerProfileRoute[2],body));
+  if(method==='GET'&&pathname==='/governance/project-people')return withTransaction(async client=>listGovernanceProjectPeople(client,await findUser(client,identity)));
+  const peopleRoute=pathname.match(/^\/governance\/project-people\/([^/]+)$/);
+  if(method==='PATCH'&&peopleRoute)return withTransaction(async client=>saveGovernanceProjectPeople(client,await findUser(client,identity),decodeURIComponent(peopleRoute[1]),body));
   const d2bRoute=pathname.match(/^\/governance\/d2b-access(?:\/(\d+))?$/);
   if(d2bRoute)return withTransaction(async client=>manageD2BAccess(client,await findUser(client,identity),method,d2bRoute[1],body));
   if (method === "GET" && pathname === "/health") return health();
