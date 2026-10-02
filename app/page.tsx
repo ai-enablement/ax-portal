@@ -1185,14 +1185,16 @@ export default function Home() {
     return [...browserProjects, ...teamWorkloadProjects];
   }, [submittedProjects, teamWorkloadProjects, deletedProjectNos]);
 
-  const deleteProject = (projectNo: string) => {
-    void (async () => {
+  const deleteProject = async (projectNo: string) => {
+    try {
       const response = await fetch(`/api/database/projects/${encodeURIComponent(projectNo)}`, { method: "DELETE" });
       const payload = (await response.json()) as { error?: string };
-      if (!response.ok) return notify(payload.error || "과제를 삭제하지 못했습니다.");
+      if (!response.ok) { notify(payload.error || "과제를 삭제하지 못했습니다."); return false; }
       setSubmittedProjects((current) => current.filter((project) => project.no !== projectNo));
       setTeamWorkloadProjects((current) => current.filter((project) => project.id !== projectNo));
-    })();
+      window.dispatchEvent(new Event('portal-project-people-saved'));
+      return true;
+    } catch { notify("DB 연결을 확인해 주세요. 과제를 삭제하지 못했습니다."); return false; }
   };
 
   const updateProject = (
@@ -14772,11 +14774,11 @@ function Governance({
   onDetail: (p: (typeof projects)[0]) => void;
   notify: (s: string) => void;
   projects: UserProject[];
-  onDeleteProject: (projectNo: string) => void;
+  onDeleteProject: (projectNo: string) => void | Promise<boolean>;
   onUpdateProject: (
     projectNo: string,
     changes: Partial<UserProject>,
-  ) => void;
+  ) => void | Promise<boolean>;
   selectedGate: string;
   onGateChange: (gate: string) => void;
 }) {
@@ -14906,21 +14908,24 @@ function Governance({
       nextAction: project.nextAction,
     });
   };
-  const saveProject = () => {
+  const saveProject = async () => {
     if (!editingProjectNo || !adminDraft.name.trim()) return;
-    onUpdateProject(editingProjectNo, {
+    const saved = await onUpdateProject(editingProjectNo, {
       name: adminDraft.name.trim(),
       status: adminDraft.status.trim(),
       dueDate: adminDraft.dueDate.trim(),
       nextAction: adminDraft.nextAction.trim(),
     });
+    if (saved === false) return;
+    window.dispatchEvent(new Event('portal-project-people-saved'));
     notify(`${editingProjectNo} 과제 정보가 수정되었습니다.`);
     setEditingProjectNo(null);
   };
-  const deleteAnyProject = (project: UserProject) => {
+  const deleteAnyProject = async (project: UserProject) => {
     if (!window.confirm(`Admin 권한으로 '${project.name}' 과제를 삭제하시겠습니까?`))
       return;
-    onDeleteProject(project.no);
+    const deleted = await onDeleteProject(project.no);
+    if (deleted === false) return;
     if (editingProjectNo === project.no) setEditingProjectNo(null);
     notify(`${project.no} 과제가 Admin 권한으로 삭제되었습니다.`);
   };
@@ -15069,67 +15074,15 @@ function Governance({
           </div>
         )}
         {tab === "Agent 과제 관리" && isLeader && (
-          <><GovernanceProjectPeople />{isAdmin && <details><summary>기타 과제 정보 수정·삭제 (Admin)</summary>
-          <div className="admin-content admin-project-manager">
-            <header>
-              <div>
-                <b>{isAdmin ? "전체 Agent 과제 수정·삭제" : "전체 Agent 과제 현황"}</b>
-                <p>
-                  {isAdmin
-                    ? "Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나 삭제할 수 있습니다."
-                    : "AI 활성화팀은 전체 과제의 단계·Owner·담당 현황을 조회합니다."}
-                </p>
-              </div>
-              <Pill tone={isAdmin ? "violet" : "blue"}>
-                {isAdmin ? "Admin 전용" : "AI 활성화팀 조회"}
-              </Pill>
-            </header>
-            <div className="admin-project-table">
-              <div className="admin-project-head">
-                <span>Agent 과제</span>
-                <span>현재 단계</span>
-                <span>관리</span>
-              </div>
-              {adminProjects.map((project) => (
-                <div className="admin-project-row" key={project.no}>
-                  <span>
-                    <b>{project.name}</b>
-                    <small>{project.no} · {project.status}</small>
-                  </span>
-                  <span>{userJourney[project.journeyStep]?.title || "운영·개선"}</span>
-                  <span className="admin-project-actions">
-                    {isAdmin ? (
-                      <>
-                        <button onClick={() => editProject(project)}>
-                          <PencilSimple size={14} weight="bold" /> 수정
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() => deleteAnyProject(project)}
-                        >
-                          <Trash size={14} weight="bold" /> 삭제
-                        </button>
-                      </>
-                    ) : (
-                      <Pill tone="gray">조회 전용</Pill>
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <GovernanceProjectPeople admin={isAdmin}
+            onEdit={(no: string) => { const project=adminProjects.find(p=>p.no===no); if(project)editProject(project); }}
+            onDelete={(no: string) => { const project=adminProjects.find(p=>p.no===no); if(project)deleteAnyProject(project); }}>
             {isAdmin && editingProjectNo && (
               <section className="admin-project-editor" aria-label="Agent 과제 수정">
                 <header>
                   <div>
-                    <small>{editingProjectNo}</small>
-                    <h3>Agent 과제 정보 수정</h3>
+                    <h3>기본 과제 정보</h3>
                   </div>
-                  <button
-                    aria-label="수정 닫기"
-                    onClick={() => setEditingProjectNo(null)}
-                  >
-                    <X size={18} />
-                  </button>
                 </header>
                 <div>
                   <label>
@@ -15148,20 +15101,6 @@ function Governance({
                       onChange={(event) =>
                         setAdminDraft({ ...adminDraft, status: event.target.value })
                       }
-                    />
-                  </label>
-                  <label>
-                    Project Owner
-                    <input
-                      value="상단 DB 담당 계정 관리에서 확인·변경하세요."
-                      readOnly
-                    />
-                  </label>
-                  <label>
-                    담당자
-                    <input
-                      value="상단 DB 담당 계정 관리에서 확인·변경하세요."
-                      readOnly
                     />
                   </label>
                   <label>
@@ -15184,20 +15123,13 @@ function Governance({
                   </label>
                 </div>
                 <footer>
-                  <button
-                    className="secondary"
-                    onClick={() => setEditingProjectNo(null)}
-                  >
-                    취소
-                  </button>
                   <button className="primary" onClick={saveProject}>
-                    변경사항 저장
+                    기본 과제 정보 저장
                   </button>
                 </footer>
               </section>
             )}
-          </div>
-          </details>}</>
+          </GovernanceProjectPeople>
         )}
         {tab === "권한 정책" && (
           <div className="admin-content approval-empty-state">

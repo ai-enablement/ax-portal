@@ -308,7 +308,7 @@ test("shows no completed or current lifecycle step when there are no projects", 
   assert.ok(page.includes('id="current-stage-detail"'));
 });
 
-test("limits user deletion to intake and gives admin full project controls", () => {
+test("limits user deletion to intake and gives admin full project controls", async () => {
   assert.ok(page.includes("agent-portal-deleted-projects"));
   assert.ok(page.includes("agent-portal-project-overrides"));
   assert.ok(page.includes("current.journeyStep === 0"));
@@ -317,7 +317,11 @@ test("limits user deletion to intake and gives admin full project controls", () 
   assert.ok(page.includes("Admin 삭제는 현재 단계와 관계없이 적용됩니다."));
   assert.ok(page.includes("과제 삭제"));
   assert.ok(page.includes("Agent 과제 관리"));
-  assert.ok(page.includes("Admin은 생애주기 단계와 관계없이 모든 과제를 수정하거나"));
+  assert.ok(page.includes("<GovernanceProjectPeople admin={isAdmin}"));
+  const people=await readFile(new URL('../app/governance-project-people.jsx',import.meta.url),'utf8');
+  assert.match(people,/admin&&<button[^>]+onClick=\{\(\)=>onDelete\?\.\(p.no\)\}/);
+  assert.ok(!page.includes('상단 DB 담당 계정 관리에서 확인·변경하세요.'));
+  assert.ok(!page.includes('기타 과제 정보 수정·삭제 (Admin)'));
   assert.ok(page.includes("onUpdateProject"));
   assert.ok(page.includes("deleteAnyProject"));
   assert.ok(page.includes("teamWorkloadProjects.map(teamRequirementAsHomeProject)"));

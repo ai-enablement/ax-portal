@@ -28,7 +28,7 @@ test('Gallery lists published or own applications and restricts published edits/
  const pool=getPool(),originalQuery=pool.query,originalConnect=pool.connect;
  let role='general_user',listed=false,edited=false,deleted=false;
  const query=async(sql,args)=>{
-  if(sql.includes('select id, email')||sql.includes('update agent_portal.users'))return {rows:[{id:'7',email:'user@example.com',app_role:role,is_active:true}]};
+  if(sql.includes('select id, organization_id, email')||sql.includes('update agent_portal.users'))return {rows:[{id:'7',organization_id:1,email:'user@example.com',app_role:role,is_active:true}]};
   if(sql.includes('for update'))return {rows:[{id:10,submission_status:'published',submitted_by:'9',agent_name:'Agent'}]};
   if(sql.includes('gs.submission_number as')){
    if(sql.includes('order by gs.submitted_at')){

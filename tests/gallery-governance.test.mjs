@@ -50,7 +50,7 @@ test("AI enablement roles can open governance and submit Gallery applications", 
   assert.match(page, /"gallery",\s+"governance"/);
   assert.match(page, /role !== ACCOUNT_ROLES\.user/);
   assert.match(page, /isTeam \? "Agent 올리기" : "내 Agent 올리기"/);
-  assert.match(page, /AI 활성화팀 조회/);
+  assert.match(page, /tab === "Agent 과제 관리" && isLeader/);
   assert.match(page, /조회 전용/);
 });
 

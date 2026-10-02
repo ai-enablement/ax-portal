@@ -10,6 +10,7 @@ test('only active admin and leader may read and manage identities',async()=>{
   assert.equal((await saveGovernanceProjectPeople(db,{...actor,app_role:role},'2026-018',change)).status,403);
  }
  assert.equal((await listGovernanceProjectPeople(db,{...actor,is_active:false})).status,403);
+ assert.equal((await listGovernanceProjectPeople(db,{...actor,organization_id:undefined})).status,403);
 });
 const profile={name:'Owner Updated',email:'owner.new@company.com',department:'경영기획팀',reason:'연락처 보완',version:change.version};
 test('Owner profile rejects invalid fields and unauthorized roles before touching DB',async()=>{

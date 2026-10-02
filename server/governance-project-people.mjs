@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {isContactEmail,normalizeContactEmail} from '../shared/project-contacts.mjs';
 import {sharedAccountFields} from './shared-accounts.mjs';
-const allowed = actor => actor?.is_active && ['admin','team_leader'].includes(actor.app_role);
+const allowed = actor => actor?.is_active && actor.organization_id && ['admin','team_leader'].includes(actor.app_role);
 const personSelect = `select u.id::text as id,u.display_name as name,coalesce(u.email,login.email,'') as email,
  coalesce(t.team_name,'') as department,u.app_role as role,u.is_active as active,u.updated_at as version
  from agent_portal.users u left join agent_portal.users login on login.id=u.shared_account_id

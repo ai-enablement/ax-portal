@@ -110,13 +110,13 @@ async function ensureSinglePortalUser(client, identity) {
   // Local preview must never overwrite a real Entra identity with a shared test ID.
   if (identity.source === 'development') {
     return (await client.query(
-      `select id, email, display_name, app_role, is_active
+      `select id, organization_id, email, display_name, app_role, is_active
          from agent_portal.users where lower(email)=lower($1) and is_active=true limit 1`,
       [identity.email],
     )).rows[0] || null;
   }
   const result = await client.query(
-    `select id, email, display_name, app_role, is_active
+    `select id, organization_id, email, display_name, app_role, is_active
        from agent_portal.users
       where lower(email) = lower($1) or ($2 <> '' and ms_account_id = $2)
       order by is_active desc, id
@@ -139,7 +139,7 @@ async function ensureSinglePortalUser(client, identity) {
               last_login_at = now(),
               updated_at = now()
         where id = $1
-        returning id, email, display_name, app_role, is_active`,
+        returning id, organization_id, email, display_name, app_role, is_active`,
       [
         user.id,
         identity.objectId || "",
@@ -173,7 +173,7 @@ async function ensureSinglePortalUser(client, identity) {
        is_active = true,
        last_login_at = now(),
        updated_at = now()
-     returning id, email, display_name, app_role, is_active`,
+     returning id, organization_id, email, display_name, app_role, is_active`,
     [
       catalog.organizationId,
       teamId,

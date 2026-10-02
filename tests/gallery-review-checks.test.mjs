@@ -12,7 +12,7 @@ test('Gallery review checks are required, persisted, restored and not overwritte
  const complete={access:true,dataPolicy:true,safetyNotice:true,operationOwner:true};
  pool.connect=async()=>({release(){},async query(sql,args){
   if(sql.includes('for update'))return {rows:[{id:1,submitted_by:2,submission_status:status}]};
-  if(sql.includes('select id, email')||sql.includes('update agent_portal.users'))return {rows:[{id:2,email:'admin@example.com',app_role:'admin',is_active:true}]};
+  if(sql.includes('select id, organization_id, email')||sql.includes('update agent_portal.users'))return {rows:[{id:2,organization_id:1,email:'admin@example.com',app_role:'admin',is_active:true}]};
   if(sql.includes('insert into agent_portal.gallery_reviews'))recorded=args.slice(4,8);
   if(sql.includes('gs.submission_number as')){
    assert.match(sql,/jsonb_build_object\('access'/);
