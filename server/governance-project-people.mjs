@@ -77,12 +77,66 @@ export async function listGovernanceProjectPeople(client,actor) {
 }
 export async function saveGovernanceProjectPeople(client,actor,code,body) {
  if(!allowed(actor))return {status:403,body:{error:'팀장과 Admin만 과제 담당 계정을 관리할 수 있습니다.'}};
- let change;try{change=validatePeopleChange(body);}catch(error){return {status:400,body:{error:error.message}};}
+ if(body.owners===undefined)return saveProjectPeople(client,actor,code,body);
+ // HTTP error results must not commit partially created/edited Owner accounts.
+ await client.query('savepoint owner_input');
+ try{
+  const result=await saveProjectPeople(client,actor,code,body);
+  if(result.status>=400)await client.query('rollback to savepoint owner_input');
+  await client.query('release savepoint owner_input');return result;
+ }catch(error){await client.query('rollback to savepoint owner_input');await client.query('release savepoint owner_input');throw error;}
+}
+async function saveProjectPeople(client,actor,code,body) {
+ if(!allowed(actor))return {status:403,body:{error:'팀장과 Admin만 과제 담당 계정을 관리할 수 있습니다.'}};
+ let change,ownerInputs;try{
+  if(body.owners!==undefined){
+   if(!Array.isArray(body.owners)||!body.owners.length||body.owners.length>30)throw new Error('Owner를 한 명 이상 입력해 주세요.');
+   ownerInputs=body.owners.map(o=>({...validateOwnerProfile({...o,reason:body.reason,version:o.version||body.version}),id:o.id?String(o.id):null,version:o.version}));
+   if(ownerInputs.some(o=>o.id&&!/^\d+$/.test(o.id)))throw new Error('올바른 Owner 계정 정보를 입력해 주세요.');
+   if(new Set(ownerInputs.map(o=>o.email)).size!==ownerInputs.length)throw new Error('Owner 이메일을 중복 입력할 수 없습니다.');
+  }
+  change=validatePeopleChange({...body,ownerIds:ownerInputs?['1']:body.ownerIds});
+ }catch(error){return {status:400,body:{error:error.message}};}
+ if(ownerInputs)await client.query("select pg_advisory_xact_lock(hashtext('governance-account-write'))");
  const project=(await client.query(`select p.*,coalesce(ir.raw_answers->'portalState','{}'::jsonb) as state
  from agent_portal.projects p left join agent_portal.intake_requests ir on ir.project_id=p.id
  where p.project_code=$1 and p.deleted_at is null and p.organization_id=$2 for update of p`,[code,actor.organization_id])).rows[0];
  if(!project)return {status:404,body:{error:'과제를 찾을 수 없습니다.'}};
  if(new Date(project.updated_at).toISOString()!==new Date(body.version).toISOString())return {status:409,body:{error:'과제가 변경되었습니다. 새로고침 후 다시 저장해 주세요.'}};
+ if(ownerInputs){
+  change.ownerIds=[];
+  for(const input of ownerInputs){
+   let id=input.id;
+   if(id){
+    const target=(await client.query(`${personSelect} where u.id=$1 and u.organization_id=$2 and u.is_active=true`,[id,actor.organization_id])).rows[0];
+    if(!target)return {status:400,body:{error:'활성 Owner 계정을 찾을 수 없습니다.'}};
+    if(target.name!==input.name||target.department!==input.department||normalizeContactEmail(target.email)!==input.email){
+     const edited=await saveGovernanceOwnerProfile(client,actor,code,id,{...input,reason:change.reason});
+     if(edited.status!==200)return edited;
+    }else{
+     const linked=(await client.query(`select p.id from agent_portal.projects p where p.id=$1 and (p.owner_id=$2 or exists(select 1 from agent_portal.project_members m where m.project_id=p.id and m.user_id=$2 and m.relationship='owner' and m.ended_at is null))`,[project.id,id])).rows[0];
+     if(!linked)return {status:400,body:{error:'해당 과제에 연결된 Owner만 직접 수정할 수 있습니다.'}};
+    }
+   }else{
+    const existing=(await client.query(`${personSelect} where lower(u.email)=lower($1)`,[input.email])).rows[0];
+    if(existing){
+     const local=(await client.query('select id from agent_portal.users where id=$1 and organization_id=$2 and is_active=true',[existing.id,actor.organization_id])).rows[0];
+     if(!local||existing.name!==input.name||existing.department!==input.department)return {status:409,body:{error:'이미 등록된 이메일입니다. 기존 계정의 이름·부서와 동일하게 입력해 주세요.'}};
+     id=existing.id;
+    }else{
+     let teamId=null;
+     if(input.department){
+      teamId=(await client.query('select id from agent_portal.teams where organization_id=$1 and team_name=$2 and is_active=true order by id limit 1',[actor.organization_id,input.department])).rows[0]?.id;
+      if(!teamId)teamId=(await client.query(`insert into agent_portal.teams(organization_id,team_code,team_name,team_type) values($1,$2,$3,'business') on conflict(organization_id,team_code) do update set is_active=true returning id`,[actor.organization_id,'owner-'+createHash('sha256').update(input.department).digest('hex').slice(0,24),input.department])).rows[0].id;
+     }
+     id=String((await client.query(`insert into agent_portal.users(organization_id,team_id,display_name,email,app_role,is_active) values($1,$2,$3,$4,'general_user',true) returning id`,[actor.organization_id,teamId,input.name,input.email])).rows[0].id);
+    }
+   }
+   if(change.ownerIds.includes(String(id)))return {status:400,body:{error:'동일한 Owner 계정은 한 번만 등록해 주세요.'}};
+   change.ownerIds.push(String(id));
+  }
+  project.state=(await client.query("select coalesce(raw_answers->'portalState','{}'::jsonb) as state from agent_portal.intake_requests where project_id=$1",[project.id])).rows[0]?.state||project.state;
+ }
  const selected=(await client.query(`${personSelect} where u.id=any($1::bigint[]) and u.organization_id=$2 and u.is_active=true`,[[...change.ownerIds,...change.developerIds],actor.organization_id])).rows;
  const map=new Map(selected.map(p=>[p.id,p]));
  if([...change.ownerIds,...change.developerIds].some(id=>!map.has(id))||change.developerIds.some(id=>!['admin','team_leader','team_member','bts','bp_solution'].includes(map.get(id).role)))return {status:400,body:{error:'활성 Owner 계정과 개발 수행 역할의 계정을 선택해 주세요.'}};

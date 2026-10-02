@@ -1,8 +1,58 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {validatePeopleChange,listGovernanceProjectPeople,saveGovernanceProjectPeople,validateOwnerProfile,saveGovernanceOwnerProfile} from '../server/governance-project-people.mjs';
 const actor={id:1,organization_id:1,is_active:true,app_role:'admin',display_name:'Admin'};
 const change={ownerIds:['2'],developerIds:['3'],reason:'담당자 변경 요청',version:'2026-10-02T00:00:00.000Z'};
+test('direct Owner entry creates new general-user identity and connects it without advancing workflow',async()=>{
+ const calls=[];
+ const db={async query(sql,args){calls.push({sql,args});
+  if(sql.includes('for update of p'))return {rows:[{id:18,updated_at:change.version,state:{journeyStep:2}}]};
+  if(sql.includes('where lower(u.email)'))return {rows:[]};
+  if(sql.startsWith('select id from agent_portal.teams'))return {rows:[{id:8}]};
+  if(sql.startsWith('insert into agent_portal.users'))return {rows:[{id:9}]};
+  if(sql.includes('u.id=any'))return {rows:[{id:'9',name:'New Owner',email:'new@company.com',department:'Finance',role:'general_user'}]};
+  return {rows:[]};
+ }};
+ const body={...change,developerIds:[],owners:[{name:'New Owner',email:'new@company.com',department:'Finance'}]};
+ const r=await saveGovernanceProjectPeople(db,actor,'2026-018',body);assert.equal(r.status,200);
+ assert.ok(calls.some(c=>c.sql.includes("'general_user',true")));
+ assert.deepEqual(calls.find(c=>c.sql.startsWith('update agent_portal.projects')).args,[18,'9']);
+ assert.equal(JSON.parse(calls.find(c=>c.sql.includes('raw_answers=jsonb_set')).args[1]).journeyStep,2);
+ assert.ok(calls.some(c=>c.sql==='release savepoint owner_input'));
+});
+test('direct Owner errors roll back partial identities, reject duplicate emails and enforce permissions',async()=>{
+ const calls=[],db={async query(sql){calls.push(sql);return {rows:[]};}};
+ const owners=[{name:'New',email:'new@company.com',department:''}];
+ assert.equal((await saveGovernanceProjectPeople(db,{...actor,app_role:'general_user'},'2026-018',{...change,owners})).status,403);
+ assert.equal(calls.length,0);
+ assert.equal((await saveGovernanceProjectPeople(db,actor,'2026-018',{...change,owners:[...owners,...owners]})).status,400);
+ assert.ok(calls.includes('rollback to savepoint owner_input'));
+});
+test('typed existing email reuses canonical account, while later validation errors roll back new accounts',async()=>{
+ for(const reuse of [true,false]){
+  const calls=[],owner={id:'9',name:'New Owner',email:'new@company.com',department:'Finance',role:'general_user'};
+  const db={async query(sql,args){calls.push({sql,args});
+   if(sql.includes('for update of p'))return {rows:[{id:18,updated_at:change.version,state:{}}]};
+   if(sql.includes('where lower(u.email)'))return {rows:reuse?[owner]:[]};
+   if(sql.startsWith('select id from agent_portal.users'))return {rows:[{id:9}]};
+   if(sql.startsWith('select id from agent_portal.teams'))return {rows:[{id:8}]};
+   if(sql.startsWith('insert into agent_portal.users'))return {rows:[{id:9}]};
+   if(sql.includes('u.id=any'))return {rows:[owner]};
+   return {rows:[]};
+  }};
+  const result=await saveGovernanceProjectPeople(db,actor,'2026-018',{...change,developerIds:reuse?[]:['3'],owners:[{name:owner.name,email:owner.email,department:owner.department}]});
+  assert.equal(result.status,reuse?200:400);
+  assert.equal(calls.some(c=>c.sql.startsWith('insert into agent_portal.users')),!reuse);
+  assert.equal(calls.some(c=>c.sql==='rollback to savepoint owner_input'),!reuse);
+ }
+});
+test('project editor is rendered immediately after the selected row and Owners use direct fields',async()=>{
+ const ui=await readFile(new URL('../app/governance-project-people.jsx',import.meta.url),'utf8');
+ assert.match(ui,/draft\?\.no===p.no&&editor\}<\/Fragment>/);
+ assert.match(ui,/\['name','Owner 이름'\]/);assert.match(ui,/\['department','Owner 부서'\]/);assert.match(ui,/\['email','Owner 이메일'\]/);
+ assert.match(ui,/\+ Owner 추가/);assert.doesNotMatch(ui,/toggle\('ownerIds'/);
+});
 test('only active admin and leader may read and manage identities',async()=>{
  const db={query(){throw new Error('must not access DB');}};
  for(const role of ['general_user','team_member','bts','bp_solution']){
