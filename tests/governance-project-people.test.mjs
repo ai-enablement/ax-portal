@@ -1,9 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {validatePeopleChange,listGovernanceProjectPeople,saveGovernanceProjectPeople,validateOwnerProfile,saveGovernanceOwnerProfile} from '../server/governance-project-people.mjs';
+import {validatePeopleChange,listGovernanceProjectPeople,saveGovernanceProjectPeople,validateOwnerProfile,saveGovernanceOwnerProfile,governanceOwners} from '../server/governance-project-people.mjs';
 const actor={id:1,organization_id:1,is_active:true,app_role:'admin',display_name:'Admin'};
 const change={ownerIds:['2'],developerIds:['3'],reason:'담당자 변경 요청',version:'2026-10-02T00:00:00.000Z'};
+test('registry preserves unlinked imported Owners, but canonical identity takes precedence without duplicates',()=>{
+ const stored={name:'기존 Owner',department:'경영기획팀',email:'owner@company.com'};
+ assert.deepEqual(governanceOwners({ownerIds:[],state:{projectOwners:[stored]}},[]),[{...stored,source:'import'}]);
+ const canonical={id:'2',name:'Owner DB',department:'Finance',email:stored.email};
+ assert.deepEqual(governanceOwners({ownerId:'2',ownerIds:['2'],state:{projectOwners:[{...stored,id:'2'},{name:'추가 Owner',email:''}]}},[canonical]),[canonical,{name:'추가 Owner',email:'',department:'',source:'import'}]);
+ assert.equal(governanceOwners({ownerIds:[],state:{owner:'송민재'}},[])[0].name,'송민재');
+});
+test('registry deadline uses G2 committed date, never requested date, and retains leader authorization',async()=>{
+ for(const role of ['admin','team_leader']){
+  let i=0;const db={async query(){return {rows:i++===0?[]:[{stage:'G2',ownerIds:[],developerIds:[],committedDate:'2026-10-31',state:{committedDate:'2026-11-01',dueDate:'2026-12-01'}},{stage:'FEA',ownerIds:[],developerIds:[],state:{dueDate:'2026-12-01'}}]};}};
+  const result=await listGovernanceProjectPeople(db,{...actor,app_role:role});
+  assert.equal(result.body.projects[0].committedDate,'2026-10-31');assert.equal(result.body.projects[0].canEditDeadline,role==='team_leader');
+  assert.equal(result.body.projects[1].committedDate,'');assert.equal(result.body.projects[1].canEditDeadline,false);
+ }
+});
 test('direct Owner entry creates new general-user identity and connects it without advancing workflow',async()=>{
  const calls=[];
  const db={async query(sql,args){calls.push({sql,args});

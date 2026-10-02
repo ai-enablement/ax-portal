@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
-import {isContactEmail,normalizeContactEmail} from '../shared/project-contacts.mjs';
+import {isContactEmail,normalizeContactEmail,historicalParties} from '../shared/project-contacts.mjs';
+import {canEditProjectDeadline,validDeadline} from '../shared/project-deadline.mjs';
 import {sharedAccountFields} from './shared-accounts.mjs';
 const allowed = actor => actor?.is_active && actor.organization_id && ['admin','team_leader'].includes(actor.app_role);
 const personSelect = `select u.id::text as id,u.display_name as name,coalesce(u.email,login.email,'') as email,
@@ -63,17 +64,35 @@ export async function saveGovernanceOwnerProfile(client,actor,code,userId,body){
  await client.query("insert into agent_portal.audit_logs(actor_user_id,project_id,action_code,entity_type,entity_id,before_data,after_data) values($1,$2,'PROJECT_OWNER_PROFILE_CHANGED','user',$3,$4::jsonb,$5::jsonb)",[actor.id,project.id,String(target.id),JSON.stringify({name:target.display_name,email:oldEmail,teamId:target.team_id}),JSON.stringify({...change,affectedProjects:related.map(p=>p.project_code)})]);
  return {status:200,body:{saved:true,affectedProjects:related.map(p=>p.project_code)}};
 }
+export function governanceOwners(project,people){
+ const ids=[...new Set([project.ownerId,...(project.ownerIds||[])].filter(Boolean).map(String))];
+ const owners=ids.map(id=>people.find(p=>String(p.id)===id)).filter(Boolean).map(p=>({...p,id:String(p.id)}));
+ for(const contact of historicalParties(project.state||{}).owners){
+  if(!contact.name&&!contact.email)continue;
+  if(owners.some(o=>(contact.id&&String(contact.id)===o.id)||(contact.email&&normalizeContactEmail(o.email)===contact.email)||(!contact.email&&o.name===contact.name)))continue;
+  owners.push({name:contact.name,email:contact.email,department:contact.department||'',source:'import'});
+ }
+ return owners;
+}
 export async function listGovernanceProjectPeople(client,actor) {
  if(!allowed(actor))return {status:403,body:{error:'팀장과 Admin만 과제 담당 계정을 관리할 수 있습니다.'}};
  const people=(await client.query(`${personSelect} where u.organization_id=$1 order by u.display_name,u.id`,[actor.organization_id])).rows;
  const projects=(await client.query(`select p.id::text as id,p.project_code as no,p.project_name as name,
  p.current_stage_code as stage,p.updated_at as version,p.owner_id::text as "ownerId",
+ to_char(p.committed_completion_date,'YYYY-MM-DD') as "committedDate",
+ coalesce(ir.raw_answers->'portalState','{}'::jsonb) as state,
  coalesce((select jsonb_agg(m.user_id::text order by m.assigned_at,m.user_id) from agent_portal.project_members m
  where m.project_id=p.id and m.relationship='owner' and m.ended_at is null),'[]'::jsonb) as "ownerIds",
  coalesce((select jsonb_agg(m.user_id::text order by m.user_id) from agent_portal.project_members m
  where m.project_id=p.id and m.relationship='developer' and m.ended_at is null),'[]'::jsonb) as "developerIds"
- from agent_portal.projects p where p.deleted_at is null and p.organization_id=$1 order by p.project_code desc`,[actor.organization_id])).rows;
- return {status:200,body:{people,projects:projects.map(p=>({...p,ownerIds:[...new Set([p.ownerId,...p.ownerIds].filter(Boolean))]}))}};
+ from agent_portal.projects p left join agent_portal.intake_requests ir on ir.project_id=p.id where p.deleted_at is null and p.organization_id=$1 order by p.project_code desc`,[actor.organization_id])).rows;
+ return {status:200,body:{people,projects:projects.map(p=>{
+  const {state={},...item}=p;
+  const journeyStep={INT:0,FEA:1,G1:2,ARD:3,G2:4,DES:5,EVP:5,EVR:5,G3:6,PILOT:7,G4:8,OPS:9}[p.stage]??state.journeyStep;
+  return {...item,ownerIds:[...new Set([p.ownerId,...p.ownerIds].filter(Boolean))],owners:governanceOwners(p,people),
+   committedDate:validDeadline(p.committedDate)?p.committedDate:validDeadline(state.committedDate)?state.committedDate:'',
+   canEditDeadline:canEditProjectDeadline({...state,journeyStep},actor),journeyStep};
+ })}};
 }
 export async function saveGovernanceProjectPeople(client,actor,code,body) {
  if(!allowed(actor))return {status:403,body:{error:'팀장과 Admin만 과제 담당 계정을 관리할 수 있습니다.'}};

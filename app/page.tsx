@@ -14913,7 +14913,6 @@ function Governance({
     const saved = await onUpdateProject(editingProjectNo, {
       name: adminDraft.name.trim(),
       status: adminDraft.status.trim(),
-      dueDate: adminDraft.dueDate.trim(),
       nextAction: adminDraft.nextAction.trim(),
     });
     if (saved === false) return;
@@ -15075,6 +15074,7 @@ function Governance({
         )}
         {tab === "Agent 과제 관리" && isLeader && (
           <GovernanceProjectPeople admin={isAdmin}
+            onSaveDeadline={(no: string, change: Partial<UserProject>) => onUpdateProject(no, change)}
             onEdit={(no: string) => { const project=adminProjects.find(p=>p.no===no); if(project)editProject(project); }}
             onDelete={(no: string) => { const project=adminProjects.find(p=>p.no===no); if(project)deleteAnyProject(project); }}>
             {isAdmin && editingProjectNo && (
@@ -15100,15 +15100,6 @@ function Governance({
                       value={adminDraft.status}
                       onChange={(event) =>
                         setAdminDraft({ ...adminDraft, status: event.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    프로젝트 마감일
-                    <input
-                      value={adminDraft.dueDate}
-                      onChange={(event) =>
-                        setAdminDraft({ ...adminDraft, dueDate: event.target.value })
                       }
                     />
                   </label>
